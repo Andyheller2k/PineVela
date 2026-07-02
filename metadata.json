@@ -1,0 +1,6 @@
+{
+  "name": "PineVela",
+  "description": "A universal global dashboard for modern student living, featuring student and manager portals for hostel accommodations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
