@@ -360,8 +360,6 @@ export default function Page10HostelManagerDashboard({
 
       {/* Main Container */}
       <div className="flex-1 flex flex-col lg:flex-row">
-        
-        {/* Sidebar Navigation */}
         <aside className="w-full lg:w-64 bg-slate-900 text-slate-400 p-4 lg:py-6 flex flex-col justify-between shrink-0 gap-4 border-r border-slate-800">
           <div className="space-y-6">
             {/* Tiny mini-card */}
@@ -371,7 +369,7 @@ export default function Page10HostelManagerDashboard({
                 <span className="text-white text-xs font-black truncate">{hostel.name}</span>
               </div>
               <p className="text-[10px] text-slate-400 flex items-center gap-1">
-                <MapPin size={10} />
+                <MapPin size={10} className="text-slate-400 shrink-0" />
                 <span className="truncate">{hostel.location}</span>
               </p>
             </div>

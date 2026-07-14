@@ -199,5 +199,43 @@ INSERT INTO staff (id, name, role, phone, contact_method, email, hostel_id) VALU
 ON CONFLICT (id) DO NOTHING;
 
 -- ==========================================
+-- CHAT SCHEMA SETUP
+-- Store chat database in a different schema/database, mapping users to the main public database
+-- ==========================================
+CREATE SCHEMA IF NOT EXISTS chat;
+
+-- 1. Create chat.profiles table
+CREATE TABLE IF NOT EXISTS chat.profiles (
+  student_id TEXT PRIMARY KEY,
+  nickname TEXT NOT NULL,
+  avatar_url TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 2. Create chat.dm_rooms table
+CREATE TABLE IF NOT EXISTS chat.dm_rooms (
+  id TEXT PRIMARY KEY,
+  user1_id TEXT NOT NULL,
+  user2_id TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 3. Create chat.messages table
+CREATE TABLE IF NOT EXISTS chat.messages (
+  id TEXT PRIMARY KEY,
+  channel_type TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  sender_id TEXT NOT NULL,
+  sender_name TEXT NOT NULL,
+  sender_avatar TEXT NOT NULL,
+  message_type TEXT NOT NULL DEFAULT 'text',
+  content TEXT NOT NULL,
+  reactions JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- ==========================================
 -- END OF SCHEMA SCRIPT
 -- ==========================================
+

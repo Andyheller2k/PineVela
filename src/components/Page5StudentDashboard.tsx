@@ -79,6 +79,7 @@ export default function Page5StudentDashboard({
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [showStickersGifsDropdown, setShowStickersGifsDropdown] = useState(false);
+  const [stickersGifsTab, setStickersGifsTab] = useState<'stickers' | 'gifs'>('stickers');
   const [activeReactionMessageId, setActiveReactionMessageId] = useState<string | null>(null);
 
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
@@ -288,7 +289,7 @@ export default function Page5StudentDashboard({
     }
   };
 
-  const handleSendChatMessage = async (content: string, type: 'text' | 'image' = 'text') => {
+  const handleSendChatMessage = async (content: string, type: 'text' | 'image' | 'sticker' | 'gif' = 'text') => {
     if (!content.trim()) return;
     try {
       const newMsg = await apiFetch('/api/chat/messages', {
@@ -303,8 +304,42 @@ export default function Page5StudentDashboard({
       setChatMessages(prev => [...prev, newMsg]);
       setChatInput('');
       setShowPhotoDropdown(false);
+      setShowStickersGifsDropdown(false);
     } catch (err: any) {
       triggerToast(`Failed to send message: ${err.message}`);
+    }
+  };
+
+  const handleDevicePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      triggerToast("File is too large. Max size is 5MB.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64Str = reader.result as string;
+      await handleSendChatMessage(base64Str, 'image');
+    };
+    reader.onerror = () => {
+      triggerToast("Failed to read device file.");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleToggleReaction = async (messageId: string, emoji: string) => {
+    try {
+      const updatedMsg = await apiFetch(`/api/chat/messages/${messageId}/react`, {
+        method: 'POST',
+        body: JSON.stringify({ emoji })
+      });
+      setChatMessages(prev => prev.map(m => m.id === messageId ? updatedMsg : m));
+      setActiveReactionMessageId(null);
+    } catch (err: any) {
+      triggerToast(`Failed to react: ${err.message}`);
     }
   };
 
@@ -1808,6 +1843,8 @@ export default function Page5StudentDashboard({
                 {chatMessages.map((msg) => {
                   const isMine = msg.senderId === user?.id;
                   const isManager = msg.senderId?.startsWith('manager_') || msg.senderId === 'manager_101';
+                  const isSticker = msg.messageType === 'sticker';
+                  const isGif = msg.messageType === 'gif';
                   return (
                     <div key={msg.id} className={`flex gap-3 max-w-[85%] ${isMine ? 'ml-auto flex-row-reverse text-right' : 'text-left'}`}>
                       <img
@@ -1815,7 +1852,7 @@ export default function Page5StudentDashboard({
                         alt={msg.senderName}
                         className="w-7 h-7 rounded-full object-cover mt-0.5 border border-slate-200 shrink-0"
                       />
-                      <div className="space-y-1">
+                      <div className="space-y-1 relative group">
                         <div className={`flex items-center gap-1.5 text-[9px] text-slate-400 font-bold ${isMine ? 'justify-end' : 'justify-start'}`}>
                           <span className="text-slate-700 font-black">{msg.senderName}</span>
                           {isManager && (
@@ -1825,20 +1862,90 @@ export default function Page5StudentDashboard({
                           <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                         </div>
 
-                        {/* Bubble */}
-                        <div className={`p-3 rounded-2xl text-left ${
-                          isMine
-                            ? 'bg-blue-900 text-white rounded-tr-none'
-                            : 'bg-white text-slate-800 border border-slate-200/80 rounded-tl-none shadow-sm'
-                        }`}>
-                          {msg.messageType === 'image' ? (
-                            <div className="space-y-1.5">
-                              <img src={msg.content} alt="shared proof" className="max-w-[200px] sm:max-w-[280px] max-h-52 rounded-xl object-cover border border-black/5" />
-                            </div>
-                          ) : (
-                            <p className="leading-relaxed font-medium">{msg.content}</p>
-                          )}
+                        {/* Flex container to hold the bubble and hover reaction trigger */}
+                        <div className={`flex items-center gap-2 ${isMine ? 'flex-row-reverse' : 'flex-row'}`}>
+                          {/* Bubble */}
+                          <div className={`p-3 rounded-2xl text-left ${
+                            isSticker
+                              ? 'bg-transparent shadow-none border-none p-0'
+                              : isMine
+                                ? 'bg-blue-900 text-white rounded-tr-none'
+                                : 'bg-white text-slate-800 border border-slate-200/80 rounded-tl-none shadow-sm'
+                          }`}>
+                            {msg.messageType === 'image' ? (
+                              <div className="space-y-1.5">
+                                <img src={msg.content} alt="shared proof" className="max-w-[200px] sm:max-w-[280px] max-h-52 rounded-xl object-cover border border-black/5" />
+                              </div>
+                            ) : isSticker ? (
+                              <div className="py-1">
+                                <img src={msg.content} alt="sticker" className="w-20 h-20 object-contain hover:scale-110 transition-transform duration-200" />
+                              </div>
+                            ) : isGif ? (
+                              <div className="space-y-1.5">
+                                <img src={msg.content} alt="gif" className="max-w-[200px] sm:max-w-[280px] max-h-52 rounded-xl object-cover border border-black/5" />
+                              </div>
+                            ) : (
+                              <p className="leading-relaxed font-medium text-[11px]">{msg.content}</p>
+                            )}
+                          </div>
+
+                          {/* Hover Reaction Trigger */}
+                          <div className="opacity-0 group-hover:opacity-100 transition-opacity relative flex items-center shrink-0">
+                            <button
+                              onClick={() => setActiveReactionMessageId(activeReactionMessageId === msg.id ? null : msg.id)}
+                              className="p-1 hover:bg-slate-100 border border-slate-200/60 text-slate-400 hover:text-slate-700 rounded-lg transition-colors bg-white shadow-sm"
+                              title="React to message"
+                            >
+                              <Smile size={12} />
+                            </button>
+
+                            {activeReactionMessageId === msg.id && (
+                              <div className={`absolute bottom-7 z-40 bg-white border border-slate-200 rounded-full py-1 px-2 shadow-2xl flex gap-1.5 items-center animate-fade-in ${
+                                isMine ? 'right-0' : 'left-0'
+                              }`}>
+                                {['👍', '❤️', '😂', '😮', '😢', '🎉'].map(emoji => (
+                                  <button
+                                    key={emoji}
+                                    onClick={() => handleToggleReaction(msg.id, emoji)}
+                                    className="hover:scale-125 transition-transform duration-100 text-xs px-0.5"
+                                  >
+                                    {emoji}
+                                  </button>
+                                ))}
+                                <button
+                                  onClick={() => setActiveReactionMessageId(null)}
+                                  className="text-[9px] text-slate-400 hover:text-slate-600 px-0.5 border-l border-slate-100 ml-0.5 font-bold"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
+
+                        {/* Render Reactions list */}
+                        {msg.reactions && Object.keys(msg.reactions).length > 0 && (
+                          <div className={`flex flex-wrap gap-1 mt-1 ${isMine ? 'justify-end' : 'justify-start'}`}>
+                            {Object.entries(msg.reactions).map(([emoji, reactors]: [string, any]) => {
+                              const hasReacted = reactors.includes(chatProfile?.nickname || user?.name);
+                              return (
+                                <button
+                                  key={emoji}
+                                  onClick={() => handleToggleReaction(msg.id, emoji)}
+                                  className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-black border transition-all ${
+                                    hasReacted
+                                      ? 'bg-blue-50 border-blue-200 text-blue-900 shadow-sm'
+                                      : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+                                  }`}
+                                  title={`Reacted by: ${reactors.join(', ')}`}
+                                >
+                                  <span>{emoji}</span>
+                                  <span>{reactors.length}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
@@ -1874,22 +1981,53 @@ export default function Page5StudentDashboard({
                   // Active Chat Inputs
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
+                      {/* Device photo file input */}
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleDevicePhotoUpload}
+                        accept="image/*"
+                        style={{ display: 'none' }}
+                      />
+
                       {/* Photo Attachment dropdown button */}
                       <div className="relative">
                         <button
                           type="button"
-                          onClick={() => setShowPhotoDropdown(!showPhotoDropdown)}
+                          onClick={() => {
+                            setShowPhotoDropdown(!showPhotoDropdown);
+                            setShowStickersGifsDropdown(false);
+                          }}
                           className="p-2 hover:bg-slate-100 text-slate-500 hover:text-slate-800 rounded-xl transition-all border border-slate-200"
                           title="Attach Photo"
                         >
                           <ImageIcon size={16} />
                         </button>
                         {showPhotoDropdown && (
-                          <div className="absolute bottom-11 left-0 bg-white border border-slate-200 rounded-2xl p-3.5 shadow-2xl z-40 w-64 text-left space-y-2">
+                          <div className="absolute bottom-11 left-0 bg-white border border-slate-200 rounded-2xl p-3.5 shadow-2xl z-45 w-64 text-left space-y-3">
                             <div className="flex justify-between items-center pb-1.5 border-b border-slate-100">
                               <span className="font-bold text-[9px] uppercase tracking-wider text-slate-400">Share Campus Snapshot</span>
                               <button onClick={() => setShowPhotoDropdown(false)} className="text-slate-400 hover:text-slate-600">×</button>
                             </div>
+                            
+                            <button
+                              type="button"
+                              onClick={() => {
+                                fileInputRef.current?.click();
+                                setShowPhotoDropdown(false);
+                              }}
+                              className="w-full py-2 bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200/50 rounded-xl font-bold transition-all text-center flex items-center justify-center gap-1.5 text-[10px]"
+                            >
+                              <Upload size={12} />
+                              <span>Upload from Device</span>
+                            </button>
+
+                            <div className="relative flex py-1 items-center">
+                              <div className="flex-grow border-t border-slate-100"></div>
+                              <span className="flex-shrink mx-2 text-[8px] text-slate-400 uppercase font-black">Or Preset</span>
+                              <div className="flex-grow border-t border-slate-100"></div>
+                            </div>
+
                             <div className="grid grid-cols-2 gap-2">
                               {[
                                 { name: 'Dorm Study', url: 'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=400&q=80' },
@@ -1908,6 +2046,108 @@ export default function Page5StudentDashboard({
                                 </button>
                               ))}
                             </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Stickers & GIFs dropdown button */}
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowStickersGifsDropdown(!showStickersGifsDropdown);
+                            setShowPhotoDropdown(false);
+                          }}
+                          className={`p-2 hover:bg-slate-100 text-slate-500 hover:text-slate-800 rounded-xl transition-all border ${
+                            showStickersGifsDropdown ? 'bg-blue-50 border-blue-200 text-blue-900' : 'border-slate-200'
+                          }`}
+                          title="Stickers & GIFs"
+                        >
+                          <Smile size={16} />
+                        </button>
+                        {showStickersGifsDropdown && (
+                          <div className="absolute bottom-11 left-0 bg-white border border-slate-200 rounded-2xl p-3.5 shadow-2xl z-45 w-72 text-left space-y-3">
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setStickersGifsTab('stickers')}
+                                  className={`text-[10px] font-black uppercase tracking-wider pb-1 border-b-2 transition-all ${
+                                    stickersGifsTab === 'stickers'
+                                      ? 'border-blue-900 text-blue-900'
+                                      : 'border-transparent text-slate-400 hover:text-slate-600'
+                                  }`}
+                                >
+                                  Stickers
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setStickersGifsTab('gifs')}
+                                  className={`text-[10px] font-black uppercase tracking-wider pb-1 border-b-2 transition-all ${
+                                    stickersGifsTab === 'gifs'
+                                      ? 'border-blue-900 text-blue-900'
+                                      : 'border-transparent text-slate-400 hover:text-slate-600'
+                                  }`}
+                                >
+                                  GIFs
+                                </button>
+                              </div>
+                              <button onClick={() => setShowStickersGifsDropdown(false)} className="text-slate-400 hover:text-slate-600">×</button>
+                            </div>
+
+                            {/* Tab Content: Stickers */}
+                            {stickersGifsTab === 'stickers' && (
+                              <div className="grid grid-cols-5 gap-2 max-h-48 overflow-y-auto p-0.5">
+                                {[
+                                  { name: 'Graduation', url: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f393/512.webp' },
+                                  { name: 'Books', url: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f4da/512.webp' },
+                                  { name: 'Laptop', url: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f4bb/512.webp' },
+                                  { name: 'Popper', url: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f389/512.webp' },
+                                  { name: 'Cool', url: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f60e/512.webp' },
+                                  { name: 'Heart', url: 'https://fonts.gstatic.com/s/e/notoemoji/latest/2764_fe0f/512.webp' },
+                                  { name: 'Mindblown', url: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f92f/512.webp' },
+                                  { name: 'Fire', url: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f525/512.webp' },
+                                  { name: 'Pizza', url: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f355/512.webp' },
+                                  { name: 'Sparkles', url: 'https://fonts.gstatic.com/s/e/notoemoji/latest/2728/512.webp' }
+                                ].map((sticker) => (
+                                  <button
+                                    key={sticker.name}
+                                    type="button"
+                                    onClick={() => handleSendChatMessage(sticker.url, 'sticker')}
+                                    className="p-1 hover:bg-slate-50 border border-slate-100 rounded-xl transition-all aspect-square flex items-center justify-center hover:scale-110 transition-transform duration-100"
+                                    title={sticker.name}
+                                  >
+                                    <img src={sticker.url} alt={sticker.name} className="w-10 h-10 object-contain" />
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Tab Content: GIFs */}
+                            {stickersGifsTab === 'gifs' && (
+                              <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-0.5">
+                                {[
+                                  { name: 'Study', url: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3BndG81Z3RkMnAwdHpuYWtzZ3pnaTRhcHlkYWU3M2g5Y2EydWdzdyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3o7qE1YN7aBOFPRw8E/giphy.gif' },
+                                  { name: 'Coding', url: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMnpvNHlhZzRtc2FnbDhycXpma2Nnb3RnM3p2ZnpsZjF4NGh6c2xzeCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/26tn33aiTi1jkl6H6/giphy.gif' },
+                                  { name: 'Success', url: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdjBvNGx0Nm85aDgzamw2cTJ3NG5sZWt6OHl2ZHNrcDR4ZDF5YWdzciZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/l0amJzR3ySd9ODJT2/giphy.gif' },
+                                  { name: 'Tired', url: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMGxnaW5jMmptMGwxd3ExdWZtMXNtcTdwYjIycG80ZDBtYXMxbXUwaiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/1cfG1gw420mW4/giphy.gif' },
+                                  { name: 'Coffee', url: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYzgxMDJ2b3gxbjYzbDV0djBhdzh4MXJjajFnaGF4NXFub3M0eWhtNyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/TDjpx6RtBhV13tLIHM/giphy.gif' },
+                                  { name: 'Facepalm', url: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMTIwdTRpYTYxdzlyMmQzMHUwaG92bWdzd2NldDZ6Y3plZWN4ZXE3YSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3og0INyM63f5M3V47C/giphy.gif' },
+                                  { name: 'Dance', url: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMmV0M3E0dzhidHBmdndkMW4zZDh2eXp2ZnptNnV6Z3Zma3l3Mm91MiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/14aUO0Mf7dWDXW/giphy.gif' },
+                                  { name: 'Excited', url: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExZm14NXBtdnl2aXpyMzdma3p2ZnptNnV6Z3Zma3l3Mm91MiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/d3OtlSJgIjS9y/giphy.gif' }
+                                ].map((gif) => (
+                                  <button
+                                    key={gif.name}
+                                    type="button"
+                                    onClick={() => handleSendChatMessage(gif.url, 'gif')}
+                                    className="border border-slate-150 rounded-xl overflow-hidden hover:opacity-90 transition-opacity block shrink-0 text-center bg-slate-50 hover:scale-105 transition-transform duration-100"
+                                  >
+                                    <img src={gif.url} alt={gif.name} className="w-full h-12 object-cover" />
+                                    <span className="block text-[8px] font-bold p-1 truncate text-slate-600">{gif.name}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>

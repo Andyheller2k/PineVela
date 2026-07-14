@@ -775,3 +775,341 @@ export async function dbCreateActivity(activity: any, fallbackActivities: any[])
   }
   return activity;
 }
+
+// ==========================================
+// CHAT SCHEMA DB FUNCTIONS
+// ==========================================
+
+let chatSupabaseClient: any = null;
+
+export function getChatSupabase() {
+  if (chatSupabaseClient) {
+    return { client: chatSupabaseClient, configured: isSupabaseConfigured };
+  }
+
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const key = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+
+  if (url && key) {
+    try {
+      chatSupabaseClient = createClient(url, key, {
+        db: { schema: 'chat' }
+      });
+      console.log("✅ Supabase chat service (schema: chat) successfully initialized!");
+    } catch (err) {
+      console.error("❌ Failed to instantiate Supabase chat client:", err);
+      chatSupabaseClient = null;
+    }
+  }
+
+  return { client: chatSupabaseClient, configured: !!chatSupabaseClient };
+}
+
+export async function dbGetChatProfile(studentId: string, fallbackProfiles: any[]): Promise<any> {
+  const { client, configured } = getChatSupabase();
+  const localProfile = fallbackProfiles.find(p => p.studentId === studentId);
+  if (!configured || !client) return localProfile;
+
+  try {
+    const { data, error } = await client
+      .from("profiles")
+      .select("*")
+      .eq("student_id", studentId)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Error reading chat profile from Supabase:", error.message);
+      return localProfile;
+    }
+    if (data) {
+      return {
+        studentId: data.student_id,
+        nickname: data.nickname,
+        avatarUrl: data.avatar_url
+      };
+    }
+  } catch (err) {
+    console.error("Failed to query chat profile:", err);
+  }
+  return localProfile;
+}
+
+export async function dbUpdateChatProfile(studentId: string, nickname: string, avatarUrl: string, fallbackProfiles: any[]): Promise<any> {
+  const localIdx = fallbackProfiles.findIndex(p => p.studentId === studentId);
+  const updatedProfile = { studentId, nickname, avatarUrl };
+  if (localIdx !== -1) {
+    fallbackProfiles[localIdx] = updatedProfile;
+  } else {
+    fallbackProfiles.push(updatedProfile);
+  }
+
+  const { client, configured } = getChatSupabase();
+  if (!configured || !client) return updatedProfile;
+
+  try {
+    const upsertData = {
+      student_id: studentId,
+      nickname,
+      avatar_url: avatarUrl
+    };
+    const { data, error } = await client
+      .from("profiles")
+      .upsert(upsertData)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error upserting chat profile in Supabase:", error.message);
+    } else if (data) {
+      return {
+        studentId: data.student_id,
+        nickname: data.nickname,
+        avatarUrl: data.avatar_url
+      };
+    }
+  } catch (err) {
+    console.error("Failed to update chat profile in Supabase:", err);
+  }
+  return updatedProfile;
+}
+
+export async function dbGetChatMessages(channelType: string, channelId: string, fallbackMessages: any[]): Promise<any[]> {
+  const { client, configured } = getChatSupabase();
+  const localMsgs = fallbackMessages.filter(m => m.channelType === channelType && m.channelId === channelId);
+  if (!configured || !client) return localMsgs;
+
+  try {
+    const { data, error } = await client
+      .from("messages")
+      .select("*")
+      .eq("channel_type", channelType)
+      .eq("channel_id", channelId)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      console.error("Error reading chat messages from Supabase:", error.message);
+      return localMsgs;
+    }
+    if (data) {
+      return data.map((m: any) => ({
+        id: m.id,
+        channelType: m.channel_type,
+        channelId: m.channel_id,
+        senderId: m.sender_id,
+        senderName: m.sender_name,
+        senderAvatar: m.sender_avatar,
+        messageType: m.message_type,
+        content: m.content,
+        reactions: m.reactions || {},
+        createdAt: m.created_at
+      }));
+    }
+  } catch (err) {
+    console.error("Failed to query chat messages:", err);
+  }
+  return localMsgs;
+}
+
+export async function dbCreateChatMessage(msg: any, fallbackMessages: any[]): Promise<any> {
+  fallbackMessages.push(msg);
+  const { client, configured } = getChatSupabase();
+  if (!configured || !client) return msg;
+
+  try {
+    const insertData = {
+      id: msg.id,
+      channel_type: msg.channelType,
+      channel_id: msg.channelId,
+      sender_id: msg.senderId,
+      sender_name: msg.senderName,
+      sender_avatar: msg.senderAvatar,
+      message_type: msg.messageType,
+      content: msg.content,
+      reactions: msg.reactions || {}
+    };
+
+    const { data, error } = await client.from("messages").insert([insertData]).select().single();
+    if (error) {
+      console.error("Error inserting chat message in Supabase:", error.message);
+    } else if (data) {
+      return {
+        id: data.id,
+        channelType: data.channel_type,
+        channelId: data.channel_id,
+        senderId: data.sender_id,
+        senderName: data.sender_name,
+        senderAvatar: data.sender_avatar,
+        messageType: data.message_type,
+        content: data.content,
+        reactions: data.reactions || {},
+        createdAt: data.created_at
+      };
+    }
+  } catch (err) {
+    console.error("Failed to save chat message in Supabase:", err);
+  }
+  return msg;
+}
+
+export async function dbReactToChatMessage(id: string, emoji: string, reactorName: string, fallbackMessages: any[]): Promise<any> {
+  const localMsg = fallbackMessages.find(m => m.id === id);
+  if (localMsg) {
+    if (!localMsg.reactions) localMsg.reactions = {};
+    if (!localMsg.reactions[emoji]) localMsg.reactions[emoji] = [];
+    const index = localMsg.reactions[emoji].indexOf(reactorName);
+    if (index > -1) {
+      localMsg.reactions[emoji].splice(index, 1);
+      if (localMsg.reactions[emoji].length === 0) {
+        delete localMsg.reactions[emoji];
+      }
+    } else {
+      localMsg.reactions[emoji].push(reactorName);
+    }
+  }
+
+  const { client, configured } = getChatSupabase();
+  if (!configured || !client) return localMsg;
+
+  try {
+    // We first read the message reactions to toggle it safely
+    const { data: readData, error: readError } = await client.from("messages").select("reactions").eq("id", id).maybeSingle();
+    if (readError) {
+      console.error("Error reading message for reaction in Supabase:", readError.message);
+      return localMsg;
+    }
+    
+    let reactions = (readData && readData.reactions) || {};
+    if (!reactions[emoji]) reactions[emoji] = [];
+    const idx = reactions[emoji].indexOf(reactorName);
+    if (idx > -1) {
+      reactions[emoji].splice(idx, 1);
+      if (reactions[emoji].length === 0) delete reactions[emoji];
+    } else {
+      reactions[emoji].push(reactorName);
+    }
+
+    const { data: updateData, error: updateError } = await client
+      .from("messages")
+      .update({ reactions })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (updateError) {
+      console.error("Error updating reactions in Supabase:", updateError.message);
+    } else if (updateData) {
+      return {
+        id: updateData.id,
+        channelType: updateData.channel_type,
+        channelId: updateData.channel_id,
+        senderId: updateData.sender_id,
+        senderName: updateData.sender_name,
+        senderAvatar: updateData.sender_avatar,
+        messageType: updateData.message_type,
+        content: updateData.content,
+        reactions: updateData.reactions || {},
+        createdAt: updateData.created_at
+      };
+    }
+  } catch (err) {
+    console.error("Failed to save reaction in Supabase:", err);
+  }
+  return localMsg;
+}
+
+export async function dbGetDMRooms(studentId: string, fallbackRooms: any[]): Promise<any[]> {
+  const { client, configured } = getChatSupabase();
+  const localRooms = fallbackRooms.filter(r => r.user1Id === studentId || r.user2Id === studentId);
+  if (!configured || !client) return localRooms;
+
+  try {
+    const { data, error } = await client
+      .from("dm_rooms")
+      .select("*")
+      .or(`user1_id.eq.${studentId},user2_id.eq.${studentId}`)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error reading DM rooms from Supabase:", error.message);
+      return localRooms;
+    }
+    if (data) {
+      return data.map((r: any) => ({
+        id: r.id,
+        user1Id: r.user1_id,
+        user2Id: r.user2_id,
+        status: r.status,
+        createdAt: r.created_at
+      }));
+    }
+  } catch (err) {
+    console.error("Failed to query DM rooms:", err);
+  }
+  return localRooms;
+}
+
+export async function dbCreateDMRoom(room: any, fallbackRooms: any[]): Promise<any> {
+  fallbackRooms.push(room);
+  const { client, configured } = getChatSupabase();
+  if (!configured || !client) return room;
+
+  try {
+    const insertData = {
+      id: room.id,
+      user1_id: room.user1Id,
+      user2_id: room.user2Id,
+      status: room.status
+    };
+
+    const { data, error } = await client.from("dm_rooms").insert([insertData]).select().single();
+    if (error) {
+      console.error("Error inserting DM room in Supabase:", error.message);
+    } else if (data) {
+      return {
+        id: data.id,
+        user1Id: data.user1_id,
+        user2Id: data.user2_id,
+        status: data.status,
+        createdAt: data.created_at
+      };
+    }
+  } catch (err) {
+    console.error("Failed to save DM room in Supabase:", err);
+  }
+  return room;
+}
+
+export async function dbAcceptDMRoom(roomId: string, fallbackRooms: any[]): Promise<any> {
+  const localIdx = fallbackRooms.findIndex(r => r.id === roomId);
+  if (localIdx !== -1) {
+    fallbackRooms[localIdx].status = 'accepted';
+  }
+
+  const { client, configured } = getChatSupabase();
+  if (!configured || !client) return localIdx !== -1 ? fallbackRooms[localIdx] : null;
+
+  try {
+    const { data, error } = await client
+      .from("dm_rooms")
+      .update({ status: 'accepted' })
+      .eq("id", roomId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error accepting DM room in Supabase:", error.message);
+    } else if (data) {
+      return {
+        id: data.id,
+        user1Id: data.user1_id,
+        user2Id: data.user2_id,
+        status: data.status,
+        createdAt: data.created_at
+      };
+    }
+  } catch (err) {
+    console.error("Failed to accept DM room in Supabase:", err);
+  }
+  return localIdx !== -1 ? fallbackRooms[localIdx] : null;
+}
+

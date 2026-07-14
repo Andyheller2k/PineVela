@@ -29,7 +29,15 @@ import {
   dbGetRatings,
   dbCreateRating,
   dbGetActivities,
-  dbCreateActivity
+  dbCreateActivity,
+  dbGetChatProfile,
+  dbUpdateChatProfile,
+  dbGetChatMessages,
+  dbCreateChatMessage,
+  dbReactToChatMessage,
+  dbGetDMRooms,
+  dbCreateDMRoom,
+  dbAcceptDMRoom
 } from "./supabaseServer.js";
 
 // Initial datasets for our stateful backend
@@ -521,6 +529,100 @@ async function startServer() {
     return res.json(matched.user);
   });
 
+  // Public Manager and Hostel registration endpoint
+  app.post("/api/auth/register-manager", async (req, res) => {
+    try {
+      const {
+        managerName,
+        managerEmail,
+        password,
+        managerPhone,
+        hostelName,
+        location,
+        wing,
+        totalCapacity,
+        description
+      } = req.body;
+
+      if (!managerName || !managerEmail || !password || !hostelName) {
+        return res.status(400).json({ error: "Missing required registration details" });
+      }
+
+      // Create new manager user
+      const managerId = `manager-new-${Date.now()}`;
+      const username = managerEmail.split('@')[0] + Math.floor(Math.random() * 100);
+      const userToken = `token_${managerId}`;
+
+      const newManagerUser = {
+        email: managerEmail,
+        username,
+        password,
+        user: {
+          id: managerId,
+          name: managerName,
+          role: 'manager',
+          token: userToken
+        }
+      };
+
+      MOCK_USERS.push(newManagerUser);
+
+      // Persist user in Supabase if configured
+      const { client, configured } = getSupabase();
+      if (configured && client) {
+        await client.from("users").insert([{
+          id: managerId,
+          email: managerEmail,
+          username,
+          password,
+          name: managerName,
+          role: 'manager',
+          token: userToken
+        }]);
+      }
+
+      // Create new hostel
+      const hostelId = `hostel-new-${Date.now()}`;
+      const newHostel = {
+        id: hostelId,
+        name: hostelName,
+        location: location || "Unknown Location",
+        wing: wing || "North Wing",
+        status: 'Open',
+        bedsLeft: Number(totalCapacity || 100),
+        totalCapacity: Number(totalCapacity || 100),
+        availableSpaces: Number(totalCapacity || 100),
+        image: 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=800&q=80',
+        managerName,
+        managerPhone: managerPhone || "",
+        managerEmail,
+        description: description || "Modern student residential community.",
+        rating: 5.0,
+        registrationDate: new Date().toISOString().split('T')[0],
+        subscriptionPaid: true
+      };
+
+      const savedHostel = await dbCreateHostel(newHostel, hostels);
+
+      // Create admin activity logs
+      await dbCreateActivity({
+        id: `act-new-${Date.now()}`,
+        text: `New Manager "${managerName}" registered hostel "${hostelName}"`,
+        time: 'Just now',
+        type: 'success'
+      }, activities);
+
+      return res.status(201).json({
+        success: true,
+        user: newManagerUser.user,
+        hostel: savedHostel
+      });
+    } catch (err: any) {
+      console.error("Manager registration error:", err);
+      return res.status(500).json({ error: err.message || "Failed to register manager and hostel" });
+    }
+  });
+
   // Authentication validation middleware
   function requireAuth(allowedRoles?: ("student" | "manager" | "admin" | "staff")[]) {
     return async (req: any, res: any, next: any) => {
@@ -858,14 +960,14 @@ async function startServer() {
   // 1. GET current user's profile
   app.get("/api/chat/profile", requireAuth(), async (req: any, res) => {
     const studentId = req.user.id;
-    let profile = chatProfiles.find(p => p.studentId === studentId);
+    let profile = await dbGetChatProfile(studentId, chatProfiles);
     if (!profile) {
-      profile = {
+      profile = await dbUpdateChatProfile(
         studentId,
-        nickname: req.user.name,
-        avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80'
-      };
-      chatProfiles.push(profile);
+        req.user.name,
+        'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
+        chatProfiles
+      );
     }
     res.json(profile);
   });
@@ -874,14 +976,11 @@ async function startServer() {
   app.post("/api/chat/profile", requireAuth(), async (req: any, res) => {
     const studentId = req.user.id;
     const { nickname, avatarUrl } = req.body;
-    let profile = chatProfiles.find(p => p.studentId === studentId);
-    if (!profile) {
-      profile = { studentId, nickname, avatarUrl };
-      chatProfiles.push(profile);
-    } else {
-      profile.nickname = nickname || profile.nickname;
-      profile.avatarUrl = avatarUrl || profile.avatarUrl;
-    }
+    let existingProfile = await dbGetChatProfile(studentId, chatProfiles);
+    const updatedNickname = nickname || (existingProfile ? existingProfile.nickname : req.user.name);
+    const updatedAvatar = avatarUrl || (existingProfile ? existingProfile.avatarUrl : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80');
+    
+    let profile = await dbUpdateChatProfile(studentId, updatedNickname, updatedAvatar, chatProfiles);
     res.json(profile);
   });
 
@@ -891,8 +990,8 @@ async function startServer() {
     if (!channelType || !channelId) {
       return res.status(400).json({ error: "channelType and channelId queries are required" });
     }
-    const filtered = chatMessages.filter(m => m.channelType === channelType && m.channelId === channelId);
-    res.json(filtered);
+    const messages = await dbGetChatMessages(channelType as string, channelId as string, chatMessages);
+    res.json(messages);
   });
 
   // 4. POST message
@@ -903,7 +1002,7 @@ async function startServer() {
       return res.status(400).json({ error: "Missing required message fields" });
     }
 
-    let profile = chatProfiles.find(p => p.studentId === studentId);
+    let profile = await dbGetChatProfile(studentId, chatProfiles);
     const senderName = profile ? profile.nickname : req.user.name;
     const senderAvatar = profile ? profile.avatarUrl : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80';
 
@@ -916,10 +1015,11 @@ async function startServer() {
       senderAvatar,
       messageType: messageType || 'text',
       content,
+      reactions: {},
       createdAt: new Date().toISOString()
     };
 
-    chatMessages.push(newMsg);
+    const savedMsg = await dbCreateChatMessage(newMsg, chatMessages);
 
     // Auto-create chat notifications for recipients
     try {
@@ -958,7 +1058,8 @@ async function startServer() {
           await dbCreateNotification(newNotif, notifications);
         }
       } else if (channelType === 'dm') {
-        const room = dmRooms.find(r => r.id === channelId);
+        const rooms = await dbGetDMRooms(studentId, dmRooms);
+        const room = rooms.find(r => r.id === channelId);
         if (room) {
           const opponentId = room.user1Id === studentId ? room.user2Id : room.user1Id;
           const newNotif = {
@@ -977,7 +1078,7 @@ async function startServer() {
       console.error("Failed to auto-create chat notifications:", err);
     }
 
-    res.status(201).json(newMsg);
+    res.status(201).json(savedMsg);
   });
 
   // 4b. React to message
@@ -986,53 +1087,36 @@ async function startServer() {
     const { emoji } = req.body;
     const studentId = req.user.id;
 
-    let profile = chatProfiles.find(p => p.studentId === studentId);
+    let profile = await dbGetChatProfile(studentId, chatProfiles);
     const reactorName = profile ? profile.nickname : req.user.name;
 
-    const msg = chatMessages.find(m => m.id === id);
-    if (!msg) {
+    const updatedMsg = await dbReactToChatMessage(id, emoji, reactorName, chatMessages);
+    if (!updatedMsg) {
       return res.status(404).json({ error: "Message not found" });
     }
 
-    if (!msg.reactions) {
-      msg.reactions = {};
-    }
-
-    if (!msg.reactions[emoji]) {
-      msg.reactions[emoji] = [];
-    }
-
-    const index = msg.reactions[emoji].indexOf(reactorName);
-    if (index > -1) {
-      msg.reactions[emoji].splice(index, 1);
-      if (msg.reactions[emoji].length === 0) {
-        delete msg.reactions[emoji];
-      }
-    } else {
-      msg.reactions[emoji].push(reactorName);
-    }
-
-    res.json(msg);
+    res.json(updatedMsg);
   });
 
   // 5. GET all DM rooms for current student
   app.get("/api/chat/dms", requireAuth(), async (req: any, res) => {
     const studentId = req.user.id;
-    const rooms = dmRooms.filter(r => r.user1Id === studentId || r.user2Id === studentId);
+    const rooms = await dbGetDMRooms(studentId, dmRooms);
     
     // Enrich DM rooms with nickname and avatar info from mock users list
     const allUsers = await dbGetUsers(MOCK_USERS);
     
-    const enrichedRooms = rooms.map(room => {
+    const enrichedRooms = [];
+    for (const room of rooms) {
       const isInitiator = room.user1Id === studentId;
       const opponentId = isInitiator ? room.user2Id : room.user1Id;
       
       const opponentUserRecord = allUsers.find(u => u.id === opponentId || (u.user && u.user.id === opponentId));
       const opponentUser = opponentUserRecord ? (opponentUserRecord.user || opponentUserRecord) : null;
       
-      const opponentProfile = chatProfiles.find(p => p.studentId === opponentId);
+      const opponentProfile = await dbGetChatProfile(opponentId, chatProfiles);
       
-      return {
+      enrichedRooms.push({
         ...room,
         isInitiator,
         opponent: {
@@ -1041,8 +1125,8 @@ async function startServer() {
           nickname: opponentProfile ? opponentProfile.nickname : (opponentUser ? opponentUser.name : 'Unknown'),
           avatarUrl: opponentProfile ? opponentProfile.avatarUrl : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80'
         }
-      };
-    });
+      });
+    }
     
     res.json(enrichedRooms);
   });
@@ -1055,7 +1139,8 @@ async function startServer() {
       return res.status(400).json({ error: "recipientId is required" });
     }
 
-    let existingRoom = dmRooms.find(r => 
+    const rooms = await dbGetDMRooms(studentId, dmRooms);
+    let existingRoom = rooms.find(r => 
       (r.user1Id === studentId && r.user2Id === recipientId) ||
       (r.user1Id === recipientId && r.user2Id === studentId)
     );
@@ -1072,8 +1157,8 @@ async function startServer() {
       createdAt: new Date().toISOString()
     };
 
-    dmRooms.push(newRoom);
-    res.status(201).json(newRoom);
+    const savedRoom = await dbCreateDMRoom(newRoom, dmRooms);
+    res.status(201).json(savedRoom);
   });
 
   // 7. POST accept DM room request
@@ -1082,12 +1167,11 @@ async function startServer() {
     if (!roomId) {
       return res.status(400).json({ error: "roomId is required" });
     }
-    const room = dmRooms.find(r => r.id === roomId);
-    if (!room) {
+    const updatedRoom = await dbAcceptDMRoom(roomId, dmRooms);
+    if (!updatedRoom) {
       return res.status(404).json({ error: "DM Room not found" });
     }
-    room.status = 'accepted';
-    res.json(room);
+    res.json(updatedRoom);
   });
 
   // 8. GET other students list for DM start
@@ -1095,19 +1179,22 @@ async function startServer() {
     const studentId = req.user.id;
     const allUsers = await dbGetUsers(MOCK_USERS);
     
-    const studentUsers = allUsers.filter(u => {
+    const studentsFiltered = allUsers.filter(u => {
       const uRecord = u.user || u;
       return uRecord.role === 'student' && uRecord.id !== studentId;
-    }).map(u => {
+    });
+
+    const studentUsers = [];
+    for (const u of studentsFiltered) {
       const uRecord = u.user || u;
-      const profile = chatProfiles.find(p => p.studentId === uRecord.id);
-      return {
+      const profile = await dbGetChatProfile(uRecord.id, chatProfiles);
+      studentUsers.push({
         id: uRecord.id,
         name: uRecord.name,
         nickname: profile ? profile.nickname : uRecord.name,
         avatarUrl: profile ? profile.avatarUrl : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80'
-      };
-    });
+      });
+    }
     
     res.json(studentUsers);
   });

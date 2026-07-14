@@ -33,7 +33,7 @@ export default function Page1Public({
   });
 
   return (
-    <div className="min-h-screen bg-slate-50 relative overflow-hidden font-sans pb-16">
+    <div className="min-h-screen bg-transparent relative overflow-hidden font-sans pb-16">
       {/* Decorative background shapes */}
       <div className="absolute top-0 right-0 w-96 h-96 bg-amber-100 rounded-full blur-3xl opacity-30 -z-10" />
       <div className="absolute top-1/2 left-0 w-80 h-80 bg-blue-100 rounded-full blur-3xl opacity-30 -z-10" />
@@ -73,38 +73,93 @@ export default function Page1Public({
         
         {/* Welcome Section */}
         <section id="welcome-hero" className="grid grid-cols-1 lg:grid-cols-12 items-center gap-12 pb-16 border-b border-slate-100">
-          <div className="lg:col-span-7 space-y-6">
-            <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-slate-900 leading-tight">
+          <motion.div 
+            className="lg:col-span-7 space-y-6"
+            initial="hidden"
+            animate="visible"
+            variants={{
+              hidden: { opacity: 0 },
+              visible: {
+                opacity: 1,
+                transition: {
+                  staggerChildren: 0.15
+                }
+              }
+            }}
+          >
+            <motion.h1 
+              className="text-4xl md:text-5xl font-extrabold tracking-tight text-slate-900 leading-tight"
+              variants={{
+                hidden: { opacity: 0, y: 30 },
+                visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } }
+              }}
+            >
               Welcome to <br />
               <span className="text-blue-900 font-black relative">
                 PineVela
                 <span className="absolute bottom-1 left-0 w-full h-2 bg-amber-300 -z-10 rounded-sm opacity-60"></span>
               </span>
-            </h1>
-            <p className="text-lg text-slate-600 max-w-xl leading-relaxed">
+            </motion.h1>
+
+            <motion.p 
+              className="text-lg text-slate-600 max-w-xl leading-relaxed"
+              variants={{
+                hidden: { opacity: 0, y: 20 },
+                visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } }
+              }}
+            >
               The universal global dashboard for modern student living. Find your next home or manage your property with professional efficiency.
-            </p>
+            </motion.p>
             
-            <div className="flex flex-wrap gap-4 pt-2">
+            <motion.div 
+              className="flex flex-wrap gap-4 pt-2"
+              variants={{
+                hidden: { opacity: 0, y: 20 },
+                visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } }
+              }}
+            >
               <button
                 id="btn-login"
                 onClick={() => onNavigate('student-login')}
-                className="px-8 py-3.5 bg-blue-900 hover:bg-blue-800 text-white font-extrabold rounded-xl shadow-lg shadow-blue-900/20 transition-all transform hover:-translate-y-0.5 flex items-center gap-2 text-sm"
+                className="px-8 py-3.5 bg-blue-900 hover:bg-blue-800 text-white font-extrabold rounded-xl shadow-lg shadow-blue-900/20 transition-all transform hover:-translate-y-1 hover:shadow-xl hover:shadow-blue-900/35 flex items-center gap-2 text-sm cursor-pointer"
               >
                 <span>Login to Portal</span>
                 <span>→</span>
               </button>
-            </div>
+            </motion.div>
 
-            <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-100/80 px-4 py-2 rounded-lg inline-flex">
+            <motion.div 
+              className="flex items-center gap-2 text-xs text-slate-500 bg-slate-100/80 px-4 py-2 rounded-lg inline-flex"
+              variants={{
+                hidden: { opacity: 0, y: 15 },
+                visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } }
+              }}
+            >
               <span className="text-amber-500">⚠️</span>
               <span>Users can only view hostel details from this screen. Booking will be available later.</span>
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
 
-          <div className="lg:col-span-5 flex justify-center">
+          <motion.div 
+            className="lg:col-span-5 flex justify-center"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1, y: [0, -8, 0] }}
+            transition={{
+              opacity: { duration: 0.8 },
+              scale: { duration: 0.8 },
+              y: { duration: 6, repeat: Infinity, ease: "easeInOut" }
+            }}
+          >
             {/* Visual Pineapple Illustration from Page 1 */}
-            <div className="relative w-72 h-72 md:w-80 md:h-80 bg-white rounded-3xl shadow-xl flex items-center justify-center p-8 border border-slate-100">
+            <motion.div 
+              className="relative w-72 h-72 md:w-80 md:h-80 bg-white rounded-3xl shadow-xl flex items-center justify-center p-8 border border-slate-100 cursor-pointer"
+              whileHover={{ 
+                scale: 1.05, 
+                rotate: 2,
+                boxShadow: "0 25px 50px -12px rgb(0 0 0 / 0.15)"
+              }}
+              transition={{ type: "spring", stiffness: 300, damping: 20 }}
+            >
               {/* Abstract decorative circles behind logo */}
               <div className="absolute -bottom-4 -right-4 w-48 h-48 bg-slate-100 rounded-full -z-10" />
               <div className="absolute -top-4 -left-4 w-24 h-24 bg-amber-50 rounded-full -z-10" />
@@ -115,8 +170,8 @@ export default function Page1Public({
                 </div>
                 <div className="text-xs text-slate-400 uppercase tracking-widest font-mono">Premium Residences</div>
               </div>
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
         </section>
 
         {/* Available Hostels Section */}
@@ -180,7 +235,7 @@ export default function Page1Public({
 
           {/* Grid of Hostels */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {filteredHostels.map((hostel) => {
+            {filteredHostels.map((hostel, index) => {
               const isOpen = hostel.status === 'Open';
               const isMaintenance = hostel.status === 'Under Maintenance';
               const isFull = hostel.status === 'Full';
@@ -196,10 +251,19 @@ export default function Page1Public({
               }
 
               return (
-                <div
+                <motion.div
                   key={hostel.id}
-                  className="bg-white rounded-2xl overflow-hidden border border-slate-100 shadow-sm transition-all flex flex-col group cursor-pointer hostel-radiant-glow"
+                  className="bg-white rounded-2xl overflow-hidden border border-slate-100 shadow-sm flex flex-col group cursor-pointer hostel-radiant-glow"
                   onClick={() => onSelectHostel(hostel)}
+                  initial={{ opacity: 0, y: 35 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: "-40px" }}
+                  transition={{ duration: 0.5, delay: (index % 4) * 0.1 }}
+                  whileHover={{ 
+                    y: -10, 
+                    scale: 1.02,
+                    boxShadow: "0 25px 40px -15px rgb(0 0 0 / 0.15)"
+                  }}
                 >
                   {/* Image and Status Ribbon */}
                   <div className="relative h-44 w-full bg-slate-100 overflow-hidden">
@@ -259,7 +323,7 @@ export default function Page1Public({
                       <ArrowRight size={14} />
                     </button>
                   </div>
-                </div>
+                </motion.div>
               );
             })}
           </div>
@@ -273,18 +337,37 @@ export default function Page1Public({
             </div>
           )}
 
-          {/* Load More Button */}
-          <div className="flex justify-center pt-4">
-            <button className="px-6 py-2.5 border border-slate-200 rounded-xl text-slate-700 text-xs font-bold hover:bg-slate-50 transition-colors flex items-center gap-2">
-              <span>Load More Properties</span>
-              <span className="text-slate-400">⚡</span>
-            </button>
-          </div>
         </section>
 
         {/* Benefits Badges Section */}
-        <section id="benefits" className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-20 pb-10">
-          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-3">
+        <motion.section 
+          id="benefits" 
+          className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-20 pb-10"
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: "-60px" }}
+          variants={{
+            hidden: { opacity: 0 },
+            visible: {
+              opacity: 1,
+              transition: {
+                staggerChildren: 0.15
+              }
+            }
+          }}
+        >
+          <motion.div 
+            className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-3 cursor-pointer"
+            variants={{
+              hidden: { opacity: 0, y: 30 },
+              visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } }
+            }}
+            whileHover={{ 
+              y: -8, 
+              scale: 1.02,
+              boxShadow: "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)"
+            }}
+          >
             <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-900">
               <Shield size={20} />
             </div>
@@ -292,9 +375,20 @@ export default function Page1Public({
             <p className="text-xs text-slate-500 leading-relaxed">
               Every hostel on PineVela is physically inspected for safety, hygiene, and amenity compliance.
             </p>
-          </div>
+          </motion.div>
 
-          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-3">
+          <motion.div 
+            className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-3 cursor-pointer"
+            variants={{
+              hidden: { opacity: 0, y: 30 },
+              visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } }
+            }}
+            whileHover={{ 
+              y: -8, 
+              scale: 1.02,
+              boxShadow: "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)"
+            }}
+          >
             <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600">
               <User size={20} />
             </div>
@@ -302,9 +396,20 @@ export default function Page1Public({
             <p className="text-xs text-slate-500 leading-relaxed">
               Connect directly with certified property managers for inquiries, viewing requests, and clarifications.
             </p>
-          </div>
+          </motion.div>
 
-          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-3">
+          <motion.div 
+            className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-3 cursor-pointer"
+            variants={{
+              hidden: { opacity: 0, y: 30 },
+              visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } }
+            }}
+            whileHover={{ 
+              y: -8, 
+              scale: 1.02,
+              boxShadow: "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)"
+            }}
+          >
             <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center text-rose-500">
               <Landmark size={20} />
             </div>
@@ -312,8 +417,8 @@ export default function Page1Public({
             <p className="text-xs text-slate-500 leading-relaxed">
               Property owners can track occupancy, maintenance requests, and bookings from a single powerful dashboard.
             </p>
-          </div>
-        </section>
+          </motion.div>
+        </motion.section>
 
       </main>
 
