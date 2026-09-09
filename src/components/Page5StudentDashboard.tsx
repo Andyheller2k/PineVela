@@ -18,6 +18,7 @@ import {
   ChevronLeft,
   Upload,
   X,
+  Menu,
   CheckCircle,
   Copy,
   Video,
@@ -52,6 +53,7 @@ export default function Page5StudentDashboard({
 
   // Tabs state
   const [activeTab, setActiveTab] = useState<'room' | 'report' | 'meetings' | 'history' | 'notifications' | 'rate' | 'chat'>('room');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Stateful datasets synchronized with full-stack APIs
   const [meetings, setMeetings] = useState<MeetingRequest[]>([]);
@@ -247,7 +249,15 @@ export default function Page5StudentDashboard({
   const loadChatMessages = async (channelType: string, channelId: string) => {
     try {
       const msgs = await apiFetch(`/api/chat/messages?channelType=${channelType}&channelId=${channelId}`);
-      setChatMessages(msgs);
+      if (Array.isArray(msgs)) {
+        const seen = new Set<string>();
+        const uniqueMsgs = msgs.filter((m: any) => {
+          if (!m || !m.id || seen.has(m.id)) return false;
+          seen.add(m.id);
+          return true;
+        });
+        setChatMessages(uniqueMsgs);
+      }
     } catch (err) {
       console.error("Failed to load chat messages:", err);
     }
@@ -301,7 +311,14 @@ export default function Page5StudentDashboard({
           content: content.trim()
         })
       });
-      setChatMessages(prev => [...prev, newMsg]);
+      if (newMsg && newMsg.id) {
+        setChatMessages(prev => {
+          if (prev.some(m => m.id === newMsg.id)) {
+            return prev.map(m => m.id === newMsg.id ? newMsg : m);
+          }
+          return [...prev, newMsg];
+        });
+      }
       setChatInput('');
       setShowPhotoDropdown(false);
       setShowStickersGifsDropdown(false);
@@ -531,7 +548,7 @@ export default function Page5StudentDashboard({
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-800">
+    <div className="h-screen w-screen overflow-hidden bg-slate-50 flex font-sans text-slate-800">
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-5 right-5 bg-blue-950 text-white font-extrabold text-xs px-4 py-3 rounded-xl shadow-2xl z-50 flex items-center gap-2 border border-slate-700">
@@ -540,150 +557,234 @@ export default function Page5StudentDashboard({
         </div>
       )}
 
-      {/* Header */}
-      <header className="bg-white border-b border-slate-100 px-6 py-3 sticky top-0 z-30 flex items-center justify-between">
-        <div className="cursor-pointer flex items-center gap-2" onClick={() => onNavigate('student-dashboard')}>
-          <PineLogo />
-          <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-900 px-2 py-0.5 rounded border border-blue-100">Student Portal</span>
+      {/* Mobile Backdrop */}
+      {mobileMenuOpen && (
+        <div
+          onClick={() => setMobileMenuOpen(false)}
+          className="fixed inset-0 bg-black/60 z-30 lg:hidden backdrop-blur-xs transition-opacity"
+        />
+      )}
+
+      {/* Full-Height Stationary Left Sidebar covering the entire side with curved edges */}
+      <aside className={`
+        fixed inset-y-0 left-0 z-40 w-64 lg:w-72 bg-slate-900 text-slate-400 flex flex-col justify-between border-r border-slate-800
+        transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 h-screen shrink-0 shadow-2xl lg:shadow-xl
+        lg:rounded-r-[36px] overflow-hidden
+        ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
+      `}>
+        {/* Brand Section with PineVela and Logo in sidebar theme */}
+        <div className="p-5 pb-4 border-b border-white/10 flex items-center justify-between shrink-0">
+          <div
+            className="cursor-pointer flex items-center gap-2.5"
+            onClick={() => {
+              setActiveTab('room');
+              onNavigate('student-dashboard');
+              setMobileMenuOpen(false);
+            }}
+          >
+            <PineLogo variant="dark" size={32} />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[9px] font-black uppercase tracking-wider bg-white/10 text-amber-300 px-2.5 py-0.5 rounded-full border border-white/15">
+              Student
+            </span>
+            <button
+              onClick={() => setMobileMenuOpen(false)}
+              className="lg:hidden p-1 text-slate-400 hover:text-white rounded-lg"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
-        
-        <div className="flex items-center gap-4">
-          {/* Notifications button */}
-          <button onClick={() => triggerToast('No new unread messages')} className="p-2 hover:bg-slate-50 rounded-xl relative text-slate-500 hover:text-slate-700 transition-colors">
-            <Bell size={20} />
-            <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-white" />
+
+        {/* Side Tabs Navigation with fully curved pill edges */}
+        <nav className="flex-1 px-3 py-4 space-y-2 overflow-y-auto">
+          <button
+            onClick={() => {
+              setActiveTab('room');
+              onNavigate('student-dashboard');
+              setMobileMenuOpen(false);
+            }}
+            className={`w-full flex items-center gap-3.5 px-5 py-3.5 rounded-full font-bold text-xs transition-all duration-200 ${
+              activeTab === 'room'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                : 'text-slate-400 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            <Home size={18} />
+            <span>Room Information</span>
           </button>
-          
-          {/* User profile */}
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-full bg-slate-100 overflow-hidden border border-slate-200 shrink-0">
+
+          <button
+            onClick={() => {
+              setActiveTab('report');
+              onNavigate('student-report-issue');
+              setMobileMenuOpen(false);
+            }}
+            className={`w-full flex items-center gap-3.5 px-5 py-3.5 rounded-full font-bold text-xs transition-all duration-200 ${
+              activeTab === 'report'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                : 'text-slate-400 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            <AlertTriangle size={18} />
+            <span>Report an Issue</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setActiveTab('meetings');
+              setMobileMenuOpen(false);
+            }}
+            className={`w-full flex items-center gap-3.5 px-5 py-3.5 rounded-full font-bold text-xs transition-all duration-200 text-left ${
+              activeTab === 'meetings'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                : 'text-slate-400 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            <Calendar size={18} />
+            <span>Meeting Requests</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setActiveTab('history');
+              setMobileMenuOpen(false);
+            }}
+            className={`w-full flex items-center gap-3.5 px-5 py-3.5 rounded-full font-bold text-xs transition-all duration-200 text-left ${
+              activeTab === 'history'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                : 'text-slate-400 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            <History size={18} />
+            <span>Reports History</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setActiveTab('notifications');
+              setMobileMenuOpen(false);
+            }}
+            className={`w-full flex items-center gap-3.5 px-5 py-3.5 rounded-full font-bold text-xs transition-all duration-200 text-left ${
+              activeTab === 'notifications'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                : 'text-slate-400 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            <Bell size={18} />
+            <span className="flex-1">Notifications</span>
+            {notificationsList.filter(n => !n.read).length > 0 && (
+              <span className="bg-red-500 text-white text-[10px] px-2.5 py-0.5 rounded-full font-extrabold">
+                {notificationsList.filter(n => !n.read).length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => {
+              setActiveTab('rate');
+              setMobileMenuOpen(false);
+            }}
+            className={`w-full flex items-center gap-3.5 px-5 py-3.5 rounded-full font-bold text-xs transition-all duration-200 text-left ${
+              activeTab === 'rate'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                : 'text-slate-400 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            <Star size={18} />
+            <span>Rate Management</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setActiveTab('chat');
+              setMobileMenuOpen(false);
+            }}
+            className={`w-full flex items-center gap-3.5 px-5 py-3.5 rounded-full font-bold text-xs transition-all duration-200 text-left ${
+              activeTab === 'chat'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                : 'text-slate-400 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            <MessageSquare size={18} />
+            <span className="flex-1">Chat Lounge</span>
+            {hasUnreadChatNotification && activeTab !== 'chat' && (
+              <span className="w-2 h-2 rounded-full bg-red-500 shrink-0 animate-pulse" />
+            )}
+          </button>
+        </nav>
+
+        {/* User Card & Logout with curved edges at bottom of sidebar */}
+        <div className="p-4 border-t border-white/10 space-y-2 shrink-0">
+          <div className="flex items-center gap-3 px-3 py-2 rounded-full bg-white/5 border border-white/10">
+            <div className="w-8 h-8 rounded-full bg-slate-800 overflow-hidden border border-white/20 shrink-0">
               <img
                 src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80"
                 alt="Alex Thompson"
                 className="w-full h-full object-cover"
               />
             </div>
-            <div className="hidden sm:block text-left text-xs">
-              <p className="font-extrabold text-slate-900">{user?.name || 'Alex Thompson'}</p>
-              <p className="text-slate-400 text-[10px]">{user?.id || 'STU-2024-8842'}</p>
+            <div className="text-left text-xs truncate">
+              <p className="font-extrabold text-white truncate">{user?.name || 'Alex Thompson'}</p>
+              <p className="text-slate-400 text-[10px] truncate">{user?.id || 'STU-2024-8842'}</p>
             </div>
           </div>
-        </div>
-      </header>
-
-      {/* Workspace container */}
-      <div className="flex-1 flex flex-col lg:flex-row">
-        
-        {/* Sidebar Navigation */}
-        <aside className="w-full lg:w-64 bg-slate-900 text-slate-400 p-4 lg:py-6 flex flex-col justify-between shrink-0 gap-4">
-          <nav className="space-y-1">
-            <button
-              onClick={() => {
-                setActiveTab('room');
-                onNavigate('student-dashboard');
-              }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-xs transition-all ${
-                activeTab === 'room'
-                  ? 'bg-white/10 text-white'
-                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
-              }`}
-            >
-              <Home size={16} />
-              <span>Room Information</span>
-            </button>
-
-            <button
-              onClick={() => {
-                setActiveTab('report');
-                onNavigate('student-report-issue');
-              }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-xs transition-all ${
-                activeTab === 'report'
-                  ? 'bg-white/10 text-white'
-                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
-              }`}
-            >
-              <AlertTriangle size={16} />
-              <span>Report an Issue</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('meetings')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-xs transition-all text-left ${
-                activeTab === 'meetings'
-                  ? 'bg-white/10 text-white'
-                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
-              }`}
-            >
-              <Calendar size={16} />
-              <span>Meeting Requests</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('history')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-xs transition-all text-left ${
-                activeTab === 'history'
-                  ? 'bg-white/10 text-white'
-                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
-              }`}
-            >
-              <History size={16} />
-              <span>Reports History</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('notifications')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-xs transition-all text-left ${
-                activeTab === 'notifications'
-                  ? 'bg-white/10 text-white'
-                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
-              }`}
-            >
-              <Bell size={16} />
-              <span className="flex-1">Notifications</span>
-              {notificationsList.filter(n => !n.read).length > 0 && (
-                <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">
-                  {notificationsList.filter(n => !n.read).length}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => setActiveTab('rate')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-xs transition-all text-left ${
-                activeTab === 'rate'
-                  ? 'bg-white/10 text-white'
-                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
-              }`}
-            >
-              <Star size={16} />
-              <span>Rate Management</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('chat')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-xs transition-all text-left ${
-                activeTab === 'chat'
-                  ? 'bg-white/10 text-white'
-                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
-              }`}
-            >
-              <MessageSquare size={16} />
-              <span className="flex-1">Chat Lounge</span>
-              {hasUnreadChatNotification && activeTab !== 'chat' && (
-                <span className="w-2 h-2 rounded-full bg-red-500 shrink-0 animate-pulse" />
-              )}
-            </button>
-          </nav>
 
           <button
             onClick={() => onNavigate('public-browse')}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-xs text-rose-400 hover:bg-rose-950/30 hover:text-rose-300 transition-all mt-auto"
+            className="w-full flex items-center gap-3 px-5 py-2.5 rounded-full font-bold text-xs text-rose-400 hover:bg-rose-950/40 hover:text-rose-300 transition-all text-left"
           >
             <LogOut size={16} />
             <span>Logout</span>
           </button>
-        </aside>
+        </div>
+      </aside>
+
+      {/* Main Content Area: Scrolls independently while sidebar stays perfectly stationary */}
+      <div className="flex-1 h-screen overflow-y-auto flex flex-col min-w-0 bg-slate-50">
+        {/* Top Header Bar */}
+        <header className="bg-white border-b border-slate-200/80 px-6 py-3 sticky top-0 z-20 flex items-center justify-between shrink-0 shadow-xs">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              className="lg:hidden p-1.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200"
+              title="Open Navigation"
+            >
+              <Menu size={18} />
+            </button>
+            <span className="text-xs font-black uppercase tracking-wider text-slate-800 hidden sm:inline">
+              Student Accommodation Portal
+            </span>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => triggerToast('No new unread messages')}
+              className="p-2 hover:bg-slate-100 rounded-xl relative text-slate-500 hover:text-slate-700 transition-colors"
+            >
+              <Bell size={18} />
+              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500" />
+            </button>
+
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-full bg-slate-100 overflow-hidden border border-slate-200 shrink-0">
+                <img
+                  src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80"
+                  alt="Alex Thompson"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="hidden sm:block text-left text-xs">
+                <p className="font-extrabold text-slate-900 leading-tight">{user?.name || 'Alex Thompson'}</p>
+                <p className="text-slate-400 text-[10px]">{user?.id || 'STU-2024-8842'}</p>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* Workspace content */}
+        <div className="flex-1 flex flex-col">
 
         {/* Main Content Pane */}
         {activeTab === 'room' ? (
@@ -867,8 +968,8 @@ export default function Page5StudentDashboard({
                   </div>
 
                   <div className="space-y-4 pt-1">
-                    {notificationsList.slice(0, 3).map((notif) => (
-                      <div key={notif.id} className="flex gap-3 text-xs">
+                    {notificationsList.slice(0, 3).map((notif, idx) => (
+                      <div key={notif.id ? `${notif.id}-${idx}` : `notif-${idx}`} className="flex gap-3 text-xs">
                         <span className={`w-1.5 h-1.5 rounded-full shrink-0 mt-1.5 ${
                           notif.type === 'success' ? 'bg-green-500' :
                           notif.type === 'warning' ? 'bg-amber-500' :
@@ -1347,8 +1448,8 @@ export default function Page5StudentDashboard({
                 <p className="text-xs text-slate-400">Track approvals and scheduled times. Once approved, details will activate.</p>
 
                 <div className="space-y-3.5 pt-1 max-h-[360px] overflow-y-auto pr-1">
-                  {meetings.map((meet) => (
-                    <div key={meet.id} className="p-4 bg-slate-50 border border-slate-150 rounded-xl flex items-start justify-between gap-4 text-xs">
+                  {meetings.map((meet, idx) => (
+                    <div key={meet.id ? `${meet.id}-${idx}` : `meet-${idx}`} className="p-4 bg-slate-50 border border-slate-150 rounded-xl flex items-start justify-between gap-4 text-xs">
                       <div className="space-y-2 text-left">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className={`px-2 py-0.5 rounded-full font-black text-[9px] uppercase tracking-wide ${
@@ -1420,8 +1521,8 @@ export default function Page5StudentDashboard({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50 font-medium text-slate-700">
-                    {issuesHistory.map((issue) => (
-                      <tr key={issue.id} className="hover:bg-slate-50/50 transition-colors">
+                    {issuesHistory.map((issue, idx) => (
+                      <tr key={issue.id ? `${issue.id}-${idx}` : `issue-${idx}`} className="hover:bg-slate-50/50 transition-colors">
                         <td className="py-4 px-4 max-w-xs">
                           <p className="font-extrabold text-slate-900">{issue.title}</p>
                           <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-1">{issue.description}</p>
@@ -1518,9 +1619,9 @@ export default function Page5StudentDashboard({
             </div>
 
             <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm space-y-4">
-              {notificationsList.map((notif) => (
+              {notificationsList.map((notif, idx) => (
                 <div
-                  key={notif.id}
+                  key={notif.id ? `${notif.id}-${idx}` : `notif-full-${idx}`}
                   onClick={() => !notif.read && handleMarkNotificationRead(notif.id)}
                   className={`p-4 rounded-xl border transition-all flex items-start gap-4 cursor-pointer ${
                     notif.read
@@ -1639,8 +1740,8 @@ export default function Page5StudentDashboard({
                 <p className="text-xs text-slate-400">View real reviews logged statefully from verified campus students.</p>
 
                 <div className="space-y-4 pt-1 max-h-[360px] overflow-y-auto pr-1">
-                  {ratingsList.map((rating) => (
-                    <div key={rating.id} className="p-4 bg-slate-50 border border-slate-100 rounded-xl space-y-2 text-xs text-left">
+                  {ratingsList.map((rating, idx) => (
+                    <div key={rating.id ? `${rating.id}-${idx}` : `rating-${idx}`} className="p-4 bg-slate-50 border border-slate-100 rounded-xl space-y-2 text-xs text-left">
                       <div className="flex items-center justify-between gap-4">
                         <div>
                           <p className="font-extrabold text-slate-900">{rating.studentName}</p>
@@ -1752,7 +1853,7 @@ export default function Page5StudentDashboard({
                     <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block text-left">Direct Messages</span>
                   </div>
                   <div className="space-y-1 mt-1">
-                    {dmRoomsList.map((room) => {
+                    {dmRoomsList.map((room, idx) => {
                       const isSelected = activeChatChannel === 'dm' && activeChatId === room.id;
                       const hasDMNotification = notificationsList.some(n => 
                         !n.read && 
@@ -1761,7 +1862,7 @@ export default function Page5StudentDashboard({
                       );
                       return (
                         <button
-                          key={room.id}
+                          key={room.id ? `${room.id}-${idx}` : `dm-room-${idx}`}
                           onClick={() => {
                             setActiveChatChannel('dm');
                             setActiveChatId(room.id);
@@ -1840,13 +1941,13 @@ export default function Page5StudentDashboard({
 
               {/* Chat Messages list */}
               <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/30">
-                {chatMessages.map((msg) => {
+                {chatMessages.map((msg, idx) => {
                   const isMine = msg.senderId === user?.id;
                   const isManager = msg.senderId?.startsWith('manager_') || msg.senderId === 'manager_101';
                   const isSticker = msg.messageType === 'sticker';
                   const isGif = msg.messageType === 'gif';
                   return (
-                    <div key={msg.id} className={`flex gap-3 max-w-[85%] ${isMine ? 'ml-auto flex-row-reverse text-right' : 'text-left'}`}>
+                    <div key={msg.id ? `${msg.id}-${idx}` : `chat-msg-${idx}`} className={`flex gap-3 max-w-[85%] ${isMine ? 'ml-auto flex-row-reverse text-right' : 'text-left'}`}>
                       <img
                         src={msg.senderAvatar}
                         alt={msg.senderName}
@@ -2287,9 +2388,9 @@ export default function Page5StudentDashboard({
                   <p className="text-[10px] text-slate-400">Select a student from the registered hostels list to send a direct message request.</p>
                   
                   <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
-                    {availableStudentsList.map((student) => (
+                    {availableStudentsList.map((student, idx) => (
                       <button
-                        key={student.id}
+                        key={student.id ? `${student.id}-${idx}` : `student-${idx}`}
                         onClick={() => handleStartDMChat(student.id)}
                         className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-slate-50 transition-colors text-left border border-transparent hover:border-slate-100"
                       >
@@ -2313,19 +2414,19 @@ export default function Page5StudentDashboard({
             )}
           </main>
         )}
-
-      </div>
-
-      {/* Workspace Footer */}
-      <footer className="border-t border-slate-200 bg-white py-4 px-6 text-[10px] text-slate-400">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>© 2026 PineVela. All rights reserved.</span>
-          <div className="flex gap-4">
-            <a href="#" className="hover:text-slate-600">Privacy Policy</a>
-            <a href="#" className="hover:text-slate-600">Terms of Service</a>
-          </div>
         </div>
-      </footer>
+
+        {/* Workspace Footer */}
+        <footer className="border-t border-slate-200 bg-white py-4 px-6 text-[10px] text-slate-400 mt-auto shrink-0">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+            <span>© 2026 PineVela. All rights reserved.</span>
+            <div className="flex gap-4">
+              <a href="#" className="hover:text-slate-600">Privacy Policy</a>
+              <a href="#" className="hover:text-slate-600">Terms of Service</a>
+            </div>
+          </div>
+        </footer>
+      </div>
     </div>
   );
 }

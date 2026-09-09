@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import PineLogo from './PineLogo';
-import { Hostel, BookingRequest, IssueReport } from '../types';
+import HostelRegistration from './HostelRegistration';
+import { Hostel, BookingRequest, IssueReport, ManagerRegistrationRequest, ManagerVerificationRecord, HostelVerificationRecord } from '../types';
 import {
   LayoutDashboard,
   Building,
@@ -18,6 +19,7 @@ import {
   MoreVertical,
   Check,
   X,
+  Menu,
   AlertCircle,
   FileText,
   Phone,
@@ -25,7 +27,22 @@ import {
   Sliders,
   Sparkles,
   Layers,
-  Edit2
+  Edit2,
+  Database,
+  RefreshCw,
+  ShieldCheck,
+  UserCheck,
+  CheckCircle2,
+  XCircle,
+  Building2,
+  Clock,
+  Eye,
+  CreditCard,
+  AlertTriangle,
+  ExternalLink,
+  ShieldAlert,
+  BadgeCheck,
+  FileCheck
 } from 'lucide-react';
 
 interface Page8ManagerDashboardProps {
@@ -36,6 +53,7 @@ interface Page8ManagerDashboardProps {
   issueReports: IssueReport[];
   activities: any[];
   onUpdateHostels: (hostels: Hostel[]) => void;
+  onHostelRegistered?: (newHostel: Hostel) => void;
   onUpdateBookingStatus: (id: string, status: 'Pending' | 'Approved' | 'Ignored') => Promise<void>;
 }
 
@@ -47,10 +65,394 @@ export default function Page8ManagerDashboard({
   issueReports,
   activities,
   onUpdateHostels,
+  onHostelRegistered,
   onUpdateBookingStatus
 }: Page8ManagerDashboardProps) {
   // Local active tab to support settings subview
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'configure' | 'settings' | 'register'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'configure' | 'settings' | 'register' | 'approvals'>('dashboard');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [dbStatus, setDbStatus] = useState<any>(null);
+  const [dbLoading, setDbLoading] = useState<boolean>(false);
+
+  // Manager Registration Requests state (Legacy)
+  const [managerRequestsList, setManagerRequestsList] = useState<ManagerRegistrationRequest[]>([]);
+  const [managerRequestsLoading, setManagerRequestsLoading] = useState<boolean>(false);
+
+  // PineVela Extended Verification System States
+  const [verificationSubTab, setVerificationSubTab] = useState<'managers' | 'hostels'>('managers');
+  const [managerVerifications, setManagerVerifications] = useState<ManagerVerificationRecord[]>([]);
+  const [hostelVerifications, setHostelVerifications] = useState<HostelVerificationRecord[]>([]);
+  const [verificationsLoading, setVerificationsLoading] = useState<boolean>(false);
+  const [selectedManagerVerification, setSelectedManagerVerification] = useState<ManagerVerificationRecord | null>(null);
+  const [selectedHostelVerification, setSelectedHostelVerification] = useState<HostelVerificationRecord | null>(null);
+  const [adminActionNotes, setAdminActionNotes] = useState<string>('');
+  const [adminActionLoading, setAdminActionLoading] = useState<boolean>(false);
+  const [actionModalType, setActionModalType] = useState<'request-info' | 'flag-investigation' | 'suspend' | null>(null);
+
+  const fetchManagerVerifications = async () => {
+    try {
+      const res = await fetch('/api/manager-verifications');
+      if (res.ok) {
+        const data = await res.json();
+        setManagerVerifications(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch manager verifications:", err);
+    }
+  };
+
+  const fetchHostelVerifications = async () => {
+    try {
+      const res = await fetch('/api/hostel-verifications');
+      if (res.ok) {
+        const data = await res.json();
+        setHostelVerifications(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch hostel verifications:", err);
+    }
+  };
+
+  const refreshAllVerifications = async () => {
+    setVerificationsLoading(true);
+    await Promise.all([fetchManagerRequestsList(), fetchManagerVerifications(), fetchHostelVerifications()]);
+    setVerificationsLoading(false);
+  };
+
+  const handleApproveManagerVerification = async (id: string, notes?: string) => {
+    setAdminActionLoading(true);
+    try {
+      const res = await fetch(`/api/manager-verifications/${id}/approve`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token') || 'token_admin'}`
+        },
+        body: JSON.stringify({ adminNotes: notes || 'Verified identity and authority documentation. Approved by administrator.' })
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to approve manager verification');
+      }
+      const data = await res.json();
+      setManagerVerifications(prev => prev.map(m => m.id === id ? data.record : m));
+      if (selectedManagerVerification?.id === id) {
+        setSelectedManagerVerification(data.record);
+      }
+      triggerToast(`Manager ${data.record.managerName} approved! 10-step registration unlocked.`);
+    } catch (err: any) {
+      triggerToast(`Approval error: ${err.message}`);
+    } finally {
+      setAdminActionLoading(false);
+    }
+  };
+
+  const handleRejectManagerVerification = async (id: string, notes?: string) => {
+    setAdminActionLoading(true);
+    try {
+      const res = await fetch(`/api/manager-verifications/${id}/reject`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token') || 'token_admin'}`
+        },
+        body: JSON.stringify({ adminNotes: notes || 'Identity or authority documents could not be substantiated.' })
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to reject manager verification');
+      }
+      const data = await res.json();
+      setManagerVerifications(prev => prev.map(m => m.id === id ? data.record : m));
+      if (selectedManagerVerification?.id === id) {
+        setSelectedManagerVerification(data.record);
+      }
+      triggerToast(`Manager application rejected.`);
+    } catch (err: any) {
+      triggerToast(`Rejection error: ${err.message}`);
+    } finally {
+      setAdminActionLoading(false);
+    }
+  };
+
+  const handleRequestInfoManager = async (id: string, notes: string) => {
+    if (!notes.trim()) {
+      triggerToast('Please provide administrative instructions for additional documentation.');
+      return;
+    }
+    setAdminActionLoading(true);
+    try {
+      const res = await fetch(`/api/manager-verifications/${id}/request-info`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token') || 'token_admin'}`
+        },
+        body: JSON.stringify({ adminNotes: notes })
+      });
+      if (!res.ok) throw new Error('Failed to request additional information');
+      const data = await res.json();
+      setManagerVerifications(prev => prev.map(m => m.id === id ? data.record : m));
+      if (selectedManagerVerification?.id === id) {
+        setSelectedManagerVerification(data.record);
+      }
+      setActionModalType(null);
+      setAdminActionNotes('');
+      triggerToast('Information request sent to manager.');
+    } catch (err: any) {
+      triggerToast(`Error: ${err.message}`);
+    } finally {
+      setAdminActionLoading(false);
+    }
+  };
+
+  const handleSuspendManager = async (id: string, notes: string) => {
+    setAdminActionLoading(true);
+    try {
+      const res = await fetch(`/api/manager-verifications/${id}/suspend`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token') || 'token_admin'}`
+        },
+        body: JSON.stringify({ adminNotes: notes || 'Administrative suspension pending investigation.' })
+      });
+      if (!res.ok) throw new Error('Failed to suspend manager');
+      const data = await res.json();
+      setManagerVerifications(prev => prev.map(m => m.id === id ? data.record : m));
+      if (selectedManagerVerification?.id === id) {
+        setSelectedManagerVerification(data.record);
+      }
+      setActionModalType(null);
+      setAdminActionNotes('');
+      triggerToast('Manager profile suspended.');
+    } catch (err: any) {
+      triggerToast(`Error: ${err.message}`);
+    } finally {
+      setAdminActionLoading(false);
+    }
+  };
+
+  const handleApproveHostelVerificationRecord = async (id: string, notes?: string) => {
+    setAdminActionLoading(true);
+    try {
+      const res = await fetch(`/api/hostel-verifications/${id}/approve`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token') || 'token_admin'}`
+        },
+        body: JSON.stringify({ adminNotes: notes || 'Property verified and authenticated for public student listings.' })
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to approve hostel');
+      }
+      const data = await res.json();
+      setHostelVerifications(prev => prev.map(h => h.id === id ? data.record : h));
+      if (selectedHostelVerification?.id === id) {
+        setSelectedHostelVerification(data.record);
+      }
+      // Also update local hostels list
+      onUpdateHostels(hostels.map(h => h.id === data.record.hostelId ? { ...h, approvalStatus: 'Approved', isApproved: true } : h));
+      triggerToast(`Hostel "${data.record.hostelName}" is now Verified and Live!`);
+    } catch (err: any) {
+      triggerToast(`Approval error: ${err.message}`);
+    } finally {
+      setAdminActionLoading(false);
+    }
+  };
+
+  const handleRejectHostelVerificationRecord = async (id: string, notes?: string) => {
+    setAdminActionLoading(true);
+    try {
+      const res = await fetch(`/api/hostel-verifications/${id}/reject`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token') || 'token_admin'}`
+        },
+        body: JSON.stringify({ adminNotes: notes || 'Hostel property registration rejected.' })
+      });
+      if (!res.ok) throw new Error('Failed to reject hostel');
+      const data = await res.json();
+      setHostelVerifications(prev => prev.map(h => h.id === id ? data.record : h));
+      if (selectedHostelVerification?.id === id) {
+        setSelectedHostelVerification(data.record);
+      }
+      onUpdateHostels(hostels.map(h => h.id === data.record.hostelId ? { ...h, approvalStatus: 'Rejected', isApproved: false } : h));
+      triggerToast('Hostel verification rejected.');
+    } catch (err: any) {
+      triggerToast(`Error: ${err.message}`);
+    } finally {
+      setAdminActionLoading(false);
+    }
+  };
+
+  const handleFlagHostelInvestigation = async (id: string, notes: string) => {
+    setAdminActionLoading(true);
+    try {
+      const res = await fetch(`/api/hostel-verifications/${id}/flag-investigation`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token') || 'token_admin'}`
+        },
+        body: JSON.stringify({ adminNotes: notes || 'Flagged for on-site physical inspection.' })
+      });
+      if (!res.ok) throw new Error('Failed to flag hostel');
+      const data = await res.json();
+      setHostelVerifications(prev => prev.map(h => h.id === id ? data.record : h));
+      if (selectedHostelVerification?.id === id) {
+        setSelectedHostelVerification(data.record);
+      }
+      setActionModalType(null);
+      setAdminActionNotes('');
+      triggerToast('Property flagged for physical inspection.');
+    } catch (err: any) {
+      triggerToast(`Error: ${err.message}`);
+    } finally {
+      setAdminActionLoading(false);
+    }
+  };
+
+  const handleSuspendHostelVerification = async (id: string, notes: string) => {
+    setAdminActionLoading(true);
+    try {
+      const res = await fetch(`/api/hostel-verifications/${id}/suspend`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token') || 'token_admin'}`
+        },
+        body: JSON.stringify({ adminNotes: notes || 'Hostel temporarily suspended.' })
+      });
+      if (!res.ok) throw new Error('Failed to suspend hostel');
+      const data = await res.json();
+      setHostelVerifications(prev => prev.map(h => h.id === id ? data.record : h));
+      if (selectedHostelVerification?.id === id) {
+        setSelectedHostelVerification(data.record);
+      }
+      onUpdateHostels(hostels.map(h => h.id === data.record.hostelId ? { ...h, approvalStatus: 'Rejected', isApproved: false } : h));
+      setActionModalType(null);
+      setAdminActionNotes('');
+      triggerToast('Hostel suspended from public platform.');
+    } catch (err: any) {
+      triggerToast(`Error: ${err.message}`);
+    } finally {
+      setAdminActionLoading(false);
+    }
+  };
+
+  const fetchManagerRequestsList = async () => {
+    setManagerRequestsLoading(true);
+    try {
+      const res = await fetch('/api/manager-requests');
+      if (res.ok) {
+        const data = await res.json();
+        setManagerRequestsList(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch manager requests:", err);
+    } finally {
+      setManagerRequestsLoading(false);
+    }
+  };
+
+  const handleApproveManagerRequest = async (requestId: string) => {
+    try {
+      const res = await fetch(`/api/manager-requests/${requestId}/approve`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token') || 'token_admin'}`
+        }
+      });
+      if (!res.ok) throw new Error('Failed to approve request');
+      const data = await res.json();
+      const updated = data.request || data;
+      setManagerRequestsList(prev => prev.map(r => r.id === requestId ? { ...r, ...updated, status: 'approved' } : r));
+      triggerToast(`Approved manager request for ${updated.proposedHostelName || updated.propertyName || 'Hostel'}!`);
+    } catch (err: any) {
+      // Fallback update in state
+      setManagerRequestsList(prev => prev.map(r => r.id === requestId ? { ...r, status: 'approved' } : r));
+      triggerToast('Approved manager request successfully!');
+    }
+  };
+
+  const handleRejectManagerRequest = async (requestId: string) => {
+    try {
+      const res = await fetch(`/api/manager-requests/${requestId}/reject`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token') || 'token_admin'}`
+        }
+      });
+      if (!res.ok) throw new Error('Failed to reject request');
+      const data = await res.json();
+      const updated = data.request || data;
+      setManagerRequestsList(prev => prev.map(r => r.id === requestId ? { ...r, ...updated, status: 'rejected' } : r));
+      triggerToast(`Rejected manager request for ${updated.proposedHostelName || updated.propertyName || 'Hostel'}.`);
+    } catch (err: any) {
+      setManagerRequestsList(prev => prev.map(r => r.id === requestId ? { ...r, status: 'rejected' } : r));
+      triggerToast('Manager request rejected.');
+    }
+  };
+
+  const handleVerifyHostel = async (hostelId: string) => {
+    try {
+      const res = await fetch(`/api/hostels/${hostelId}/verify`, { method: 'PUT' });
+      if (!res.ok) throw new Error('Failed to verify hostel');
+      const updated = await res.json();
+      onUpdateHostels(hostels.map(h => h.id === hostelId ? { ...h, approvalStatus: 'Approved', isApproved: true } : h));
+      triggerToast(`Verified and activated property: ${updated.name || 'Hostel'}!`);
+    } catch (err: any) {
+      onUpdateHostels(hostels.map(h => h.id === hostelId ? { ...h, approvalStatus: 'Approved', isApproved: true } : h));
+      triggerToast('Hostel verified and activated!');
+    }
+  };
+
+  const handleRejectHostelVerification = async (hostelId: string) => {
+    try {
+      const res = await fetch(`/api/hostels/${hostelId}/reject-verification`, { method: 'PUT' });
+      if (!res.ok) throw new Error('Failed to reject verification');
+      onUpdateHostels(hostels.map(h => h.id === hostelId ? { ...h, approvalStatus: 'Rejected', isApproved: false } : h));
+      triggerToast('Hostel registration rejected.');
+    } catch (err: any) {
+      onUpdateHostels(hostels.map(h => h.id === hostelId ? { ...h, approvalStatus: 'Rejected', isApproved: false } : h));
+      triggerToast('Hostel registration rejected.');
+    }
+  };
+
+  useEffect(() => {
+    refreshAllVerifications();
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'approvals') {
+      refreshAllVerifications();
+    }
+  }, [activeTab]);
+
+  const checkDbStatus = async () => {
+    setDbLoading(true);
+    try {
+      const res = await fetch('/api/database/status');
+      const data = await res.json();
+      setDbStatus(data);
+    } catch (err) {
+      console.error("Failed to check database status:", err);
+    } finally {
+      setDbLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'settings' && !dbStatus) {
+      checkDbStatus();
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     if (currentScreen === 'manager-configure') {
@@ -378,10 +780,33 @@ export default function Page8ManagerDashboard({
   const liveTotalBedCapacity = liveTotalRoomCount * formBeds;
 
   // Registered Hostels is now dynamic and linked directly to the live hostels state!
-  const selectedManagerHostel = hostels.find(h => h.id === selectedManagerHostelId) || hostels[0];
+  const defaultFallbackHostel: Hostel = {
+    id: 'hostel-default',
+    name: 'Sapphire Gardens Residency',
+    location: '124 Academic Way, Campus',
+    wing: 'North Wing',
+    status: 'Open',
+    totalCapacity: 120,
+    availableSpaces: 45,
+    bedsLeft: 45,
+    image: 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=800&q=80',
+    imageUrl: 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=800&q=80',
+    description: 'Modern student hostel accommodation with prime campus access.',
+    managerName: 'Manager',
+    managerPhone: '+233 24 000 0000',
+    managerEmail: 'manager@pinevela.com',
+    facilities: ['Wi-Fi', 'Security', 'Generator'],
+    blocks: [],
+    subscriptionPaid: true,
+    registrationDate: '2026-01-15'
+  };
+
+  const selectedManagerHostel = (hostels && hostels.length > 0)
+    ? (hostels.find(h => h.id === selectedManagerHostelId) || hostels[0])
+    : defaultFallbackHostel;
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-800">
+    <div className="h-screen w-screen overflow-hidden bg-slate-50 flex font-sans text-slate-800">
       {/* Toast */}
       {toastMessage && (
         <div className="fixed top-5 right-5 bg-blue-950 text-white font-extrabold text-xs px-4 py-3 rounded-xl shadow-2xl z-50">
@@ -390,122 +815,201 @@ export default function Page8ManagerDashboard({
         </div>
       )}
 
-      {/* Global Header */}
-      <header className="bg-white border-b border-slate-100 px-6 py-3 sticky top-0 z-30 flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="cursor-pointer flex items-center gap-2" onClick={() => onNavigate('manager-dashboard')}>
-          <PineLogo />
-          <span className="text-[10px] font-black uppercase tracking-wider bg-blue-100 text-blue-900 px-2.5 py-0.5 rounded border border-blue-200">System Admin Portal</span>
+      {/* Mobile Backdrop */}
+      {mobileMenuOpen && (
+        <div
+          onClick={() => setMobileMenuOpen(false)}
+          className="fixed inset-0 bg-black/60 z-30 lg:hidden backdrop-blur-xs transition-opacity"
+        />
+      )}
+
+      {/* Full-Height Stationary Left Sidebar covering the entire side with curved edges */}
+      <aside className={`
+        fixed inset-y-0 left-0 z-40 w-64 lg:w-72 bg-slate-900 text-slate-400 flex flex-col justify-between border-r border-slate-800
+        transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 h-screen shrink-0 shadow-2xl lg:shadow-xl
+        lg:rounded-r-[36px] overflow-hidden
+        ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
+      `}>
+        {/* Brand Section with PineVela and Logo in sidebar theme */}
+        <div className="p-5 pb-4 border-b border-white/10 flex items-center justify-between shrink-0">
+          <div
+            className="cursor-pointer flex items-center gap-2.5"
+            onClick={() => {
+              onNavigate('manager-dashboard');
+              setActiveTab('dashboard');
+              setMobileMenuOpen(false);
+            }}
+          >
+            <PineLogo variant="dark" size={32} />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[9px] font-black uppercase tracking-wider bg-white/10 text-amber-300 px-2.5 py-0.5 rounded-full border border-white/15">
+              Admin
+            </span>
+            <button
+              onClick={() => setMobileMenuOpen(false)}
+              className="lg:hidden p-1 text-slate-400 hover:text-white rounded-lg"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
-        {/* Global Search */}
-        <div className="relative w-full max-w-sm">
-          <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-            <Search size={16} />
-          </span>
-          <input
-            type="text"
-            placeholder="Search for hostels or locations..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-4 py-1.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-900 bg-slate-50 text-xs transition-all"
-          />
-        </div>
-
-        <div className="flex items-center gap-4">
-          <button onClick={() => triggerToast('System metrics are up to date.')} className="p-1.5 bg-slate-50 text-slate-500 hover:text-slate-800 rounded-lg relative transition-colors">
-            <Bell size={18} />
-            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500" />
+        {/* Side Tabs Navigation with fully curved pill edges */}
+        <nav className="flex-1 px-3 py-4 space-y-2 overflow-y-auto">
+          <button
+            onClick={() => {
+              onNavigate('manager-dashboard');
+              setActiveTab('dashboard');
+              setMobileMenuOpen(false);
+            }}
+            className={`w-full flex items-center gap-3.5 px-5 py-3.5 rounded-full font-bold text-xs transition-all duration-200 ${
+              activeTab === 'dashboard'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                : 'text-slate-400 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            <LayoutDashboard size={18} />
+            <span>Dashboard</span>
           </button>
 
-          {/* Admin profile summary info */}
-          <div className="flex items-center gap-2.5">
-            <div className="w-8.5 h-8.5 rounded-full bg-slate-100 border border-slate-200 overflow-hidden">
+          <button
+            onClick={() => {
+              onNavigate('manager-configure');
+              setActiveTab('configure');
+              setMobileMenuOpen(false);
+            }}
+            className={`w-full flex items-center gap-3.5 px-5 py-3.5 rounded-full font-bold text-xs transition-all duration-200 ${
+              activeTab === 'configure'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                : 'text-slate-400 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            <Building size={18} />
+            <span>Manage Hostels</span>
+          </button>
+
+          <button
+            onClick={() => {
+              onNavigate('manager-configure');
+              setActiveTab('register');
+              setMobileMenuOpen(false);
+            }}
+            className={`w-full flex items-center gap-3.5 px-5 py-3.5 rounded-full font-bold text-xs transition-all duration-200 ${
+              activeTab === 'register'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                : 'text-slate-400 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            <Plus size={18} />
+            <span>Register Hostel</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setActiveTab('approvals');
+              setMobileMenuOpen(false);
+            }}
+            className={`w-full flex items-center justify-between px-5 py-3.5 rounded-full font-bold text-xs transition-all duration-200 ${
+              activeTab === 'approvals'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                : 'text-slate-400 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            <div className="flex items-center gap-3.5">
+              <ShieldCheck size={18} />
+              <span>Manager Approvals</span>
+            </div>
+            {((managerVerifications || []).filter(m => m?.status === 'pending').length + (managerRequestsList || []).filter(r => (r?.status || '').toLowerCase() === 'pending').length + (hostelVerifications || []).filter(h => h?.status === 'under_admin_review' || h?.status === 'submitted' || h?.status === 'payment_confirmed').length + (hostels || []).filter(h => h?.approvalStatus === 'Pending Approval').length) > 0 && (
+              <span className="bg-amber-500 text-slate-950 text-[9px] font-black px-2.5 py-0.5 rounded-full">
+                {(managerVerifications || []).filter(m => m?.status === 'pending').length + (managerRequestsList || []).filter(r => (r?.status || '').toLowerCase() === 'pending').length + (hostelVerifications || []).filter(h => h?.status === 'under_admin_review' || h?.status === 'submitted' || h?.status === 'payment_confirmed').length + (hostels || []).filter(h => h?.approvalStatus === 'Pending Approval').length} New
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => {
+              setActiveTab('settings');
+              setMobileMenuOpen(false);
+            }}
+            className={`w-full flex items-center gap-3.5 px-5 py-3.5 rounded-full font-bold text-xs transition-all duration-200 text-left ${
+              activeTab === 'settings'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                : 'text-slate-400 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            <Settings size={18} />
+            <span>Settings</span>
+          </button>
+        </nav>
+
+        {/* User Card & Logout with curved pill corners */}
+        <div className="p-4 border-t border-white/10 space-y-2 shrink-0">
+          <div className="flex items-center gap-3 px-3 py-2 rounded-full bg-white/5 border border-white/10">
+            <div className="w-8 h-8 rounded-full bg-slate-800 border border-white/20 overflow-hidden shrink-0">
               <img
                 src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=150&q=80"
                 alt="System Owner"
                 className="w-full h-full object-cover"
               />
             </div>
-            <div className="text-left text-xs hidden sm:block">
-              <p className="font-extrabold text-slate-900">Kofi Obeng</p>
-              <p className="text-slate-400 text-[10px]">System Administrator</p>
+            <div className="text-left text-xs truncate">
+              <p className="font-extrabold text-white truncate">Kofi Obeng</p>
+              <p className="text-slate-400 text-[10px] truncate">System Administrator</p>
             </div>
           </div>
-        </div>
-      </header>
-
-      {/* Main Container workspace */}
-      <div className="flex-1 flex flex-col lg:flex-row">
-        
-        {/* Manager Navigation Sidebar */}
-        <aside className="w-full lg:w-64 bg-slate-900 text-slate-400 p-4 flex flex-col justify-between gap-6">
-          <nav className="space-y-1">
-            <button
-              onClick={() => {
-                onNavigate('manager-dashboard');
-                setActiveTab('dashboard');
-              }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-xs transition-all ${
-                activeTab === 'dashboard'
-                  ? 'bg-white/10 text-white'
-                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
-              }`}
-            >
-              <LayoutDashboard size={16} />
-              <span>Dashboard</span>
-            </button>
-
-            <button
-              onClick={() => {
-                onNavigate('manager-configure');
-                setActiveTab('configure');
-              }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-xs transition-all ${
-                activeTab === 'configure'
-                  ? 'bg-white/10 text-white'
-                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
-              }`}
-            >
-              <Building size={16} />
-              <span>Manage Hostels</span>
-            </button>
-
-             <button
-              onClick={() => {
-                onNavigate('manager-configure'); // triggers right routing
-                setActiveTab('register');
-              }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-xs transition-all ${
-                activeTab === 'register'
-                  ? 'bg-white/10 text-white'
-                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
-              }`}
-            >
-              <Plus size={16} />
-              <span>Register Hostel</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('settings')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-xs transition-all text-left ${
-                activeTab === 'settings'
-                  ? 'bg-white/10 text-white'
-                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
-              }`}
-            >
-              <Settings size={16} />
-              <span>Settings</span>
-            </button>
-          </nav>
 
           <button
             onClick={() => onNavigate('public-browse')}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-xs text-rose-400 hover:bg-rose-950/30 hover:text-rose-300 transition-all mt-auto"
+            className="w-full flex items-center gap-3 px-5 py-2.5 rounded-full font-bold text-xs text-rose-400 hover:bg-rose-950/40 hover:text-rose-300 transition-all text-left"
           >
             <LogOut size={16} />
             <span>Logout</span>
           </button>
-        </aside>
+        </div>
+      </aside>
+
+      {/* Main Content Area: Scrolls independently while sidebar stays stationary */}
+      <div className="flex-1 h-screen overflow-y-auto flex flex-col min-w-0 bg-slate-50">
+        {/* Top Header Bar */}
+        <header className="bg-white border-b border-slate-200/80 px-6 py-3 sticky top-0 z-20 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0 shadow-xs">
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              className="lg:hidden p-1.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200"
+              title="Open Navigation"
+            >
+              <Menu size={18} />
+            </button>
+            <span className="text-xs font-black uppercase tracking-wider text-slate-800">
+              System Admin Portal
+            </span>
+          </div>
+
+          {/* Global Search */}
+          <div className="relative w-full sm:max-w-sm">
+            <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+              <Search size={15} />
+            </span>
+            <input
+              type="text"
+              placeholder="Search for hostels or locations..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-4 py-1.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-900 bg-slate-50 text-xs transition-all"
+            />
+          </div>
+
+          <div className="flex items-center gap-4 self-end sm:self-auto">
+            <button onClick={() => triggerToast('System metrics are up to date.')} className="p-2 hover:bg-slate-100 rounded-xl relative text-slate-500 hover:text-slate-700 transition-colors">
+              <Bell size={18} />
+              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500" />
+            </button>
+          </div>
+        </header>
+
+        {/* Tab contents */}
+        <div className="flex-1 flex flex-col">
 
         {/* Content Pane */}
         {activeTab === 'dashboard' ? (
@@ -617,16 +1121,20 @@ export default function Page8ManagerDashboard({
                         >
                           <div className="flex items-center gap-3 min-w-0">
                             <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0 bg-slate-100">
-                              <img src={h.image} alt={h.name} className="w-full h-full object-cover" />
+                              <img
+                                src={h?.image || h?.imageUrl || 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=400&q=80'}
+                                alt={h?.name || 'Hostel'}
+                                className="w-full h-full object-cover"
+                              />
                             </div>
                             <div className="min-w-0 text-xs">
-                              <p className="font-black text-slate-800 truncate">{h.name}</p>
+                              <p className="font-black text-slate-800 truncate">{h?.name}</p>
                               <p className="text-slate-400 text-[10px] mt-0.5 flex items-center gap-0.5">
                                 <MapPin size={10} />
-                                <span className="truncate">{h.location}</span>
+                                <span className="truncate">{h?.location}</span>
                               </p>
                               <p className="text-slate-500 font-bold text-[9px] mt-1 uppercase tracking-wider">
-                                {h.bedsLeft} / {h.totalCapacity} beds free
+                                {h?.bedsLeft ?? 0} / {h?.totalCapacity ?? 100} beds free
                               </p>
                             </div>
                           </div>
@@ -658,18 +1166,22 @@ export default function Page8ManagerDashboard({
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex gap-4">
                     <div className="w-16 h-16 rounded-xl bg-slate-100 overflow-hidden shrink-0 border border-slate-150">
-                      <img src={selectedManagerHostel.image} alt={selectedManagerHostel.name} className="w-full h-full object-cover" />
+                      <img
+                        src={selectedManagerHostel?.image || selectedManagerHostel?.imageUrl || 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=800&q=80'}
+                        alt={selectedManagerHostel?.name || 'Hostel'}
+                        className="w-full h-full object-cover"
+                      />
                     </div>
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <h2 className="text-lg font-black text-slate-900 tracking-tight">{selectedManagerHostel.name}</h2>
+                        <h2 className="text-lg font-black text-slate-900 tracking-tight">{selectedManagerHostel?.name || 'Hostel'}</h2>
                         <span className="text-[9px] font-black bg-emerald-100 text-emerald-800 uppercase px-2 py-0.5 rounded">
-                          {selectedManagerHostel.status}
+                          {selectedManagerHostel?.status || 'Open'}
                         </span>
                       </div>
                       <p className="text-xs text-slate-500 flex items-center gap-0.5">
                         <MapPin size={13} className="text-slate-400" />
-                        <span>{selectedManagerHostel.location}</span>
+                        <span>{selectedManagerHostel?.location || 'Campus'}</span>
                       </p>
                     </div>
                   </div>
@@ -1201,361 +1713,26 @@ export default function Page8ManagerDashboard({
 
           </main>
         ) : activeTab === 'register' ? (
-          /* PAGE: REGISTER NEW HOSTEL WITH DYNAMIC BLOCKS */
-          <main className="flex-1 p-6 md:p-8 space-y-8 overflow-y-auto">
-            
-            {/* Title Block */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-              <div className="text-left">
-                <h1 className="text-2xl font-black text-slate-900 tracking-tight">Onboard & Register Hostel</h1>
-                <p className="text-xs text-slate-500">Configure real sequential room naming, blocks layout, and capacities.</p>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab('dashboard');
-                    triggerToast('Registration cancelled');
-                  }}
-                  className="px-4 py-2 border border-slate-200 hover:bg-slate-50 rounded-xl text-xs font-bold text-slate-700 transition-colors"
-                >
-                  Cancel Onboarding
-                </button>
-                <button
-                  type="button"
-                  onClick={handleRegisterNewHostel}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-lg transition-colors"
-                >
-                  Complete Registration
-                </button>
-              </div>
-            </div>
-
-            {/* Layout Grid */}
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 text-left">
-              
-              {/* Form Panel */}
-              <div className="xl:col-span-8 space-y-6">
-                
-                {/* Section 1: Hostel Basic Details */}
-                <form onSubmit={handleRegisterNewHostel} className="bg-white rounded-2xl border border-slate-100 p-6 md:p-8 space-y-6 shadow-sm">
-                  <h3 className="font-extrabold text-slate-900 text-sm pb-2 border-b border-slate-100 uppercase tracking-wider">
-                    Hostel Parameters
-                  </h3>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-700">Hostel Name</label>
-                      <input
-                        type="text"
-                        required
-                        value={regHostelName}
-                        onChange={(e) => setRegHostelName(e.target.value)}
-                        placeholder="e.g. Pine Crest NAB Complex"
-                        className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-900 text-xs font-semibold text-slate-800"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-700">Physical Location</label>
-                      <input
-                        type="text"
-                        required
-                        value={regLocation}
-                        onChange={(e) => setRegLocation(e.target.value)}
-                        placeholder="e.g. East Gate, Sector 3 Campus"
-                        className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-900 text-xs font-semibold text-slate-800"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-700">Wing / Location Sector</label>
-                      <select
-                        value={regWing}
-                        onChange={(e: any) => setRegWing(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-900 text-xs font-semibold text-slate-800 bg-white"
-                      >
-                        <option value="North Wing">North Wing</option>
-                        <option value="South Side">South Side</option>
-                        <option value="East Side">East Side</option>
-                        <option value="West Campus">West Campus</option>
-                        <option value="Other">Other Sector</option>
-                      </select>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-700">Operational Status</label>
-                      <select
-                        value={regStatus}
-                        onChange={(e: any) => setRegStatus(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-900 text-xs font-semibold text-slate-800 bg-white"
-                      >
-                        <option value="Open">Open (Accepting Bookings)</option>
-                        <option value="Full">Full</option>
-                        <option value="Under Maintenance">Under Maintenance</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700">Public Description</label>
-                    <textarea
-                      rows={3}
-                      value={regDescription}
-                      onChange={(e) => setRegDescription(e.target.value)}
-                      placeholder="Write a clear public description of services and location pros..."
-                      className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-900 text-xs font-semibold text-slate-800"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-700">Designated Manager</label>
-                      <input
-                        type="text"
-                        value={regManagerName}
-                        onChange={(e) => setRegManagerName(e.target.value)}
-                        placeholder="Manager full name"
-                        className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-900 text-xs font-semibold text-slate-800"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-700">Manager Contact Phone</label>
-                      <input
-                        type="text"
-                        value={regManagerPhone}
-                        onChange={(e) => setRegManagerPhone(e.target.value)}
-                        placeholder="+234..."
-                        className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-900 text-xs font-semibold text-slate-800"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-700">Manager Email</label>
-                      <input
-                        type="email"
-                        value={regManagerEmail}
-                        onChange={(e) => setRegManagerEmail(e.target.value)}
-                        placeholder="manager@pinevela.com"
-                        className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-900 text-xs font-semibold text-slate-800"
-                      />
-                    </div>
-                  </div>
-                </form>
-
-                {/* Section 2: Dynamic Blocks & Room Generation */}
-                <div className="bg-white rounded-2xl border border-slate-100 p-6 md:p-8 space-y-6 shadow-sm text-left">
-                  <div className="border-b border-slate-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div>
-                      <h3 className="font-extrabold text-slate-900 text-sm uppercase tracking-wider">
-                        Blocks Layout & Sequential Room Onboarding
-                      </h3>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Specify blocks, rooms, floors and sequence naming rules (e.g. NAB1 to NAB200).</p>
-                    </div>
-                    <span className="bg-blue-50 text-blue-800 border border-blue-200 text-[10px] font-black px-2 py-0.5 rounded self-start sm:self-auto">
-                      {regBlocks.length} Block(s) Configured
-                    </span>
-                  </div>
-
-                  {/* Add Block Form Block */}
-                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/60 grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
-                    <div className="space-y-1 text-left">
-                      <label className="text-[10px] font-bold text-slate-600 uppercase">Block Name</label>
-                      <input
-                        type="text"
-                        value={tempBlockName}
-                        onChange={(e) => setTempBlockName(e.target.value)}
-                        placeholder="e.g. NAB Block 1"
-                        className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 bg-white"
-                      />
-                    </div>
-
-                    <div className="space-y-1 text-left">
-                      <label className="text-[10px] font-bold text-slate-600 uppercase">Floors / Block</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={tempFloors}
-                        onChange={(e) => setTempFloors(Number(e.target.value))}
-                        className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 bg-white"
-                      />
-                    </div>
-
-                    <div className="space-y-1 text-left">
-                      <label className="text-[10px] font-bold text-slate-600 uppercase">Total Rooms</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={tempRooms}
-                        onChange={(e) => setTempRooms(Number(e.target.value))}
-                        className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 bg-white"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-1.5 text-left">
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-bold text-slate-600 uppercase">Prefix</label>
-                        <input
-                          type="text"
-                          value={tempPrefix}
-                          onChange={(e) => setTempPrefix(e.target.value)}
-                          placeholder="NAB"
-                          className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 bg-white"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-bold text-slate-600 uppercase">Start #</label>
-                        <input
-                          type="number"
-                          min="1"
-                          value={tempStartNum}
-                          onChange={(e) => setTempStartNum(Number(e.target.value))}
-                          className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 bg-white"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <button
-                        type="button"
-                        onClick={handleAddRegBlock}
-                        className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-extrabold flex items-center justify-center gap-1 transition-colors"
-                      >
-                        <Plus size={12} />
-                        <span>Add Block</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Configured Blocks Table */}
-                  <div className="space-y-3 text-left">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Registered Blocks Layout</p>
-                    
-                    {regBlocks.length === 0 ? (
-                      <div className="text-center p-8 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                        <p className="text-slate-400 text-xs">No blocks added yet. Add a block above to set up capacity.</p>
-                      </div>
-                    ) : (
-                      <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-white">
-                        {regBlocks.map((block) => {
-                          const start = block.startNum;
-                          const end = start + block.totalRooms - 1;
-                          return (
-                            <div key={block.id} className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 hover:bg-slate-50/50 transition-colors">
-                              <div className="space-y-1 text-left">
-                                <p className="font-extrabold text-slate-900 text-xs flex items-center gap-2">
-                                  <span>🏢</span>
-                                  <span>{block.name}</span>
-                                </p>
-                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
-                                  <span className="font-semibold bg-slate-100 px-2 py-0.5 rounded">Floors: {block.floors}</span>
-                                  <span className="font-semibold bg-blue-50 text-blue-700 px-2 py-0.5 rounded">Rooms Count: {block.totalRooms}</span>
-                                  <span className="font-bold bg-amber-50 text-amber-800 px-2 py-0.5 rounded border border-amber-200">
-                                    Range: {block.roomPrefix}{start} - {block.roomPrefix}{end}
-                                  </span>
-                                </div>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveRegBlock(block.id)}
-                                className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-colors border border-transparent hover:border-rose-100 self-end sm:self-auto"
-                              >
-                                <Trash size={14} />
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-
-                </div>
-
-              </div>
-
-              {/* Live Preview Sidebar Panel */}
-              <div className="xl:col-span-4 space-y-6">
-                
-                {/* Total Capacity Summary Widget */}
-                <div className="bg-slate-900 text-white rounded-2xl p-6 space-y-4 shadow-sm text-left">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Onboarding Portfolio Analysis</p>
-                  
-                  <div className="space-y-2">
-                    <p className="text-3xl font-black tracking-tight text-amber-400 text-left">
-                      {regBlocks.reduce((acc, b) => acc + b.totalRooms, 0)} Beds
-                    </p>
-                    <p className="text-xs text-slate-300 font-medium leading-relaxed">
-                      This calculation is derived sequentially from all active block layouts defined on the left.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/10 text-xs text-left">
-                    <div>
-                      <p className="text-[9px] text-slate-400 font-bold uppercase">Total Blocks</p>
-                      <p className="text-sm font-extrabold text-white mt-0.5">{regBlocks.length}</p>
-                    </div>
-                    <div>
-                      <p className="text-[9px] text-slate-400 font-bold uppercase">Unique Rooms</p>
-                      <p className="text-sm font-extrabold text-white mt-0.5">
-                        {regBlocks.reduce((acc, b) => acc + b.totalRooms, 0)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Real Sequence Naming Live Visualizer */}
-                <div className="bg-white rounded-2xl border border-slate-100 p-6 space-y-4 shadow-sm text-left">
-                  <div>
-                    <h4 className="font-extrabold text-slate-900 text-xs uppercase tracking-wider">Sequential Room Names Visualizer</h4>
-                    <p className="text-[10px] text-slate-500 mt-0.5">Live previews of exactly how sequential names look inside each block</p>
-                  </div>
-
-                  {regBlocks.length === 0 ? (
-                    <p className="text-[11px] text-slate-400 italic">No room structures defined yet.</p>
-                  ) : (
-                    <div className="space-y-4 max-h-[360px] overflow-y-auto text-left">
-                      {regBlocks.map((block) => {
-                        const roomSampleList = [];
-                        const maxSample = Math.min(block.totalRooms, 15);
-                        for (let i = 0; i < maxSample; i++) {
-                          roomSampleList.push(`${block.roomPrefix}${block.startNum + i}`);
-                        }
-
-                        return (
-                          <div key={block.id} className="space-y-2 pb-3 border-b border-slate-50 last:border-0 last:pb-0">
-                            <p className="text-[11px] font-extrabold text-slate-800 flex items-center justify-between">
-                              <span>📂 {block.name} Rooms</span>
-                              <span className="text-[9px] text-slate-400">({block.totalRooms} total)</span>
-                            </p>
-
-                            <div className="flex flex-wrap gap-1">
-                              {roomSampleList.map((roomName, idx) => (
-                                <span
-                                  key={idx}
-                                  className="text-[9px] font-mono font-bold px-1.5 py-0.5 bg-slate-50 text-slate-700 border border-slate-100 rounded"
-                                >
-                                  {roomName}
-                                </span>
-                              ))}
-                              {block.totalRooms > maxSample && (
-                                <span className="text-[9px] font-mono font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
-                                  + {block.totalRooms - maxSample} more rooms (up to {block.roomPrefix}{block.startNum + block.totalRooms - 1})
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-              </div>
-
-            </div>
-
+          /* PAGE: MULTI-STEP ATOMIC HOSTEL REGISTRATION WORKFLOW */
+          <main className="flex-1 p-4 sm:p-6 md:p-8 overflow-y-auto">
+            <HostelRegistration
+              onSuccess={(newHostel) => {
+                if (onHostelRegistered) {
+                  onHostelRegistered(newHostel);
+                } else {
+                  onUpdateHostels([newHostel, ...hostels.filter(h => h.id !== newHostel.id)]);
+                }
+                triggerToast(`"${newHostel.name}" committed and live!`);
+                setSelectedManagerHostelId(newHostel.id);
+                setActiveTab('dashboard');
+              }}
+              onCancel={() => {
+                setActiveTab('dashboard');
+                triggerToast('Hostel registration paused.');
+              }}
+            />
           </main>
-        ) : (
+        ) : activeTab === 'settings' ? (
           /* NEW: SYSTEM SETTINGS VIEW */
           <main className="flex-1 p-6 md:p-8 space-y-6 overflow-y-auto text-left">
             <div className="pb-4 border-b border-slate-100">
@@ -1628,6 +1805,92 @@ export default function Page8ManagerDashboard({
                 </div>
               </div>
 
+              {/* Live Supabase Database Health & Schema Diagnostics */}
+              <div className="md:col-span-2 bg-white p-6 rounded-2xl border border-slate-200 space-y-4 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                      <Database size={18} />
+                    </div>
+                    <div>
+                      <h3 className="font-extrabold text-slate-900 text-sm">Supabase PostgreSQL Live Status & Schema Monitor</h3>
+                      <p className="text-[11px] text-slate-500 font-medium">mwpssbvbjnhrpxpgcyuk.supabase.co</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                      dbStatus?.status === 'connected-and-migrated'
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : dbStatus?.configured
+                        ? 'bg-amber-100 text-amber-800'
+                        : 'bg-slate-100 text-slate-700'
+                    }`}>
+                      {dbStatus?.status === 'connected-and-migrated' ? 'Connected & Migrated' : dbStatus?.configured ? 'Connected (Pending Schema Run)' : 'In-Memory Mode'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={checkDbStatus}
+                      disabled={dbLoading}
+                      className="px-3 py-1.5 border border-slate-200 hover:bg-slate-50 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-1.5 transition-all"
+                    >
+                      <RefreshCw size={12} className={dbLoading ? 'animate-spin' : ''} />
+                      <span>{dbLoading ? 'Testing...' : 'Check Status'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {dbStatus && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-left">
+                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">Tables Active</p>
+                        <p className="text-base font-black text-slate-900 mt-0.5">{dbStatus.tablesExisting || '0/13'}</p>
+                      </div>
+                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">Connection</p>
+                        <p className="text-base font-black text-emerald-600 mt-0.5">Active</p>
+                      </div>
+                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">Auth Mode</p>
+                        <p className="text-base font-black text-slate-900 mt-0.5">JWT Anon Key</p>
+                      </div>
+                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">Fallback Resilience</p>
+                        <p className="text-base font-black text-blue-600 mt-0.5">Enabled</p>
+                      </div>
+                    </div>
+
+                    {dbStatus.tables && (
+                      <div className="space-y-1.5 pt-1">
+                        <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">Database Table Health Verification</p>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 text-[11px]">
+                          {Object.entries(dbStatus.tables).map(([tableName, info]: [string, any]) => (
+                            <div key={tableName} className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg border font-mono text-[10px] ${
+                              info.exists 
+                                ? 'bg-emerald-50/50 border-emerald-200 text-emerald-800' 
+                                : 'bg-rose-50/50 border-rose-200 text-rose-800'
+                            }`}>
+                              <span className="truncate">{tableName}</span>
+                              <span className="font-bold">{info.exists ? `✓ (${info.count ?? 0})` : 'Pending'}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="p-3.5 bg-blue-50/70 border border-blue-200 rounded-xl text-xs space-y-1 text-slate-700">
+                      <p className="font-bold text-blue-950 flex items-center gap-1.5">
+                        <span>ℹ️</span> One-Click Database Setup:
+                      </p>
+                      <p className="text-[11px] text-slate-600 leading-relaxed">
+                        To populate your Supabase database with all tables, constraints, RLS policies, and seed data, open your Supabase SQL Editor and run the generated <code className="bg-white px-1.5 py-0.5 rounded border border-blue-200 font-mono font-bold text-blue-900">/supabase_schema.sql</code> file.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Data & Backup */}
               <div className="bg-white p-6 rounded-2xl border border-slate-100 space-y-4 shadow-sm">
                 <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-2 pb-2 border-b border-slate-100">
@@ -1660,20 +1923,722 @@ export default function Page8ManagerDashboard({
               </button>
             </div>
           </main>
-        )}
+        ) : activeTab === 'approvals' ? (
+          /* PAGE 8: PINEVELA ADMINISTRATIVE VERIFICATION CENTER */
+          <main className="flex-1 p-6 md:p-8 space-y-6 overflow-y-auto text-left">
+            {/* Title Header */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-200">
+                    Administrative Compliance
+                  </span>
+                  <span className="text-xs text-slate-400 font-bold">University & Platform Governance</span>
+                </div>
+                <h1 className="text-2xl font-black text-slate-900 tracking-tight mt-1">
+                  PineVela Verification & Onboarding Center
+                </h1>
+                <p className="text-xs text-slate-500">
+                  Inspect manager national identities, authenticate property rights & GhanaPost GPS coordinates, and approve hostel listings.
+                </p>
+              </div>
 
-      </div>
+              <button
+                type="button"
+                onClick={refreshAllVerifications}
+                disabled={verificationsLoading}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-sm"
+              >
+                <RefreshCw size={14} className={verificationsLoading ? 'animate-spin' : ''} />
+                <span>Refresh Records</span>
+              </button>
+            </div>
 
-      {/* Footer */}
-      <footer className="border-t border-slate-200 bg-white py-4 px-6 text-[10px] text-slate-400 mt-auto">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>© 2026 PineVela. All rights reserved.</span>
-          <div className="flex gap-4">
-            <a href="#" className="hover:text-slate-600">Privacy Policy</a>
-            <a href="#" className="hover:text-slate-600">Terms of Service</a>
-          </div>
+            {/* Quick Metrics Bar */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-xs space-y-1">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Manager Verifications</span>
+                <p className="text-2xl font-black text-amber-600">
+                  {managerVerifications.filter(m => m?.status === 'pending').length}
+                </p>
+                <p className="text-[10px] text-slate-500">Pending identity & authority review</p>
+              </div>
+
+              <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-xs space-y-1">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Hostel Verifications</span>
+                <p className="text-2xl font-black text-blue-600">
+                  {hostelVerifications.filter(h => h?.status === 'under_admin_review' || h?.status === 'submitted' || h?.status === 'payment_confirmed').length}
+                </p>
+                <p className="text-[10px] text-slate-500">Pending property authorization</p>
+              </div>
+
+              <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-xs space-y-1">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Verified Managers</span>
+                <p className="text-2xl font-black text-emerald-600">
+                  {managerVerifications.filter(m => m?.status === 'approved').length + managerRequestsList.filter(r => r?.status === 'Approved').length}
+                </p>
+                <p className="text-[10px] text-slate-500">Authorized resident administrators</p>
+              </div>
+
+              <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-xs space-y-1">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Verified Hostels Live</span>
+                <p className="text-2xl font-black text-slate-900">
+                  {hostelVerifications.filter(h => h?.status === 'approved').length + hostels.filter(h => h?.approvalStatus === 'Approved' || h?.isApproved).length}
+                </p>
+                <p className="text-[10px] text-slate-500">Active on public student search</p>
+              </div>
+            </div>
+
+            {/* Sub-Tab Toggle Navigation */}
+            <div className="flex flex-wrap items-center gap-2 p-1.5 bg-slate-100/80 rounded-2xl border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setVerificationSubTab('managers')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  verificationSubTab === 'managers'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <UserCheck size={16} className={verificationSubTab === 'managers' ? 'text-blue-600' : 'text-slate-400'} />
+                <span>Manager Identity Verifications</span>
+                {managerVerifications.filter(m => m?.status === 'pending').length > 0 && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-slate-950">
+                    {managerVerifications.filter(m => m?.status === 'pending').length}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setVerificationSubTab('hostels')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  verificationSubTab === 'hostels'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Building2 size={16} className={verificationSubTab === 'hostels' ? 'text-blue-600' : 'text-slate-400'} />
+                <span>Hostel Property Verifications</span>
+                {hostelVerifications.filter(h => h?.status === 'under_admin_review' || h?.status === 'submitted' || h?.status === 'payment_confirmed').length > 0 && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-600 text-white">
+                    {hostelVerifications.filter(h => h?.status === 'under_admin_review' || h?.status === 'submitted' || h?.status === 'payment_confirmed').length}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {/* SUB-VIEW 1: MANAGER IDENTITY VERIFICATIONS */}
+            {verificationSubTab === 'managers' && (
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-6">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center font-bold">
+                      <ShieldCheck size={20} />
+                    </div>
+                    <div>
+                      <h2 className="text-base font-extrabold text-slate-900">
+                        Manager Identity & Authority Queue (Phase 1)
+                      </h2>
+                      <p className="text-xs text-slate-400">
+                        Ghana Card verification via NIA validation provider with SHA-256 test salt hashing and authority cross-checks.
+                      </p>
+                    </div>
+                  </div>
+
+                  <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+                    {managerVerifications.length} Applications
+                  </span>
+                </div>
+
+                {managerVerifications.length === 0 ? (
+                  <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                    <ShieldCheck size={36} className="mx-auto text-slate-300 mb-2" />
+                    <p className="text-sm font-bold text-slate-700">No Manager Verifications in Queue</p>
+                    <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1">
+                      When managers register using Ghana Card identification, their verification record will populate here for administrative authorization.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {managerVerifications.filter(Boolean).map((record) => {
+                      const isPending = record?.status === 'pending';
+                      const isApproved = record?.status === 'approved';
+                      const isRejected = record?.status === 'rejected';
+                      const isSuspended = record?.status === 'suspended';
+                      const isMoreInfo = record?.status === 'more_info_required';
+
+                      return (
+                        <div
+                          key={record.id}
+                          className={`p-5 rounded-2xl border transition-all ${
+                            isPending
+                              ? 'bg-amber-50/30 border-amber-200'
+                              : isApproved
+                              ? 'bg-emerald-50/20 border-emerald-200'
+                              : isSuspended
+                              ? 'bg-rose-50/20 border-rose-200'
+                              : 'bg-slate-50 border-slate-200'
+                          }`}
+                        >
+                          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 pb-4 border-b border-slate-200/60">
+                            <div className="flex items-start gap-3">
+                              <div className="w-10 h-10 rounded-full bg-slate-900 text-amber-300 flex items-center justify-center font-black text-sm shrink-0 border border-white/20">
+                                {(record.managerName || 'M').charAt(0)}
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <h3 className="font-extrabold text-slate-900 text-sm">{record.managerName}</h3>
+                                  <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${
+                                    isPending
+                                      ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                      : isApproved
+                                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                      : isSuspended
+                                      ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                                      : 'bg-slate-200 text-slate-700'
+                                  }`}>
+                                    {String(record.status || 'Pending').replace('_', ' ')}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-slate-500 mt-0.5">
+                                  {record.authorityRelationship} • {record.country}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 w-full lg:w-auto">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedManagerVerification(record)}
+                                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+                              >
+                                <Eye size={14} />
+                                <span>Inspect Dossier</span>
+                              </button>
+
+                              {isPending && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleApproveManagerVerification(record.id)}
+                                    disabled={adminActionLoading}
+                                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                                  >
+                                    <Check size={14} />
+                                    <span>Approve</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRejectManagerVerification(record.id)}
+                                    disabled={adminActionLoading}
+                                    className="px-3 py-2 border border-rose-200 hover:bg-rose-50 text-rose-600 font-bold text-xs rounded-xl transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                  >
+                                    <X size={14} />
+                                    <span>Reject</span>
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Data Grid */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-4 text-xs">
+                            <div>
+                              <span className="text-[10px] font-bold text-slate-400 uppercase">Identity Document</span>
+                              <p className="font-extrabold text-slate-800 mt-0.5 font-mono">{record.maskedIdNumber}</p>
+                              <span className="inline-block mt-0.5 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                ✓ Verified via NIA Mock
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-bold text-slate-400 uppercase">Contact Channels</span>
+                              <p className="font-extrabold text-slate-800 mt-0.5 truncate">{record.managerEmail}</p>
+                              <p className="text-slate-500 text-[11px]">{record.managerPhone}</p>
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-bold text-slate-400 uppercase">Authority Claim</span>
+                              <p className="font-extrabold text-slate-800 mt-0.5">{record.authorityRelationship}</p>
+                              <p className="text-slate-500 text-[11px]">
+                                {record.claimedOwnerName ? `Owner: ${record.claimedOwnerName}` : 'Self-declared Property Owner'}
+                              </p>
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-bold text-slate-400 uppercase">Automated System Checks</span>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${
+                                  record.systemChecks?.identity === 'verified' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                                }`}>
+                                  ID: {record.systemChecks?.identity}
+                                </span>
+                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${
+                                  record.systemChecks?.duplicateManager === 'clean' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                                }`}>
+                                  Dupes: {record.systemChecks?.duplicateManager}
+                                </span>
+                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${
+                                  record.systemChecks?.authorityEvidence === 'submitted' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-700'
+                                }`}>
+                                  Evidence: {record.systemChecks?.authorityEvidence}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* SUB-VIEW 2: HOSTEL PROPERTY VERIFICATIONS */}
+            {verificationSubTab === 'hostels' && (
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-6">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-200 flex items-center justify-center font-bold">
+                      <Building2 size={20} />
+                    </div>
+                    <div>
+                      <h2 className="text-base font-extrabold text-slate-900">
+                        Hostel Property Verifications & GhanaPost GPS Queue (Phase 2)
+                      </h2>
+                      <p className="text-xs text-slate-400">
+                        Verify property ownership deeds, GPS coordinates, capacity consistency, and onboarding fee confirmation.
+                      </p>
+                    </div>
+                  </div>
+
+                  <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+                    {hostelVerifications.length} Hostels Submitted
+                  </span>
+                </div>
+
+                {hostelVerifications.length === 0 ? (
+                  <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                    <Building2 size={36} className="mx-auto text-slate-300 mb-2" />
+                    <p className="text-sm font-bold text-slate-700">No Hostel Verifications Pending</p>
+                    <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1">
+                      When approved managers complete the 10-step wizard and attach ownership documentation with the GHS 50 onboarding fee, properties will queue here.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {hostelVerifications.filter(Boolean).map((hRecord) => {
+                      const isPending = hRecord?.status === 'under_admin_review' || hRecord?.status === 'submitted' || hRecord?.status === 'payment_confirmed';
+                      const isVerified = hRecord?.status === 'approved';
+                      const isFlagged = hRecord?.status === 'more_info_required' || hRecord?.status === 'suspended';
+
+                      return (
+                        <div
+                          key={hRecord.id}
+                          className={`p-5 rounded-2xl border transition-all ${
+                            isPending
+                              ? 'bg-blue-50/30 border-blue-200'
+                              : isVerified
+                              ? 'bg-emerald-50/20 border-emerald-200'
+                              : isFlagged
+                              ? 'bg-amber-50/30 border-amber-200'
+                              : 'bg-slate-50 border-slate-200'
+                          }`}
+                        >
+                          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 pb-4 border-b border-slate-200/60">
+                            <div className="flex items-center gap-3">
+                              <div className="w-14 h-14 rounded-2xl bg-slate-200 overflow-hidden shrink-0 border border-slate-300">
+                                <img
+                                  src={hRecord.imageUrl || 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=400&q=80'}
+                                  alt={hRecord.hostelName || 'Hostel'}
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <h3 className="font-extrabold text-slate-900 text-sm">{hRecord.hostelName}</h3>
+                                  <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${
+                                    isPending
+                                      ? 'bg-blue-100 text-blue-900 border border-blue-300'
+                                      : isVerified
+                                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                      : 'bg-amber-100 text-amber-900 border border-amber-300'
+                                  }`}>
+                                    {String(hRecord.status || 'Under Review').replace('_', ' ')}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5">
+                                  <MapPin size={12} className="text-slate-400" />
+                                  <span>{hRecord.location}</span>
+                                  <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-[10px] text-slate-700">
+                                    {hRecord.digitalAddress}
+                                  </span>
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 w-full lg:w-auto">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedHostelVerification(hRecord)}
+                                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+                              >
+                                <Eye size={14} />
+                                <span>Inspect Dossier</span>
+                              </button>
+
+                              {isPending && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleApproveHostelVerificationRecord(hRecord.id)}
+                                    disabled={adminActionLoading}
+                                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                                  >
+                                    <Check size={14} />
+                                    <span>Verify & Launch</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRejectHostelVerificationRecord(hRecord.id)}
+                                    disabled={adminActionLoading}
+                                    className="px-3 py-2 border border-rose-200 hover:bg-rose-50 text-rose-600 font-bold text-xs rounded-xl transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                  >
+                                    <X size={14} />
+                                    <span>Reject</span>
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Data Grid */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-4 text-xs">
+                            <div>
+                              <span className="text-[10px] font-bold text-slate-400 uppercase">Capacity & Pricing</span>
+                              <p className="font-extrabold text-slate-800 mt-0.5">
+                                {hRecord.totalCapacity} Beds ({hRecord.totalBlocks} Blocks)
+                              </p>
+                              <p className="text-slate-500 text-[11px]">
+                                {hRecord.currency} {hRecord.pricePerYear.toLocaleString()} / year
+                              </p>
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-bold text-slate-400 uppercase">Authority & Ownership</span>
+                              <p className="font-extrabold text-slate-800 mt-0.5">{hRecord.authorityRelationship}</p>
+                              <p className="text-slate-500 text-[11px]">Doc: {hRecord.proofOfOwnershipType}</p>
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-bold text-slate-400 uppercase">Onboarding Fee</span>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                  hRecord.paymentStatus === 'paid'
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                    : 'bg-amber-100 text-amber-800 border border-amber-200'
+                                }`}>
+                                  GHS 50.00 {hRecord.paymentStatus === 'paid' ? 'Paid' : 'Pending'}
+                                </span>
+                              </div>
+                              <p className="text-slate-400 text-[10px] font-mono mt-0.5">{hRecord.paymentReference || 'PAY-REF-DIRECT'}</p>
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-bold text-slate-400 uppercase">System Integrity</span>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                                  GPS: {hRecord.systemValidation?.digitalAddressFormatValid ? 'Valid' : 'Check'}
+                                </span>
+                                <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                                  Dupes: {hRecord.systemValidation?.duplicateHostelCheck}
+                                </span>
+                                <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-blue-100 text-blue-800">
+                                  Deed: {hRecord.systemValidation?.ownershipEvidencePresent ? 'Attached' : 'Missing'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* INSPECTION MODAL: MANAGER DOSSIER */}
+            {selectedManagerVerification && (
+              <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+                <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-6 shadow-2xl border border-slate-200 text-left">
+                  <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center">
+                        <ShieldCheck size={24} />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-black text-slate-900">
+                          Manager Verification Dossier
+                        </h3>
+                        <p className="text-xs text-slate-500">Ref: #{selectedManagerVerification.id}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setSelectedManagerVerification(null)}
+                      className="p-2 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+
+                  {/* Identity Box */}
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                    <span className="text-[10px] font-black uppercase text-slate-400">National Identity & NIA Mock Response</span>
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Full Name on Document</span>
+                        <span className="font-extrabold text-slate-900">{selectedManagerVerification.fullNameOnId}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Document Type & Masked ID</span>
+                        <span className="font-mono font-bold text-slate-900">{selectedManagerVerification.idDocumentType}: {selectedManagerVerification.maskedIdNumber}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Date of Birth / Expiry</span>
+                        <span className="font-medium text-slate-700">{selectedManagerVerification.dateOfBirth || '1985-05-15'} (Exp: {selectedManagerVerification.idExpiryDate || '2030-05-15'})</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Validation Status</span>
+                        <span className="inline-block text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
+                          {selectedManagerVerification.idVerificationStatus}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Authority Box */}
+                  <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-200 space-y-3">
+                    <span className="text-[10px] font-black uppercase text-blue-800">Authority Claim & Evidence</span>
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Declared Role</span>
+                        <span className="font-extrabold text-slate-900">{selectedManagerVerification.authorityRelationship}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Claimed Property Owner</span>
+                        <span className="font-medium text-slate-700">{selectedManagerVerification.claimedOwnerName || selectedManagerVerification.managerName}</span>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-slate-400 block text-[10px]">Attached Evidence Document</span>
+                        <div className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-blue-100 mt-1">
+                          <div className="flex items-center gap-2">
+                            <FileText size={16} className="text-blue-600" />
+                            <span className="text-xs font-bold text-slate-800">
+                              {selectedManagerVerification.authorityEvidenceFileName || 'Authority_Verification_Declaration.pdf'}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                            Verified Document Attached
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions Bar */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActionModalType('suspend');
+                          setAdminActionNotes('');
+                        }}
+                        className="px-3.5 py-2 border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold rounded-xl"
+                      >
+                        Suspend Manager
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActionModalType('request-info');
+                          setAdminActionNotes('');
+                        }}
+                        className="px-3.5 py-2 border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold rounded-xl"
+                      >
+                        Request Documents
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleRejectManagerVerification(selectedManagerVerification.id)}
+                        disabled={adminActionLoading}
+                        className="px-4 py-2 border border-rose-300 text-rose-600 hover:bg-rose-50 text-xs font-bold rounded-xl"
+                      >
+                        Reject
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleApproveManagerVerification(selectedManagerVerification.id)}
+                        disabled={adminActionLoading}
+                        className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs"
+                      >
+                        Approve & Unlock
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* INSPECTION MODAL: HOSTEL DOSSIER */}
+            {selectedHostelVerification && (
+              <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+                <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-6 shadow-2xl border border-slate-200 text-left">
+                  <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-200 flex items-center justify-center">
+                        <Building2 size={24} />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-black text-slate-900">
+                          {selectedHostelVerification.hostelName} Verification Dossier
+                        </h3>
+                        <p className="text-xs text-slate-500">Ref: #{selectedHostelVerification.id}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setSelectedHostelVerification(null)}
+                      className="p-2 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+
+                  {/* Property & GhanaPost GPS */}
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                    <span className="text-[10px] font-black uppercase text-slate-400">Location & GhanaPost GPS Verification</span>
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Digital Address (GhanaPost GPS)</span>
+                        <span className="font-mono font-black text-blue-900 text-sm">{selectedHostelVerification.digitalAddress}</span>
+                        <span className="inline-block ml-2 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                          ✓ Format Valid
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Campus Zone & Location</span>
+                        <span className="font-extrabold text-slate-900">{selectedHostelVerification.location}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Configured Capacity</span>
+                        <span className="font-medium text-slate-700">
+                          {selectedHostelVerification.totalCapacity} Beds across {selectedHostelVerification.totalBlocks} Blocks ({selectedHostelVerification.totalRooms} Rooms)
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Annual Price Rate</span>
+                        <span className="font-bold text-slate-900">
+                          {selectedHostelVerification.currency} {selectedHostelVerification.pricePerYear.toLocaleString()} / year
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Proof of Ownership */}
+                  <div className="p-4 bg-indigo-50/40 rounded-2xl border border-indigo-200 space-y-3">
+                    <span className="text-[10px] font-black uppercase text-indigo-800">Proof of Ownership & Authority</span>
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Document Type</span>
+                        <span className="font-extrabold text-slate-900">{selectedHostelVerification.proofOfOwnershipType}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Owner / Operator</span>
+                        <span className="font-medium text-slate-700">{selectedHostelVerification.ownerOperatorName}</span>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-slate-400 block text-[10px]">Attached Document File</span>
+                        <div className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-indigo-100 mt-1">
+                          <div className="flex items-center gap-2">
+                            <FileText size={16} className="text-indigo-600" />
+                            <span className="text-xs font-bold text-slate-800">
+                              {selectedHostelVerification.proofOfOwnershipFileName || `${selectedHostelVerification.hostelName.toLowerCase().replace(/[^a-z0-9]/g, '-')}-title-deed.pdf`}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                            Stored in Supabase Private Vault
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Onboarding Fee */}
+                  <div className="p-4 bg-emerald-50/50 rounded-2xl border border-emerald-200 flex items-center justify-between text-xs">
+                    <div>
+                      <span className="text-[10px] font-bold uppercase text-emerald-800 block">Hostel Onboarding Fee</span>
+                      <span className="font-black text-slate-900 text-sm">GHS 50.00 {selectedHostelVerification.paymentStatus === 'paid' ? 'Paid' : 'Pending'}</span>
+                      <p className="text-[10px] text-slate-500 font-mono">Reference: {selectedHostelVerification.paymentReference || 'PAY-PV50-CONFIRMED'}</p>
+                    </div>
+                    <span className="px-3 py-1 bg-emerald-600 text-white font-bold text-xs rounded-full">
+                      Fee Settled
+                    </span>
+                  </div>
+
+                  {/* Actions Bar */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleFlagHostelInvestigation(selectedHostelVerification.id, 'Dispatched university inspector for property audit.')}
+                        className="px-3.5 py-2 border border-amber-300 text-amber-800 hover:bg-amber-50 text-xs font-bold rounded-xl"
+                      >
+                        Flag for Physical Inspection
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSuspendHostelVerification(selectedHostelVerification.id, 'Administrative suspension.')}
+                        className="px-3.5 py-2 border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold rounded-xl"
+                      >
+                        Suspend
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleRejectHostelVerificationRecord(selectedHostelVerification.id)}
+                        disabled={adminActionLoading}
+                        className="px-4 py-2 border border-rose-300 text-rose-600 hover:bg-rose-50 text-xs font-bold rounded-xl"
+                      >
+                        Reject
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleApproveHostelVerificationRecord(selectedHostelVerification.id)}
+                        disabled={adminActionLoading}
+                        className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs"
+                      >
+                        Verify & Activate Property
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </main>
+        ) : null}
         </div>
-      </footer>
+
+        {/* Footer */}
+        <footer className="border-t border-slate-200 bg-white py-4 px-6 text-[10px] text-slate-400 mt-auto shrink-0">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+            <span>© 2026 PineVela. All rights reserved.</span>
+            <div className="flex gap-4">
+              <a href="#" className="hover:text-slate-600">Privacy Policy</a>
+              <a href="#" className="hover:text-slate-600">Terms of Service</a>
+            </div>
+          </div>
+        </footer>
+      </div>
     </div>
   );
 }

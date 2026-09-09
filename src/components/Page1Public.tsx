@@ -23,10 +23,12 @@ export default function Page1Public({
   const [selectedWing, setSelectedWing] = useState<'All' | 'North Wing' | 'South Side'>('All');
 
   // Filter logic
-  const filteredHostels = hostels.filter((hostel) => {
-    const matchesSearch =
-      hostel.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      hostel.location.toLowerCase().includes(searchQuery.toLowerCase());
+  const filteredHostels = (hostels || []).filter((hostel) => {
+    if (!hostel) return false;
+    const query = (searchQuery || '').toLowerCase().trim();
+    const name = (hostel.name || '').toLowerCase();
+    const loc = (hostel.location || '').toLowerCase();
+    const matchesSearch = name.includes(query) || loc.includes(query);
     
     if (selectedWing === 'All') return matchesSearch;
     return matchesSearch && hostel.wing === selectedWing;
@@ -236,7 +238,7 @@ export default function Page1Public({
           {/* Grid of Hostels */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {filteredHostels.map((hostel, index) => {
-              const isOpen = hostel.status === 'Open';
+              const isOpen = hostel.status === 'Open' || (hostel.status as any) === 'active';
               const isMaintenance = hostel.status === 'Under Maintenance';
               const isFull = hostel.status === 'Full';
 
@@ -252,7 +254,7 @@ export default function Page1Public({
 
               return (
                 <motion.div
-                  key={hostel.id}
+                  key={hostel.id || index}
                   className="bg-white rounded-2xl overflow-hidden border border-slate-100 shadow-sm flex flex-col group cursor-pointer hostel-radiant-glow"
                   onClick={() => onSelectHostel(hostel)}
                   initial={{ opacity: 0, y: 35 }}
@@ -268,8 +270,8 @@ export default function Page1Public({
                   {/* Image and Status Ribbon */}
                   <div className="relative h-44 w-full bg-slate-100 overflow-hidden">
                     <img
-                      src={hostel.image}
-                      alt={hostel.name}
+                      src={hostel?.image || hostel?.imageUrl || 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=800&q=80'}
+                      alt={hostel?.name || 'Hostel'}
                       referrerPolicy="no-referrer"
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
@@ -280,7 +282,7 @@ export default function Page1Public({
                         {statusText}
                       </span>
                       <span className="bg-blue-900/90 text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-sm backdrop-blur-sm">
-                        {hostel.bedsLeft} BEDS LEFT
+                        {hostel.bedsLeft ?? hostel.availableSpaces ?? hostel.totalCapacity ?? 0} BEDS LEFT
                       </span>
                     </div>
                   </div>
@@ -300,14 +302,14 @@ export default function Page1Public({
                     {/* Manager Details */}
                     <div className="pt-3 border-t border-slate-100 flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-slate-100 overflow-hidden border border-slate-200 shrink-0 flex items-center justify-center font-bold text-xs text-blue-900">
-                        {hostel.managerName[0]}
+                        {hostel.managerName?.[0] || hostel.name?.[0] || 'H'}
                       </div>
                       <div className="text-left text-xs min-w-0">
-                        <p className="font-bold text-slate-800 truncate">{hostel.managerName}</p>
+                        <p className="font-bold text-slate-800 truncate">{hostel.managerName || 'Resident Manager'}</p>
                         <p className="text-slate-400 text-[10px] font-medium">Hostel Manager</p>
                         <p className="text-slate-500 text-[10px] flex items-center gap-0.5 mt-0.5">
                           <Phone size={10} />
-                          {hostel.managerPhone}
+                          {hostel.managerPhone || 'Direct Line Available'}
                         </p>
                       </div>
                     </div>
@@ -510,13 +512,13 @@ export default function Page1Public({
                 {/* Cover Image with Status Overlay */}
                 <div className="relative h-64 w-full bg-slate-100 rounded-2xl overflow-hidden shadow-sm">
                   <img
-                    src={selectedHostel.image}
-                    alt={selectedHostel.name}
+                    src={selectedHostel?.image || selectedHostel?.imageUrl || 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=800&q=80'}
+                    alt={selectedHostel?.name || 'Hostel'}
                     referrerPolicy="no-referrer"
                     className="w-full h-full object-cover"
                   />
                   <span className="absolute top-4 left-4 bg-emerald-500 text-white text-xs uppercase font-extrabold px-3 py-1 rounded-full shadow-md">
-                    {selectedHostel.status}
+                    {selectedHostel?.status || 'Active'}
                   </span>
                 </div>
 
@@ -545,11 +547,11 @@ export default function Page1Public({
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Capacity</span>
-                    <span className="text-xl font-extrabold text-slate-800 block mt-1">250 Beds</span>
+                    <span className="text-xl font-extrabold text-slate-800 block mt-1">{selectedHostel.totalCapacity ?? 120} Beds</span>
                   </div>
                   <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Available Spaces</span>
-                    <span className="text-xl font-extrabold text-blue-950 block mt-1">42</span>
+                    <span className="text-xl font-extrabold text-blue-950 block mt-1">{selectedHostel.bedsLeft ?? selectedHostel.availableSpaces ?? 0}</span>
                   </div>
                 </div>
 

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Hostel, BookingRequest, IssueReport, Staff } from '../types';
+import { Hostel, BookingRequest, IssueReport, Staff, ManagerRegistrationRequest } from '../types';
 import PineLogo from './PineLogo';
+import HostelRegistration from './HostelRegistration';
 import {
   LayoutDashboard,
   CalendarCheck,
@@ -12,6 +13,7 @@ import {
   Search,
   Check,
   X,
+  Menu,
   AlertTriangle,
   Phone,
   Mail,
@@ -27,7 +29,14 @@ import {
   MessageCircle,
   Users,
   MessageSquare,
-  Trash2
+  Trash2,
+  PlusCircle,
+  Building2,
+  HelpCircle,
+  Sparkles,
+  ArrowRight,
+  RefreshCw,
+  FileCheck
 } from 'lucide-react';
 
 interface Page10HostelManagerDashboardProps {
@@ -47,12 +56,27 @@ export default function Page10HostelManagerDashboard({
   onUpdateHostel,
   onAddActivity
 }: Page10HostelManagerDashboardProps) {
-  const { apiFetch } = useAuth();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'bookings' | 'maintenance' | 'details' | 'meetings' | 'staff'>('dashboard');
+  const { apiFetch, user } = useAuth();
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'bookings' | 'maintenance' | 'details' | 'meetings' | 'staff' | 'register_hostel'>('dashboard');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [meetings, setMeetings] = useState<any[]>([]);
   const [staffList, setStaffList] = useState<Staff[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Manager Registration Request state
+  const [managerRequest, setManagerRequest] = useState<ManagerRegistrationRequest | null>(null);
+  const [requestLoading, setRequestLoading] = useState(false);
+  const [requestSubmitting, setRequestSubmitting] = useState(false);
+  const [proposedHostelName, setProposedHostelName] = useState('');
+  const [proposedLocation, setProposedLocation] = useState('Legon Campus Area, Accra');
+  const [proposedCapacity, setProposedCapacity] = useState(120);
+  const [proposedReason, setProposedReason] = useState('Official university-affiliated student accommodation seeking digital onboarding and room allocation management.');
+  const [isOpeningRegistration, setIsOpeningRegistration] = useState(false);
+
+  const isRequestApproved = (managerRequest?.status || '').toLowerCase() === 'approved';
+  const isRequestPending = (managerRequest?.status || '').toLowerCase() === 'pending';
+  const isRequestRejected = (managerRequest?.status || '').toLowerCase() === 'rejected';
 
   // Staff registration form state
   const [newStaffName, setNewStaffName] = useState('');
@@ -79,6 +103,26 @@ export default function Page10HostelManagerDashboard({
     }
   }, [hostel]);
 
+  // Check URL query parameters and local storage for direct hostel registration redirection
+  useEffect(() => {
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const tabParam = searchParams.get('tab');
+      const openWizard = searchParams.get('openWizard');
+      const autoRegister = localStorage.getItem('pinevela_auto_open_register');
+
+      if (tabParam === 'register_hostel' || tabParam === 'register' || autoRegister === 'true') {
+        setActiveTab('register_hostel');
+        if (openWizard === 'true' || autoRegister === 'true') {
+          setIsOpeningRegistration(true);
+        }
+        localStorage.removeItem('pinevela_auto_open_register');
+      }
+    } catch (e) {
+      console.warn('Could not parse navigation query parameters:', e);
+    }
+  }, []);
+
   const fetchMeetings = async () => {
     try {
       const data = await apiFetch('/api/meetings');
@@ -97,10 +141,81 @@ export default function Page10HostelManagerDashboard({
     }
   };
 
+  const fetchManagerRequests = async () => {
+    setRequestLoading(true);
+    try {
+      const data: ManagerRegistrationRequest[] = await apiFetch('/api/manager-requests');
+      const myEmail = user?.email || hostel?.managerEmail || '';
+      const myRequest = Array.isArray(data) ? (data.find(r => 
+        (r.managerEmail && myEmail && (r.managerEmail || '').toLowerCase() === (myEmail || '').toLowerCase()) ||
+        (user?.id && r.managerId === user.id)
+      ) || (user?.role === 'manager' && data.length > 0 ? data[0] : null)) : null;
+      if (myRequest) {
+        setManagerRequest(myRequest);
+      }
+    } catch (err) {
+      console.error("Failed to fetch manager requests:", err);
+    } finally {
+      setRequestLoading(false);
+    }
+  };
+
+  const handleCreateManagerRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!proposedHostelName.trim()) {
+      triggerToast('Please provide a proposed hostel or property name');
+      return;
+    }
+
+    setRequestSubmitting(true);
+    try {
+      const cleanName = proposedHostelName.trim();
+      const cleanReason = proposedReason.trim();
+      const payload = {
+        managerId: user?.id || `mgr-${Date.now()}`,
+        managerName: user?.name || hostel?.managerName || 'Hostel Manager',
+        managerEmail: user?.email || hostel?.managerEmail || '',
+        managerPhone: user?.phone || hostel?.managerPhone || '+233 24 000 0000',
+        nationalId: user?.nationalId || 'GHA-8920193-4',
+        organization: user?.organization || 'Student Accommodations Management',
+        roleTitle: user?.roleTitle || 'General Manager',
+        propertyName: cleanName,
+        proposedHostelName: cleanName,
+        hostelName: cleanName,
+        proposedLocation: proposedLocation.trim(),
+        proposedCapacity: Number(proposedCapacity) || 120,
+        reason: cleanReason,
+        notes: cleanReason
+      };
+
+      const res: any = await apiFetch('/api/manager-requests', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+
+      const created: ManagerRegistrationRequest = res?.request || res;
+      setManagerRequest(created);
+      if (res?.isApproved || (created?.status || '').toLowerCase() === 'approved') {
+        triggerToast('You are authorized! Launch the 10-step wizard to register your property.');
+      } else if (res?.alreadyExists || (created?.status || '').toLowerCase() === 'pending') {
+        triggerToast('Registration request is already submitted and awaiting Admin approval.');
+      } else {
+        triggerToast('Request submitted successfully! Awaiting Administrative Approval.');
+        onAddActivity(`Submitted request to register hostel property: ${cleanName}`, 'info');
+      }
+    } catch (err: any) {
+      console.error("Failed to submit manager request:", err);
+      triggerToast(err.message || 'Failed to submit registration request.');
+    } finally {
+      setRequestSubmitting(false);
+    }
+  };
+
   useEffect(() => {
     fetchMeetings();
     fetchStaff();
-  }, []);
+    fetchManagerRequests();
+  }, [user]);
 
   const handleUpdateMeetingStatus = async (meetingId: string, status: 'Approved' | 'Declined') => {
     try {
@@ -108,7 +223,7 @@ export default function Page10HostelManagerDashboard({
         method: 'PUT',
         body: JSON.stringify({ status })
       });
-      triggerToast(`Meeting has been successfully ${status.toLowerCase()}!`);
+      triggerToast(`Meeting has been successfully ${(status || '').toLowerCase()}!`);
       fetchMeetings();
       const targetMeeting = meetings.find(m => m.id === meetingId);
       const studentName = targetMeeting?.studentName || 'Student';
@@ -125,8 +240,11 @@ export default function Page10HostelManagerDashboard({
 
   // Filter lists to only show items belonging to THIS hostel
   // (Fuzzy match in case some descriptions have block letters)
-  const isMatch = (name: string, target: string) => {
-    return name.toLowerCase().includes(target.toLowerCase()) || target.toLowerCase().includes(name.toLowerCase());
+  const isMatch = (name?: string, target?: string) => {
+    if (!name || !target) return false;
+    const n = (name || '').toLowerCase().trim();
+    const t = (target || '').toLowerCase().trim();
+    return n.includes(t) || t.includes(n);
   };
 
   // Handle local states to make page highly reactive
@@ -323,7 +441,7 @@ export default function Page10HostelManagerDashboard({
   const pendingIssuesCount = localIssues.filter(i => i.status !== 'Resolved').length;
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
+    <div className="h-screen w-screen overflow-hidden bg-slate-50 flex font-sans text-slate-800">
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-5 right-5 bg-blue-600 text-white font-extrabold text-xs px-4 py-3 rounded-xl shadow-xl z-50 animate-fade-in flex items-center gap-2">
@@ -332,40 +450,45 @@ export default function Page10HostelManagerDashboard({
         </div>
       )}
 
-      {/* Top Header */}
-      <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between z-10">
-        <div className="flex items-center gap-3">
-          <PineLogo />
-          <span className="text-slate-300">/</span>
-          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full border border-slate-200">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
-            <span>Hostel Portal: {hostel.name}</span>
-          </div>
-        </div>
+      {/* Mobile Backdrop */}
+      {mobileMenuOpen && (
+        <div
+          onClick={() => setMobileMenuOpen(false)}
+          className="fixed inset-0 bg-black/60 z-30 lg:hidden backdrop-blur-xs transition-opacity"
+        />
+      )}
 
-        <div className="flex items-center gap-4">
-          <div className="text-right hidden sm:block">
-            <p className="text-xs font-black text-slate-900">{hostel.managerName}</p>
-            <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Property Manager</p>
+      {/* Full-Height Stationary Left Sidebar covering the entire side with curved edges */}
+      <aside className={`
+        fixed inset-y-0 left-0 z-40 w-64 lg:w-72 bg-slate-900 text-slate-400 flex flex-col justify-between border-r border-slate-800
+        transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 h-screen shrink-0 shadow-2xl lg:shadow-xl
+        lg:rounded-r-[36px] overflow-hidden
+        ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
+      `}>
+        <div className="flex flex-col flex-1 min-h-0">
+          {/* Brand Section with PineVela and Logo in sidebar theme */}
+          <div className="p-5 pb-4 border-b border-white/10 flex items-center justify-between shrink-0">
+            <div className="cursor-pointer flex items-center gap-2.5">
+              <PineLogo variant="dark" size={32} />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[9px] font-black uppercase tracking-wider bg-white/10 text-amber-300 px-2.5 py-0.5 rounded-full border border-white/15">
+                Manager
+              </span>
+              <button
+                onClick={() => setMobileMenuOpen(false)}
+                className="lg:hidden p-1 text-slate-400 hover:text-white rounded-lg"
+              >
+                <X size={18} />
+              </button>
+            </div>
           </div>
-          <button
-            onClick={onLogout}
-            className="p-2 hover:bg-rose-50 text-rose-500 hover:text-rose-700 rounded-xl transition-all"
-            title="Logout"
-          >
-            <LogOut size={18} />
-          </button>
-        </div>
-      </header>
 
-      {/* Main Container */}
-      <div className="flex-1 flex flex-col lg:flex-row">
-        <aside className="w-full lg:w-64 bg-slate-900 text-slate-400 p-4 lg:py-6 flex flex-col justify-between shrink-0 gap-4 border-r border-slate-800">
-          <div className="space-y-6">
-            {/* Tiny mini-card */}
-            <div className="bg-white/5 rounded-xl p-4 border border-white/10 space-y-2">
+          <div className="p-3 space-y-4 flex-1 overflow-y-auto">
+            {/* Hostel Property Mini-Card */}
+            <div className="bg-white/5 rounded-3xl p-3.5 border border-white/10 space-y-1.5">
               <div className="flex items-center gap-2">
-                <span className="text-blue-400">🏫</span>
+                <span className="text-blue-400 text-sm">🏫</span>
                 <span className="text-white text-xs font-black truncate">{hostel.name}</span>
               </div>
               <p className="text-[10px] text-slate-400 flex items-center gap-1">
@@ -374,128 +497,230 @@ export default function Page10HostelManagerDashboard({
               </p>
             </div>
 
-            <nav className="space-y-1">
+            {/* Side Tabs Navigation with fully curved pill edges */}
+            <nav className="space-y-2">
               <button
-                onClick={() => setActiveTab('dashboard')}
-                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-bold text-xs transition-all ${
+                onClick={() => {
+                  setActiveTab('dashboard');
+                  setMobileMenuOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-5 py-3.5 rounded-full font-bold text-xs transition-all duration-200 ${
                   activeTab === 'dashboard'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                    : 'text-slate-400 hover:bg-white/10 hover:text-white'
                 }`}
               >
-                <div className="flex items-center gap-3">
-                  <LayoutDashboard size={16} />
+                <div className="flex items-center gap-3.5">
+                  <LayoutDashboard size={18} />
                   <span>Dashboard</span>
                 </div>
                 {pendingBookingsCount + pendingIssuesCount > 0 && (
-                  <span className="bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full">
+                  <span className="bg-red-500 text-white text-[9px] font-black px-2.5 py-0.5 rounded-full">
                     {pendingBookingsCount + pendingIssuesCount}
                   </span>
                 )}
               </button>
 
               <button
-                onClick={() => setActiveTab('bookings')}
-                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-bold text-xs transition-all ${
+                onClick={() => {
+                  setActiveTab('bookings');
+                  setMobileMenuOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-5 py-3.5 rounded-full font-bold text-xs transition-all duration-200 ${
                   activeTab === 'bookings'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                    : 'text-slate-400 hover:bg-white/10 hover:text-white'
                 }`}
               >
-                <div className="flex items-center gap-3">
-                  <CalendarCheck size={16} />
+                <div className="flex items-center gap-3.5">
+                  <CalendarCheck size={18} />
                   <span>Booking Requests</span>
                 </div>
                 {pendingBookingsCount > 0 && (
-                  <span className="bg-blue-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full">
+                  <span className="bg-blue-500 text-white text-[9px] font-black px-2.5 py-0.5 rounded-full">
                     {pendingBookingsCount}
                   </span>
                 )}
               </button>
 
               <button
-                onClick={() => setActiveTab('maintenance')}
-                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-bold text-xs transition-all ${
+                onClick={() => {
+                  setActiveTab('maintenance');
+                  setMobileMenuOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-5 py-3.5 rounded-full font-bold text-xs transition-all duration-200 ${
                   activeTab === 'maintenance'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                    : 'text-slate-400 hover:bg-white/10 hover:text-white'
                 }`}
               >
-                <div className="flex items-center gap-3">
-                  <Wrench size={16} />
+                <div className="flex items-center gap-3.5">
+                  <Wrench size={18} />
                   <span>Maintenance Logs</span>
                 </div>
                 {pendingIssuesCount > 0 && (
-                  <span className="bg-red-600 text-white text-[9px] font-black px-2 py-0.5 rounded-full border border-red-400 sos-glow flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-white inline-block animate-ping"></span>
+                  <span className="bg-red-600 text-white text-[9px] font-black px-2.5 py-0.5 rounded-full border border-red-400 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-white inline-block animate-ping" />
                     <span>{pendingIssuesCount} SOS</span>
                   </span>
                 )}
               </button>
 
               <button
-                onClick={() => setActiveTab('details')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-xs transition-all ${
+                onClick={() => {
+                  setActiveTab('details');
+                  setMobileMenuOpen(false);
+                }}
+                className={`w-full flex items-center gap-3.5 px-5 py-3.5 rounded-full font-bold text-xs transition-all duration-200 ${
                   activeTab === 'details'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                    : 'text-slate-400 hover:bg-white/10 hover:text-white'
                 }`}
               >
-                <Building size={16} />
+                <Building size={18} />
                 <span>Configure Hostel</span>
               </button>
 
               <button
-                onClick={() => setActiveTab('meetings')}
-                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-bold text-xs transition-all ${
+                onClick={() => {
+                  setActiveTab('meetings');
+                  setMobileMenuOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-5 py-3.5 rounded-full font-bold text-xs transition-all duration-200 ${
                   activeTab === 'meetings'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                    : 'text-slate-400 hover:bg-white/10 hover:text-white'
                 }`}
               >
-                <div className="flex items-center gap-3">
-                  <Calendar size={16} />
+                <div className="flex items-center gap-3.5">
+                  <Calendar size={18} />
                   <span>Meeting Requests</span>
                 </div>
                 {meetings.filter(m => m.status === 'Pending').length > 0 && (
-                  <span className="bg-amber-500 text-slate-950 text-[9px] font-black px-1.5 py-0.5 rounded-full">
+                  <span className="bg-amber-500 text-slate-950 text-[9px] font-black px-2.5 py-0.5 rounded-full">
                     {meetings.filter(m => m.status === 'Pending').length}
                   </span>
                 )}
               </button>
 
               <button
-                onClick={() => setActiveTab('staff')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-xs transition-all ${
+                onClick={() => {
+                  setActiveTab('staff');
+                  setMobileMenuOpen(false);
+                }}
+                className={`w-full flex items-center gap-3.5 px-5 py-3.5 rounded-full font-bold text-xs transition-all duration-200 ${
                   activeTab === 'staff'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                    : 'text-slate-400 hover:bg-white/10 hover:text-white'
                 }`}
               >
-                <Users size={16} />
+                <Users size={18} />
                 <span>Staff Directory</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setActiveTab('register_hostel');
+                  setMobileMenuOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-5 py-3.5 rounded-full font-bold text-xs transition-all duration-200 ${
+                  activeTab === 'register_hostel'
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                    : 'text-slate-400 hover:bg-white/10 hover:text-white'
+                }`}
+              >
+                <div className="flex items-center gap-3.5">
+                  <Building2 size={18} />
+                  <span>Register Hostel</span>
+                </div>
+                {isRequestApproved ? (
+                  <span className="bg-emerald-500 text-white text-[9px] font-black px-2 py-0.5 rounded-full">
+                    Approved
+                  </span>
+                ) : isRequestPending ? (
+                  <span className="bg-amber-500 text-slate-900 text-[9px] font-black px-2 py-0.5 rounded-full">
+                    Pending
+                  </span>
+                ) : (
+                  <span className="bg-white/10 text-slate-300 text-[9px] font-bold px-2 py-0.5 rounded-full">
+                    1 Max
+                  </span>
+                )}
               </button>
             </nav>
           </div>
+        </div>
 
-          {/* Secure Badge */}
-          <div className="pt-4 border-t border-slate-800 space-y-3">
-            <div className="flex items-center gap-2 text-[10px] text-slate-500">
-              <ShieldCheck size={14} className="text-emerald-500" />
-              <span>Isolated Manager Session</span>
+        {/* Manager Profile & Sign Out at bottom of sidebar with curved edges */}
+        <div className="p-4 border-t border-white/10 space-y-2 shrink-0">
+          <div className="flex items-center gap-3 px-3 py-2 rounded-full bg-white/5 border border-white/10">
+            <div className="w-8 h-8 rounded-full bg-slate-800 border border-white/20 flex items-center justify-center text-amber-300 font-black text-xs shrink-0">
+              {hostel.managerName ? hostel.managerName.charAt(0) : 'M'}
             </div>
+            <div className="text-left text-xs truncate">
+              <p className="font-extrabold text-white truncate">{hostel.managerName || 'Property Manager'}</p>
+              <div className="flex items-center gap-1 text-[10px] text-emerald-400">
+                <ShieldCheck size={11} />
+                <span>Verified Manager</span>
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={onLogout}
+            className="w-full flex items-center gap-3 px-5 py-2.5 rounded-full font-bold text-xs text-rose-400 hover:bg-rose-950/40 hover:text-rose-300 transition-all text-left"
+          >
+            <LogOut size={16} />
+            <span>Sign Out</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content Area: Scrolls independently while sidebar stays stationary */}
+      <div className="flex-1 h-screen overflow-y-auto flex flex-col min-w-0 bg-slate-50">
+        {/* Top Header Bar */}
+        <header className="bg-white border-b border-slate-200/80 px-6 py-3 sticky top-0 z-20 flex items-center justify-between shrink-0 shadow-xs">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              className="lg:hidden p-1.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200"
+              title="Open Navigation"
+            >
+              <Menu size={18} />
+            </button>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black uppercase tracking-wider text-slate-800 hidden sm:inline">
+                Hostel Operations:
+              </span>
+              <span className="text-xs font-bold text-blue-900 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-200">
+                {hostel.name}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => triggerToast('No pending system alerts.')}
+              className="p-2 hover:bg-slate-100 rounded-xl relative text-slate-500 hover:text-slate-700 transition-colors"
+            >
+              <Bell size={18} />
+              {(pendingBookingsCount + pendingIssuesCount > 0) && (
+                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500" />
+              )}
+            </button>
+
             <button
               onClick={onLogout}
-              className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl font-bold text-xs text-rose-400 hover:bg-rose-950/20 hover:text-rose-300 transition-all text-left"
+              className="p-2 hover:bg-rose-50 text-rose-500 hover:text-rose-700 rounded-xl transition-all"
+              title="Sign Out"
             >
-              <LogOut size={15} />
-              <span>Sign Out</span>
+              <LogOut size={18} />
             </button>
           </div>
-        </aside>
+        </header>
 
         {/* Dashboard Main Content Area */}
-        <main className="flex-grow p-6 lg:p-8 overflow-y-auto space-y-8 max-w-7xl">
+        <main className="flex-grow p-6 lg:p-8 space-y-8 max-w-7xl w-full mx-auto">
           
           {/* Header */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-200 pb-6">
@@ -507,6 +732,7 @@ export default function Page10HostelManagerDashboard({
                 {activeTab === 'details' && 'Configure Hostel Properties'}
                 {activeTab === 'meetings' && 'Student Meeting Advisory'}
                 {activeTab === 'staff' && 'Staff Directory & Management'}
+                {activeTab === 'register_hostel' && 'Hostel Registration & Approval Portal'}
               </h1>
               <p className="text-slate-500 text-xs font-medium">
                 {activeTab === 'dashboard' && 'Live performance metric analysis and pending work reviews'}
@@ -515,6 +741,7 @@ export default function Page10HostelManagerDashboard({
                 {activeTab === 'details' && 'Update hostel descriptions, public status indicators, and contact points'}
                 {activeTab === 'meetings' && 'Approve, schedule, and review advisory, online or physical meeting requests'}
                 {activeTab === 'staff' && 'Register and manage designated maintenance staff, plumbers, technicians, and wardens'}
+                {activeTab === 'register_hostel' && 'Request administrative authorization and register your single designated property'}
               </p>
             </div>
 
@@ -535,8 +762,57 @@ export default function Page10HostelManagerDashboard({
           {/* TAB 1: DASHBOARD OVERVIEW */}
           {activeTab === 'dashboard' && (
             <div className="space-y-8">
+              {/* Quick Action: Hostel Registration Sequence Banner */}
+              <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 rounded-2xl p-5 sm:p-6 text-white shadow-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-left border border-blue-700/40">
+                <div className="space-y-1.5 max-w-2xl">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-400 text-slate-950">
+                      Hostel Onboarding Portal
+                    </span>
+                    <span className="text-xs text-blue-200 font-bold">
+                      {isRequestApproved ? '✓ Admin Authorized' : isRequestPending ? '⏳ Verification In Progress' : '⚡ Action Required'}
+                    </span>
+                  </div>
+                  <h3 className="text-lg font-black tracking-tight text-white">
+                    {isRequestApproved
+                      ? `Ready to register: ${managerRequest?.proposedHostelName || managerRequest?.propertyName || 'Your Property'}`
+                      : isRequestPending
+                      ? `Administrative review pending for ${managerRequest?.proposedHostelName || managerRequest?.propertyName || 'your property'}`
+                      : 'Initiate Official 10-Step Hostel Property Registration'}
+                  </h3>
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    {isRequestApproved
+                      ? 'Administrative clearance granted! Launch the comprehensive 10-step wizard to upload floor plans, GPS coordinates, room pricing, and amenities.'
+                      : isRequestPending
+                      ? 'Your registration request is in the Admin approvals queue. You can check authorization status or prepare property documentation.'
+                      : 'Connect your student accommodation with university students, allocate room blocks, configure amenities, and manage digital bookings.'}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('register_hostel');
+                      if (isRequestApproved) {
+                        setIsOpeningRegistration(true);
+                      }
+                    }}
+                    className={`px-5 py-3 rounded-xl font-extrabold text-xs flex items-center gap-2 transition-all shadow-md cursor-pointer ${
+                      isRequestApproved
+                        ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-500/30'
+                        : 'bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-amber-400/20'
+                    }`}
+                  >
+                    <Building2 size={16} />
+                    <span>{isRequestApproved ? 'Launch 10-Step Wizard' : 'Open Registration Portal'}</span>
+                    <ArrowRight size={14} />
+                  </button>
+                </div>
+              </div>
+
               {/* BIG SOS MAINTENANCE ALERTS BOARD */}
-              {localIssues.filter(i => i.status !== 'Resolved').length > 0 && (
+              {localIssues.filter(i => i?.status !== 'Resolved').length > 0 && (
                 <div className="bg-red-50 border-2 border-red-500 rounded-2xl p-6 shadow-xl space-y-6 sos-glow relative overflow-hidden text-left">
                   {/* Decorative glowing background elements */}
                   <div className="absolute top-0 right-0 w-32 h-32 bg-red-200/40 rounded-full blur-3xl -mr-10 -mt-10 animate-pulse"></div>
@@ -549,7 +825,7 @@ export default function Page10HostelManagerDashboard({
                           Emergency Maintenance SOS Panel
                         </h2>
                         <p className="text-xs text-red-600 font-semibold sos-text-pulse">
-                          Immediate response required. {localIssues.filter(i => i.status !== 'Resolved').length} active issues reported.
+                          Immediate response required. {localIssues.filter(i => i?.status !== 'Resolved').length} active issues reported.
                         </p>
                       </div>
                     </div>
@@ -560,7 +836,7 @@ export default function Page10HostelManagerDashboard({
                   </div>
 
                   <div className="space-y-4">
-                    {localIssues.filter(i => i.status !== 'Resolved').map((issue) => (
+                    {localIssues.filter(i => i && i.status !== 'Resolved').map((issue) => (
                       <div key={issue.id} className="bg-white rounded-xl border border-red-100 p-5 shadow-sm space-y-4 hover:border-red-300 transition-all">
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-100 pb-3">
                           <div>
@@ -800,14 +1076,14 @@ export default function Page10HostelManagerDashboard({
                   </div>
 
                   <div className="p-4 divide-y divide-slate-100 flex-1">
-                    {localBookings.filter(b => b.status === 'Pending').length === 0 ? (
+                    {localBookings.filter(b => b?.status === 'Pending').length === 0 ? (
                       <div className="text-center py-10 space-y-2">
                         <span className="text-2xl">✨</span>
                         <p className="text-xs text-slate-500 font-semibold">All booking requests approved or cleared!</p>
                       </div>
                     ) : (
                       localBookings
-                        .filter(b => b.status === 'Pending')
+                        .filter(b => b && b.status === 'Pending')
                         .slice(0, 3)
                         .map(b => (
                           <div key={b.id} className="py-3.5 flex items-center justify-between gap-4 first:pt-0 last:pb-0">
@@ -853,14 +1129,14 @@ export default function Page10HostelManagerDashboard({
                   </div>
 
                   <div className="p-4 divide-y divide-slate-100 flex-1">
-                    {localIssues.filter(i => i.status !== 'Resolved').length === 0 ? (
+                    {localIssues.filter(i => i?.status !== 'Resolved').length === 0 ? (
                       <div className="text-center py-10 space-y-2">
                         <span className="text-2xl">🌱</span>
                         <p className="text-xs text-slate-500 font-semibold">No pending maintenance concerns in your hostel!</p>
                       </div>
                     ) : (
                       localIssues
-                        .filter(i => i.status !== 'Resolved')
+                        .filter(i => i && i.status !== 'Resolved')
                         .slice(0, 3)
                         .map(i => (
                           <div key={i.id} className="py-3.5 flex items-start justify-between gap-4 first:pt-0 last:pb-0">
@@ -932,7 +1208,7 @@ export default function Page10HostelManagerDashboard({
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-xs">
                     {localBookings
-                      .filter(b => b.studentName.toLowerCase().includes(searchQuery.toLowerCase()))
+                      .filter(b => (b?.studentName || '').toLowerCase().includes((searchQuery || '').toLowerCase().trim()))
                       .map(b => (
                         <tr key={b.id} className="hover:bg-slate-50/50 transition-colors">
                           <td className="py-4 px-6 font-bold text-slate-900">
@@ -978,7 +1254,7 @@ export default function Page10HostelManagerDashboard({
                           </td>
                         </tr>
                       ))}
-                    {localBookings.filter(b => b.studentName.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
+                    {localBookings.filter(b => (b?.studentName || '').toLowerCase().includes((searchQuery || '').toLowerCase().trim())).length === 0 && (
                       <tr>
                         <td colSpan={5} className="py-12 text-center text-slate-500 font-medium">
                           No reservation requests matching search.
@@ -1196,7 +1472,7 @@ export default function Page10HostelManagerDashboard({
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2.5 py-1 rounded-full border border-amber-200">
-                    {meetings.filter(m => m.status === 'Pending').length} Pending Requests
+                    {meetings.filter(m => m?.status === 'Pending').length} Pending Requests
                   </span>
                   <span className="bg-blue-100 text-blue-800 text-[10px] font-bold px-2.5 py-1 rounded-full border border-blue-200">
                     {meetings.length} Total Registered
@@ -1366,7 +1642,7 @@ export default function Page10HostelManagerDashboard({
                               <div className="text-[10px] text-slate-400 font-mono space-y-0.5 mt-0.5">
                                 <p>ID: {member.id}</p>
                                 <p className="text-[9px] text-blue-600 font-bold bg-blue-50 px-1 py-0.5 rounded border border-blue-100 inline-block">
-                                  User: {member.name.toLowerCase().replace(/[^a-z0-9]/g, '') || 'staff'}{member.id.substring(member.id.length - 3)} / staff123
+                                  User: {(member?.name || 'staff').toLowerCase().replace(/[^a-z0-9]/g, '') || 'staff'}{(member?.id || '000').substring(Math.max(0, (member?.id || '000').length - 3))} / staff123
                                 </p>
                               </div>
                             </td>
@@ -1529,8 +1805,356 @@ export default function Page10HostelManagerDashboard({
             </div>
           )}
 
+          {/* TAB 7: REGISTER HOSTEL (MANAGER ONBOARDING & 10-STEP HOSTEL REGISTRATION) */}
+          {activeTab === 'register_hostel' && (
+            <div className="space-y-8 text-left">
+              {isOpeningRegistration ? (
+                /* The identical 10-step HostelRegistration component used throughout the system */
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden p-6 md:p-8">
+                  <div className="mb-6 flex items-center justify-between border-b border-slate-100 pb-4">
+                    <div>
+                      <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-200">
+                        Admin-Authorized Registration
+                      </span>
+                      <h2 className="text-xl font-black text-slate-900 mt-1">Official 10-Step Hostel Registration Wizard</h2>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsOpeningRegistration(false)}
+                      className="px-3 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-600 font-bold text-xs rounded-xl transition-all"
+                    >
+                      Cancel & Return
+                    </button>
+                  </div>
+
+                  <HostelRegistration
+                    currentUserId={user?.id}
+                    onCancel={() => setIsOpeningRegistration(false)}
+                    onSuccess={(newHostel) => {
+                      setIsOpeningRegistration(false);
+                      onUpdateHostel(newHostel);
+                      triggerToast(`Hostel "${newHostel.name}" registered successfully! Submitted for final Admin verification.`);
+                      onAddActivity(`Registered new hostel "${newHostel.name}" via manager portal`, 'success');
+                      fetchManagerRequests();
+                    }}
+                  />
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Workflow Overview Banner */}
+                  <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white rounded-3xl p-6 md:p-8 shadow-xl relative overflow-hidden">
+                    <div className="relative z-10 max-w-3xl space-y-3">
+                      <div className="flex items-center gap-2">
+                        <span className="bg-amber-400 text-slate-950 font-black text-[10px] uppercase px-3 py-1 rounded-full">
+                          Manager Property Protocol
+                        </span>
+                        <span className="text-xs text-blue-200 font-bold">1 Property Per Manager Limit</span>
+                      </div>
+                      <h2 className="text-2xl font-black tracking-tight text-white">
+                        Hostel Registration & Administrative Authorization
+                      </h2>
+                      <p className="text-xs text-slate-300 leading-relaxed max-w-2xl">
+                        To maintain standard safety and university accommodation quality, property managers must submit a pre-registration request. Once approved by the system administration, the official 10-step onboarding wizard will be unlocked.
+                      </p>
+                    </div>
+
+                    {/* Stepper tracker */}
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-6 mt-6 border-t border-white/10 text-xs">
+                      <div className="bg-white/5 rounded-2xl p-3 border border-white/10">
+                        <span className="text-[10px] font-black text-amber-300">STEP 1</span>
+                        <p className="font-bold text-white mt-0.5">Manager Request</p>
+                        <p className="text-[10px] text-slate-400 mt-1">Submit property intent & verified manager details</p>
+                      </div>
+                      <div className="bg-white/5 rounded-2xl p-3 border border-white/10">
+                        <span className="text-[10px] font-black text-blue-300">STEP 2</span>
+                        <p className="font-bold text-white mt-0.5">Admin Pre-Approval</p>
+                        <p className="text-[10px] text-slate-400 mt-1">University Admin reviews & grants authorization</p>
+                      </div>
+                      <div className="bg-white/5 rounded-2xl p-3 border border-white/10">
+                        <span className="text-[10px] font-black text-indigo-300">STEP 3</span>
+                        <p className="font-bold text-white mt-0.5">10-Step Registration</p>
+                        <p className="text-[10px] text-slate-400 mt-1">Complete full property blocks, rooms, map & pricing</p>
+                      </div>
+                      <div className="bg-white/5 rounded-2xl p-3 border border-white/10">
+                        <span className="text-[10px] font-black text-emerald-300">STEP 4</span>
+                        <p className="font-bold text-white mt-0.5">Final Verification</p>
+                        <p className="text-[10px] text-slate-400 mt-1">Admin verifies property and enables public booking</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Status Sections */}
+                  {isRequestApproved ? (
+                    /* AUTHORIZATION GRANTED: Manager can launch the 10-step wizard */
+                    <div className="bg-white rounded-3xl border border-emerald-200 shadow-md p-6 md:p-8 space-y-6">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-emerald-100">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center shrink-0">
+                            <ShieldCheck size={26} />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full">
+                                Authorization Approved
+                              </span>
+                              <span className="text-xs text-slate-400 font-bold">Ref: #{managerRequest?.id?.substring(0, 8) || 'APPROVED'}</span>
+                            </div>
+                            <h3 className="text-lg font-black text-slate-900 mt-0.5">
+                              Authorized for Property: {managerRequest?.proposedHostelName || managerRequest?.propertyName || 'Hostel Property'}
+                            </h3>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setIsOpeningRegistration(true)}
+                          className="px-6 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-2xl shadow-lg shadow-emerald-600/30 flex items-center gap-2 transition-all cursor-pointer"
+                        >
+                          <Sparkles size={16} />
+                          <span>Launch 10-Step Hostel Registration</span>
+                          <ArrowRight size={16} />
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase">Proposed Property</span>
+                          <p className="font-extrabold text-slate-800 text-sm">{managerRequest?.proposedHostelName || managerRequest?.propertyName || 'Hostel Property'}</p>
+                          <p className="text-slate-500">{managerRequest?.proposedLocation || 'Campus Area'}</p>
+                        </div>
+                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase">Authorized Capacity</span>
+                          <p className="font-extrabold text-slate-800 text-sm">{managerRequest?.proposedCapacity || 120} Bed Spaces</p>
+                          <p className="text-slate-500">Student Accommodation</p>
+                        </div>
+                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase">Manager Credentials</span>
+                          <p className="font-extrabold text-slate-800 text-sm">{managerRequest?.managerName || user?.name || 'Hostel Manager'}</p>
+                          <p className="text-slate-500">{managerRequest?.organization || user?.organization || 'Accommodation Management'} • ID: {managerRequest?.nationalId || user?.nationalId || 'Verified'}</p>
+                        </div>
+                      </div>
+
+                      <div className="p-4 bg-blue-50 border border-blue-200 rounded-2xl flex items-center justify-between text-xs text-blue-900">
+                        <div className="flex items-center gap-3">
+                          <FileCheck size={20} className="text-blue-600 shrink-0" />
+                          <span>Ready to input blocks, rooms, amenities, GPS location, and billing rules.</span>
+                        </div>
+                        <button
+                          onClick={() => setIsOpeningRegistration(true)}
+                          className="font-black text-blue-700 hover:underline"
+                        >
+                          Proceed to Wizard →
+                        </button>
+                      </div>
+                    </div>
+                  ) : isRequestPending ? (
+                    /* PENDING ADMIN APPROVAL */
+                    <div className="bg-white rounded-3xl border border-amber-200 shadow-md p-6 md:p-8 space-y-6">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-amber-100">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center shrink-0">
+                            <Clock size={26} />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="bg-amber-100 text-amber-900 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full">
+                                Pending Administrative Approval
+                              </span>
+                              <span className="text-xs text-slate-400 font-bold">Ref: #{managerRequest?.id?.substring(0, 8) || 'PENDING'}</span>
+                            </div>
+                            <h3 className="text-lg font-black text-slate-900 mt-0.5">
+                              Request Under Review: {managerRequest?.proposedHostelName || managerRequest?.propertyName || 'Hostel Property'}
+                            </h3>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={fetchManagerRequests}
+                          disabled={requestLoading}
+                          className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl flex items-center gap-2 transition-all cursor-pointer"
+                        >
+                          <RefreshCw size={14} className={requestLoading ? 'animate-spin' : ''} />
+                          <span>Check Approval Status</span>
+                        </button>
+                      </div>
+
+                      <p className="text-xs text-slate-600 leading-relaxed">
+                        Your application to register <span className="font-extrabold text-slate-900">{managerRequest?.proposedHostelName || managerRequest?.propertyName || 'your property'}</span> has been routed to the University Administration queue. Once approved, you can immediately begin configuring the 10-step property specs.
+                      </p>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase">Proposed Property</span>
+                          <p className="font-extrabold text-slate-800">{managerRequest?.proposedHostelName || managerRequest?.propertyName || 'Property Name'}</p>
+                          <p className="text-slate-500">{managerRequest?.proposedLocation || 'Campus Area'}</p>
+                        </div>
+                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase">Target Capacity</span>
+                          <p className="font-extrabold text-slate-800">{managerRequest?.proposedCapacity || 100} Beds</p>
+                          <p className="text-slate-500">Proposed Student Residence</p>
+                        </div>
+                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase">Manager Credentials</span>
+                          <p className="font-extrabold text-slate-800">{managerRequest?.managerName || user?.name || 'Hostel Manager'}</p>
+                          <p className="text-slate-500">{managerRequest?.organization || user?.organization || 'Accommodation Management'} • ID: {managerRequest?.nationalId || user?.nationalId || 'Verified'}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    /* NO REQUEST SUBMITTED YET: Form to request hostel registration */
+                    <div className="bg-white rounded-3xl border border-slate-200 shadow-md p-6 md:p-8 space-y-6">
+                      <div className="pb-4 border-b border-slate-100">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-200">
+                          Step 1 of 4
+                        </span>
+                        <h3 className="text-xl font-black text-slate-900 mt-1">Request Authorization to Register Hostel</h3>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Submit your proposed hostel property details for Administrative verification before launching the 10-step wizard.
+                        </p>
+                      </div>
+
+                      <form onSubmit={handleCreateManagerRequest} className="space-y-5">
+                        {/* Verified Manager Profile Summary */}
+                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                              <ShieldCheck size={14} className="text-emerald-600" />
+                              Verified Manager Identity
+                            </span>
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                              Verified
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                            <div>
+                              <span className="text-[10px] text-slate-400 block font-semibold">Manager Name</span>
+                              <p className="font-extrabold text-slate-800">{user?.name || hostel.managerName || 'Property Manager'}</p>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-slate-400 block font-semibold">National ID / Ghana Card</span>
+                              <p className="font-extrabold text-slate-800">{user?.nationalId || 'GHA-8920193-4'}</p>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-slate-400 block font-semibold">Organization / Agency</span>
+                              <p className="font-extrabold text-slate-800">{user?.organization || 'Student Housing Real Estate Ltd'}</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Proposed Hostel Info */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-extrabold text-slate-800 block">
+                              Proposed Hostel / Hotel Name <span className="text-rose-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={proposedHostelName}
+                              onChange={(e) => setProposedHostelName(e.target.value)}
+                              placeholder="e.g. Royal Palm Luxury Student Residence"
+                              className="w-full border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-900 p-3 bg-slate-50 text-slate-800 text-xs font-semibold"
+                            />
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-extrabold text-slate-800 block">
+                              Campus Vicinity & Location <span className="text-rose-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={proposedLocation}
+                              onChange={(e) => setProposedLocation(e.target.value)}
+                              placeholder="e.g. Legon Campus North Area, Accra"
+                              className="w-full border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-900 p-3 bg-slate-50 text-slate-800 text-xs font-semibold"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-extrabold text-slate-800 block">
+                              Estimated Bed Capacity <span className="text-rose-500">*</span>
+                            </label>
+                            <input
+                              type="number"
+                              min={10}
+                              max={2000}
+                              required
+                              value={proposedCapacity}
+                              onChange={(e) => setProposedCapacity(Number(e.target.value))}
+                              className="w-full border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-900 p-3 bg-slate-50 text-slate-800 text-xs font-semibold"
+                            />
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-extrabold text-slate-800 block">
+                              Manager Contact Phone
+                            </label>
+                            <input
+                              type="text"
+                              readOnly
+                              value={user?.phone || hostel.managerPhone || '+233 24 123 4567'}
+                              className="w-full border border-slate-200 rounded-xl p-3 bg-slate-100 text-slate-600 text-xs font-semibold cursor-not-allowed"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-extrabold text-slate-800 block">
+                            Manager Statement & Accommodation Purpose
+                          </label>
+                          <textarea
+                            rows={3}
+                            value={proposedReason}
+                            onChange={(e) => setProposedReason(e.target.value)}
+                            placeholder="Provide details regarding property standards, student security, and facilities..."
+                            className="w-full border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-900 p-3 bg-slate-50 text-slate-800 text-xs font-medium"
+                          />
+                        </div>
+
+                        <div className="pt-2 flex items-center justify-end gap-3">
+                          <button
+                            type="submit"
+                            disabled={requestSubmitting}
+                            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs rounded-xl shadow-lg shadow-blue-600/30 flex items-center gap-2 transition-all cursor-pointer font-bold disabled:opacity-50"
+                          >
+                            {requestSubmitting ? (
+                              <>
+                                <RefreshCw size={14} className="animate-spin" />
+                                <span>Submitting Request...</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>Submit Request to Register Hostel</span>
+                                <ArrowRight size={14} />
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
         </main>
 
+        {/* Footer */}
+        <footer className="border-t border-slate-200 bg-white py-4 px-6 text-[10px] text-slate-400 mt-auto shrink-0">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+            <span>© 2026 PineVela. All rights reserved.</span>
+            <div className="flex gap-4">
+              <a href="#" className="hover:text-slate-600">Privacy Policy</a>
+              <a href="#" className="hover:text-slate-600">Terms of Service</a>
+            </div>
+          </div>
+        </footer>
       </div>
     </div>
   );

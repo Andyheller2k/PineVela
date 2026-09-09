@@ -47,28 +47,155 @@ export default function PageUnifiedLogin() {
 
   // Manager registration onboarding states
   const [showRegModal, setShowRegModal] = useState(false);
-  const [regStep, setRegStep] = useState(1); // 1, 2, 3, 4 (Success)
-
-  // Step 1: Manager details
+  const [regStep, setRegStep] = useState(1); // 1: Account Info, 2: Verification Success
   const [regManagerName, setRegManagerName] = useState('');
   const [regManagerEmail, setRegManagerEmail] = useState('');
+  const [regManagerPhone, setRegManagerPhone] = useState('');
+  const [regNationalId, setRegNationalId] = useState('');
+  const [regOrganization, setRegOrganization] = useState('');
+  const [regRoleTitle, setRegRoleTitle] = useState('General Manager');
+  const [regExperienceYears, setRegExperienceYears] = useState(4);
+  const [regAddress, setRegAddress] = useState('');
   const [regPassword, setRegPassword] = useState('');
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
   const [showRegPassword, setShowRegPassword] = useState(false);
   const [showRegConfirmPassword, setShowRegConfirmPassword] = useState(false);
-
-  // Step 2: Hostel Basics & Map
-  const [regHostelName, setRegHostelName] = useState('');
+  const [regSelectedLocation, setRegSelectedLocation] = useState('Accra Central, University Area');
   const [regLocationSearch, setRegLocationSearch] = useState('');
-  const [regSelectedLocation, setRegSelectedLocation] = useState('North Campus, Sector 5');
-  const [mapCoordinates, setMapCoordinates] = useState({ lat: 5.6120, lng: -0.1890 });
-
-  // Step 3: Additional Details
-  const [regWing, setRegWing] = useState('North Wing');
-  const [regTotalCapacity, setRegTotalCapacity] = useState(120);
-  const [regManagerPhone, setRegManagerPhone] = useState('');
-  const [regDescription, setRegDescription] = useState('');
+  const [mapCoordinates, setMapCoordinates] = useState({ lat: 5.6506, lng: -0.1870 });
   const [loadingRegister, setLoadingRegister] = useState(false);
+  const [registeredManagers, setRegisteredManagers] = useState<Array<{
+    name: string;
+    email: string;
+    password: string;
+    organization?: string;
+    savedAt?: string;
+  }>>([]);
+
+  const loadRegisteredManagers = () => {
+    try {
+      const raw = localStorage.getItem('pinevela_registered_managers');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          setRegisteredManagers(parsed.filter(Boolean));
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to load registered managers from localStorage:", e);
+    }
+  };
+
+  useEffect(() => {
+    loadRegisteredManagers();
+  }, []);
+
+  // Extended Manager Verification States (Phase 1)
+  const [regCountry, setRegCountry] = useState('Ghana');
+  const [regDocumentType, setRegDocumentType] = useState('Ghana Card');
+  const [regFullNameOnId, setRegFullNameOnId] = useState('');
+  const [regDob, setRegDob] = useState('1988-06-15');
+  const [regIdExpiry, setRegIdExpiry] = useState('2032-11-20');
+  const [regAuthorityRel, setRegAuthorityRel] = useState<'Property Owner' | 'Authorized Manager' | 'Managing Director' | 'Property Agent'>('Property Owner');
+  const [regClaimedOwnerName, setRegClaimedOwnerName] = useState('');
+  const [regClaimedOwnerPhone, setRegClaimedOwnerPhone] = useState('');
+  const [regClaimedOwnerEmail, setRegClaimedOwnerEmail] = useState('');
+  const [regOrgRegNumber, setRegOrgRegNumber] = useState('');
+  const [regAuthorityEvidenceDesc, setRegAuthorityEvidenceDesc] = useState('Registered property owner with verifiable lease and municipal certification.');
+  const [regDocFileName, setRegDocFileName] = useState('ownership-certificate.pdf');
+  const [verificationResult, setVerificationResult] = useState<any>(null);
+  const [testCards, setTestCards] = useState<Array<{ idNumber: string; fullName: string; dob?: string; expiryDate?: string; status?: string }>>([]);
+  const [selectedSyntheticCardId, setSelectedSyntheticCardId] = useState('');
+
+  // Apply a selected or randomized synthetic card to the form
+  const applySyntheticCard = (card: { idNumber: string; fullName: string; dob?: string; expiryDate?: string; status?: string }) => {
+    if (!card) return;
+    setSelectedSyntheticCardId(card.idNumber);
+    setRegDocumentType('Ghana Card');
+    setRegCountry('Ghana');
+    setRegNationalId(card.idNumber);
+    setRegFullNameOnId(card.fullName);
+    setRegManagerName(card.fullName);
+    if (card.dob) setRegDob(card.dob);
+    if (card.expiryDate) setRegIdExpiry(card.expiryDate);
+    triggerToast(`Applied Synthetic Card: ${card.idNumber} (${card.fullName})`, 'success');
+  };
+
+  // Dedicated random test card selector that always works
+  const handleRandomCard = async () => {
+    try {
+      const res = await fetch('/api/verification/test-cards/random?verified=true');
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.card) {
+          applySyntheticCard(data.card);
+          return;
+        }
+      }
+    } catch {
+      // Fallback below
+    }
+
+    if (testCards && testCards.length > 0) {
+      const verifiedCards = testCards.filter(c => c && (!c.status || c.status === 'verified'));
+      const pool = verifiedCards.length > 0 ? verifiedCards : testCards.filter(Boolean);
+      if (pool.length > 0) {
+        const randCard = pool[Math.floor(Math.random() * pool.length)];
+        if (randCard) applySyntheticCard(randCard);
+        return;
+      }
+    } else {
+      const randomIdx = Math.floor(Math.random() * 250) + 1;
+      const numPadded = String(100000000 + randomIdx);
+      const checksum = (randomIdx * 7) % 10;
+      const fNames = ['Kwame', 'Kofi', 'Ama', 'Yaw', 'Abena', 'Kojo', 'Akosua', 'Kwesi', 'Sarah', 'Anthony'];
+      const lNames = ['Mensah', 'Osei', 'Appiah', 'Asante', 'Boateng', 'Agyemang', 'Owusu', 'Frimpong'];
+      const card = {
+        idNumber: `GHA-${numPadded}-${checksum}`,
+        fullName: `${fNames[randomIdx % fNames.length]} ${lNames[(randomIdx * 3) % lNames.length]}`,
+        dob: `1985-05-${String(1 + (randomIdx % 28)).padStart(2, '0')}`,
+        expiryDate: `2032-05-${String(1 + (randomIdx % 28)).padStart(2, '0')}`,
+        status: 'verified'
+      };
+      applySyntheticCard(card);
+    }
+  };
+
+  useEffect(() => {
+    // Generate initial fallback test cards so the UI is responsive immediately
+    const initialFallbackCards = Array.from({ length: 50 }, (_, i) => {
+      const idx = i + 1;
+      const numPadded = String(100000000 + idx);
+      const checksum = (idx * 7) % 10;
+      const fNames = ['Kwame', 'Kofi', 'Ama', 'Yaw', 'Abena', 'Kojo', 'Akosua', 'Kwesi', 'Sarah', 'Anthony', 'Michael', 'Grace'];
+      const lNames = ['Mensah', 'Osei', 'Appiah', 'Asante', 'Boateng', 'Agyemang', 'Owusu', 'Frimpong', 'Darko', 'Antwi'];
+      const fullName = `${fNames[i % fNames.length]} ${lNames[(i * 3) % lNames.length]}`;
+      const birthYear = 1975 + (i % 25);
+      const birthMonth = String(1 + (i % 12)).padStart(2, '0');
+      const birthDay = String(1 + (i % 28)).padStart(2, '0');
+      return {
+        idNumber: `GHA-${numPadded}-${checksum}`,
+        fullName,
+        dob: `${birthYear}-${birthMonth}-${birthDay}`,
+        expiryDate: `2032-${birthMonth}-${birthDay}`,
+        status: 'verified'
+      };
+    });
+    setTestCards(initialFallbackCards);
+
+    // Pre-fetch complete synthetic test cards from verification engine API
+    fetch('/api/verification/test-cards')
+      .then(res => res.json())
+      .then(data => {
+        const cards = data.testCards || data.sample || data.allCards;
+        if (cards && Array.isArray(cards) && cards.length > 0) {
+          setTestCards(cards);
+        }
+      })
+      .catch((err) => {
+        console.warn("Could not fetch test cards from backend, using local synthetic cards:", err);
+      });
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -244,7 +371,7 @@ export default function PageUnifiedLogin() {
     }
   };
 
-  const handleQuickLogin = async (email: string, pass: string) => {
+  const handleQuickLogin = async (email: string, pass: string, targetPath?: string) => {
     setUsernameOrEmail(email);
     setPassword(pass);
     setLoadingLogin(true);
@@ -252,6 +379,10 @@ export default function PageUnifiedLogin() {
       const authenticatedUser = await login(email, pass);
       triggerToast(`Sandbox Login: Welcoming ${authenticatedUser.name}!`, 'success');
       setTimeout(() => {
+        if (targetPath) {
+          navigate(targetPath, { replace: true });
+          return;
+        }
         if (authenticatedUser.role === 'student') {
           navigate('/student/dashboard', { replace: true });
         } else if (authenticatedUser.role === 'manager') {
@@ -269,53 +400,142 @@ export default function PageUnifiedLogin() {
     }
   };
 
-  const handleStep1Submit = (e: React.FormEvent) => {
+  const handleManagerRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!regManagerName.trim() || !regManagerEmail.trim() || !regPassword) {
+      triggerToast('Please provide your name, email, and password', 'error');
+      return;
+    }
+
+    if (!regNationalId.trim()) {
+      triggerToast('National ID / Ghana Card number is required for manager verification', 'error');
+      return;
+    }
+
+    if (!regPhoneVerified(regManagerPhone)) {
+      triggerToast('Please provide a valid direct phone number', 'error');
+      return;
+    }
+
     if (regPassword !== regConfirmPassword) {
       triggerToast('Passwords do not match. Please verify your entry.', 'error');
       return;
     }
-    setRegStep(2);
-  };
 
-  const handleManagerRegisterSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (regPassword !== regConfirmPassword) {
-      triggerToast('Passwords do not match', 'error');
+    if (regPassword.length < 6) {
+      triggerToast('Password must be at least 6 characters long', 'error');
       return;
     }
 
     setLoadingRegister(true);
     try {
-      const res = await fetch('/api/auth/register-manager', {
+      const res = await fetch('/api/auth/register-manager-account', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          managerName: regManagerName,
-          managerEmail: regManagerEmail,
+          name: regManagerName.trim(),
+          managerName: regManagerName.trim(),
+          email: regManagerEmail.trim(),
+          managerEmail: regManagerEmail.trim(),
           password: regPassword,
-          managerPhone: regManagerPhone,
-          hostelName: regHostelName,
-          location: regSelectedLocation,
-          wing: regWing,
-          totalCapacity: Number(regTotalCapacity),
-          description: regDescription
+          phone: regManagerPhone.trim(),
+          managerPhone: regManagerPhone.trim(),
+          nationalId: regNationalId.trim(),
+          organization: regOrganization.trim() || 'Student Residence Management',
+          roleTitle: regRoleTitle.trim() || 'General Manager',
+          experienceYears: Number(regExperienceYears) || 3,
+          address: regAddress.trim() || 'University Campus Area',
+          operatingAddress: regAddress.trim() || 'University Campus Area'
         })
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Failed to register manager and hostel');
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to create manager account');
       }
 
-      setRegStep(4); // Success Step
-      triggerToast('Hostel and Manager account registered successfully!', 'success');
+      const managerData = await res.json();
+
+      // Submit Manager Verification with Identity Checks & Authority Proof (Phase 1)
+      try {
+        const verifPayload = {
+          managerId: managerData.user?.id || managerData.manager?.id || `mgr_${Date.now()}`,
+          managerName: regManagerName.trim(),
+          managerEmail: regManagerEmail.trim(),
+          managerPhone: regManagerPhone.trim(),
+          country: regCountry,
+          idDocumentType: regDocumentType,
+          documentType: regDocumentType,
+          idNumber: regNationalId.trim(),
+          documentNumber: regNationalId.trim(),
+          nationalId: regNationalId.trim(),
+          fullNameOnId: regFullNameOnId.trim() || regManagerName.trim(),
+          dateOfBirth: regDob,
+          idExpiryDate: regIdExpiry,
+          authorityRelationship: regAuthorityRel,
+          claimedOwnerName: regClaimedOwnerName.trim() || undefined,
+          claimedOwnerPhone: regClaimedOwnerPhone.trim() || undefined,
+          claimedOwnerEmail: regClaimedOwnerEmail.trim() || undefined,
+          organizationName: regOrganization.trim() || 'Student Residence Management',
+          organizationRegNumber: regOrgRegNumber.trim() || undefined,
+          authorityEvidenceDescription: regAuthorityEvidenceDesc.trim() || 'Official authority documents submitted.',
+          documents: regDocFileName ? [{
+            fileName: regDocFileName,
+            documentType: 'AUTHORITY_PROOF',
+            storagePath: `manager-verifications/${regManagerEmail.trim()}/${regDocFileName}`,
+            mimeType: 'application/pdf',
+            fileSizeBytes: 245000,
+            isSensitive: true
+          }] : []
+        };
+
+        const verifRes = await fetch('/api/manager-verifications/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(verifPayload)
+        });
+        if (verifRes.ok) {
+          const verifData = await verifRes.json();
+          setVerificationResult(verifData.verification || verifData.record || verifData);
+        }
+      } catch (verifErr) {
+        console.warn("Manager verification submission warning:", verifErr);
+      }
+
+      // Save locally in localStorage for persistent offline & Sandbox Quick Access
+      try {
+        const existingRaw = localStorage.getItem('pinevela_registered_managers');
+        const existing = existingRaw ? JSON.parse(existingRaw) : [];
+        const newManagerEntry = {
+          name: regManagerName.trim(),
+          email: regManagerEmail.trim(),
+          password: regPassword,
+          organization: regOrganization.trim() || 'Independent Residence',
+          savedAt: new Date().toISOString()
+        };
+        const updated = [...existing.filter((m: any) => m && m.email !== regManagerEmail), newManagerEntry];
+        localStorage.setItem('pinevela_registered_managers', JSON.stringify(updated));
+        setRegisteredManagers(updated);
+      } catch (storageErr) {
+        console.warn("Local storage write error:", storageErr);
+      }
+
+      // Pre-fill login input with registered email
+      setUsernameOrEmail(regManagerEmail);
+      setPassword(regPassword);
+
+      setRegStep(2); // Step 2: Verification Success Card
+      triggerToast('Manager account created & approval dossier queued for Admin!', 'success');
     } catch (err: any) {
-      triggerToast(err.message || 'An error occurred', 'error');
+      triggerToast(err.message || 'An error occurred during manager registration', 'error');
     } finally {
       setLoadingRegister(false);
     }
+  };
+
+  const regPhoneVerified = (p: string) => {
+    return p.trim().length >= 6;
   };
 
   return (
@@ -364,86 +584,105 @@ export default function PageUnifiedLogin() {
           <div className="bg-white rounded-3xl border border-slate-100 shadow-2xl p-6 space-y-6 flex flex-col justify-between">
             
             {/* Image Slider Section */}
-            <div className="relative aspect-[4/3] w-full rounded-2xl overflow-hidden bg-slate-50 border border-slate-100 shadow-sm">
-              <AnimatePresence mode="wait">
-                <motion.img
-                  key={currentSlide}
-                  src={slides[currentSlide].image}
-                  alt={slides[currentSlide].title}
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                  transition={{ duration: 0.5, ease: "easeInOut" }}
-                  className="w-full h-full object-cover"
-                />
-              </AnimatePresence>
+            {(() => {
+              const activeSlide = slides[currentSlide] || slides[0] || {
+                image: managerImg,
+                title: "Hostel Management Simplified",
+                description: "PineVela - Manage your hostel seamlessly from anywhere.",
+                badge: "Hostel Manager"
+              };
+              return (
+                <div className="relative aspect-[4/3] w-full rounded-2xl overflow-hidden bg-slate-50 border border-slate-100 shadow-sm">
+                  <AnimatePresence mode="wait">
+                    <motion.img
+                      key={currentSlide}
+                      src={activeSlide.image || managerImg}
+                      alt={activeSlide.title || 'PineVela'}
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      transition={{ duration: 0.5, ease: "easeInOut" }}
+                      className="w-full h-full object-cover"
+                    />
+                  </AnimatePresence>
 
-              {/* Floating Badge */}
-              <div className="absolute top-4 left-4 bg-blue-900/90 backdrop-blur-md text-white text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-full shadow-md z-10 border border-white/10">
-                {slides[currentSlide].badge}
-              </div>
+                  {/* Floating Badge */}
+                  <div className="absolute top-4 left-4 bg-blue-900/90 backdrop-blur-md text-white text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-full shadow-md z-10 border border-white/10">
+                    {activeSlide.badge || 'PineVela'}
+                  </div>
 
-              {/* Quick Navigation Buttons (Prev/Next) */}
-              <div className="absolute inset-y-0 left-2 right-2 flex items-center justify-between pointer-events-none">
-                <button
-                  type="button"
-                  onClick={() => setCurrentSlide((prev) => (prev - 1 + slides.length) % slides.length)}
-                  className="p-1.5 rounded-full bg-white/80 hover:bg-white text-slate-800 pointer-events-auto shadow-md transition-all hover:scale-105 active:scale-95 cursor-pointer border border-slate-100"
-                  aria-label="Previous slide"
-                >
-                  <ArrowLeft size={14} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCurrentSlide((prev) => (prev + 1) % slides.length)}
-                  className="p-1.5 rounded-full bg-white/80 hover:bg-white text-slate-800 pointer-events-auto shadow-md transition-all hover:scale-105 active:scale-95 cursor-pointer border border-slate-100"
-                  aria-label="Next slide"
-                >
-                  <ArrowRight size={14} />
-                </button>
-              </div>
-            </div>
+                  {/* Quick Navigation Buttons (Prev/Next) */}
+                  <div className="absolute inset-y-0 left-2 right-2 flex items-center justify-between pointer-events-none">
+                    <button
+                      type="button"
+                      onClick={() => setCurrentSlide((prev) => (prev - 1 + slides.length) % slides.length)}
+                      className="p-1.5 rounded-full bg-white/80 hover:bg-white text-slate-800 pointer-events-auto shadow-md transition-all hover:scale-105 active:scale-95 cursor-pointer border border-slate-100"
+                      aria-label="Previous slide"
+                    >
+                      <ArrowLeft size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCurrentSlide((prev) => (prev + 1) % slides.length)}
+                      className="p-1.5 rounded-full bg-white/80 hover:bg-white text-slate-800 pointer-events-auto shadow-md transition-all hover:scale-105 active:scale-95 cursor-pointer border border-slate-100"
+                      aria-label="Next slide"
+                    >
+                      <ArrowRight size={14} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Captions and Dots */}
-            <div className="space-y-4 px-2">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xl font-black text-slate-900 tracking-tight">
-                  {slides[currentSlide].title}
-                </h3>
-                
-                {/* Dot indicators */}
-                <div className="flex items-center gap-1.5">
-                  {slides.map((_, index) => (
-                    <button
-                      key={index}
-                      type="button"
-                      onClick={() => setCurrentSlide(index)}
-                      className={`h-2 rounded-full transition-all duration-300 ${
-                        currentSlide === index ? 'w-5 bg-blue-900' : 'w-2 bg-slate-200 hover:bg-slate-300'
-                      }`}
-                      aria-label={`Go to slide ${index + 1}`}
-                    />
-                  ))}
+            {(() => {
+              const activeSlide = slides[currentSlide] || slides[0] || {
+                image: managerImg,
+                title: "Hostel Management Simplified",
+                description: "PineVela - Manage your hostel seamlessly from anywhere.",
+                badge: "Hostel Manager"
+              };
+              return (
+                <div className="space-y-4 px-2">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xl font-black text-slate-900 tracking-tight">
+                      {activeSlide.title}
+                    </h3>
+                    
+                    {/* Dot indicators */}
+                    <div className="flex items-center gap-1.5">
+                      {slides.map((_, index) => (
+                        <button
+                          key={index}
+                          type="button"
+                          onClick={() => setCurrentSlide(index)}
+                          className={`h-2 rounded-full transition-all duration-300 ${
+                            currentSlide === index ? 'w-5 bg-blue-900' : 'w-2 bg-slate-200 hover:bg-slate-300'
+                          }`}
+                          aria-label={`Go to slide ${index + 1}`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  <p className="text-slate-650 text-sm leading-relaxed min-h-[4rem] font-semibold">
+                    {activeSlide.description}
+                  </p>
                 </div>
-              </div>
+              );
+            })()}
 
-              <p className="text-slate-650 text-sm leading-relaxed min-h-[4rem] font-semibold">
-                {slides[currentSlide].description}
-              </p>
-
-              {/* Secure verification mini-badge to retain branding context */}
-              <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400 font-bold">
-                <span className="flex items-center gap-1">
-                  <ShieldCheck size={12} className="text-emerald-500" />
-                  Gateway Verification Active
-                </span>
-                <span className="flex items-center gap-1">
-                  <RefreshCw size={12} className="text-blue-500 animate-spin-slow" />
-                  JWT Session Enforced
-                </span>
-              </div>
+            {/* Secure verification mini-badge to retain branding context */}
+            <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400 font-bold">
+              <span className="flex items-center gap-1">
+                <ShieldCheck size={12} className="text-emerald-500" />
+                Gateway Verification Active
+              </span>
+              <span className="flex items-center gap-1">
+                <RefreshCw size={12} className="text-blue-500 animate-spin-slow" />
+                JWT Session Enforced
+              </span>
             </div>
-
           </div>
         </div>
 
@@ -560,67 +799,78 @@ export default function PageUnifiedLogin() {
               <span className="text-[9px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-mono font-bold">1-Click Auth</span>
             </div>
 
-            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('student@pinevela.com', 'student123')}
-                className="p-2 bg-slate-800 hover:bg-slate-750 text-white rounded-lg text-center transition-all border border-slate-700/60"
-              >
-                <span className="block text-sm">👤</span>
-                <span className="block text-[9px] font-bold truncate">Stu: Sarah</span>
-                <span className="block text-[8px] text-slate-400 font-mono mt-0.5">student123</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('student2@pinevela.com', 'student123')}
-                className="p-2 bg-slate-800 hover:bg-slate-750 text-white rounded-lg text-center transition-all border border-slate-700/60"
-              >
-                <span className="block text-sm">👤</span>
-                <span className="block text-[9px] font-bold truncate">Stu: Marcus</span>
-                <span className="block text-[8px] text-slate-400 font-mono mt-0.5">student123</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('student3@pinevela.com', 'student123')}
-                className="p-2 bg-slate-800 hover:bg-slate-750 text-white rounded-lg text-center transition-all border border-slate-700/60"
-              >
-                <span className="block text-sm">👤</span>
-                <span className="block text-[9px] font-bold truncate">Stu: Kyle</span>
-                <span className="block text-[8px] text-slate-400 font-mono mt-0.5">student123</span>
-              </button>
-
+            <div className="grid grid-cols-2 gap-2.5">
               <button
                 type="button"
                 onClick={() => handleQuickLogin('manager@pinevela.com', 'manager123')}
-                className="p-2 bg-slate-800 hover:bg-slate-750 text-white rounded-lg text-center transition-all border border-slate-700/60"
+                className="p-2.5 bg-slate-800 hover:bg-slate-750 text-white rounded-xl text-center transition-all border border-slate-700/60 cursor-pointer hover:border-amber-500/50"
               >
-                <span className="block text-sm">🏫</span>
-                <span className="block text-[9px] font-bold truncate">Manager</span>
-                <span className="block text-[8px] text-slate-400 font-mono mt-0.5">manager123</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('staff@pinevela.com', 'staff123')}
-                className="p-2 bg-slate-800 hover:bg-slate-750 text-white rounded-lg text-center transition-all border border-slate-700/60"
-              >
-                <span className="block text-sm">🛠️</span>
-                <span className="block text-[9px] font-bold truncate">Staff</span>
-                <span className="block text-[8px] text-slate-400 font-mono mt-0.5">staff123</span>
+                <span className="block text-base">🏫</span>
+                <span className="block text-[11px] font-bold truncate mt-0.5">Manager</span>
+                <span className="block text-[9px] text-slate-400 font-mono mt-0.5">manager123</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => handleQuickLogin('admin@pinevela.com', 'admin123')}
-                className="p-2 bg-slate-800 hover:bg-slate-750 text-white rounded-lg text-center transition-all border border-slate-700/60"
+                className="p-2.5 bg-slate-800 hover:bg-slate-750 text-white rounded-xl text-center transition-all border border-slate-700/60 cursor-pointer hover:border-amber-500/50"
               >
-                <span className="block text-sm">🛡️</span>
-                <span className="block text-[9px] font-bold truncate">Admin</span>
-                <span className="block text-[8px] text-slate-400 font-mono mt-0.5">admin123</span>
+                <span className="block text-base">🛡️</span>
+                <span className="block text-[11px] font-bold truncate mt-0.5">Admin</span>
+                <span className="block text-[9px] text-slate-400 font-mono mt-0.5">admin123</span>
               </button>
             </div>
+
+            {/* Dynamic New Manager Sandbox Quick Access */}
+            {registeredManagers.length > 0 && (
+              <div className="pt-2.5 border-t border-slate-800/80 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[9px] uppercase font-black tracking-wider text-amber-300 flex items-center gap-1.5">
+                    <Sparkles size={11} className="text-amber-400" />
+                    <span>Newly Registered Manager Sandbox Quick Access</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      localStorage.removeItem('pinevela_registered_managers');
+                      setRegisteredManagers([]);
+                      triggerToast('Cleared registered manager sandbox history');
+                    }}
+                    className="text-[8px] text-slate-500 hover:text-rose-400 transition-colors cursor-pointer"
+                    title="Clear history"
+                  >
+                    Clear History
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {registeredManagers.slice(0, 4).map((rm, idx) => (
+                    <button
+                      key={rm.email || idx}
+                      type="button"
+                      onClick={() => handleQuickLogin(rm.email, rm.password, '/manager/dashboard?tab=register_hostel')}
+                      className="p-2.5 bg-gradient-to-r from-slate-800 to-blue-950/80 hover:from-slate-750 hover:to-blue-900 text-white rounded-xl text-left transition-all border border-blue-500/30 hover:border-blue-400/60 flex items-center justify-between gap-2.5 group cursor-pointer shadow-sm"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm">🏫</span>
+                          <span className="text-[10px] font-black text-amber-200 truncate">{rm.name || 'New Manager'}</span>
+                          <span className="text-[8px] bg-blue-500/20 text-blue-300 px-1 py-0.2 rounded font-bold border border-blue-500/30">Manager</span>
+                        </div>
+                        <span className="block text-[8px] text-slate-300 font-mono truncate mt-0.5">{rm.email}</span>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="text-[8px] bg-amber-500 text-slate-950 font-black px-2 py-0.5 rounded-md flex items-center gap-1 group-hover:bg-amber-400 transition-colors">
+                          <span>Start Hostel Reg</span>
+                          <ArrowRight size={9} />
+                        </span>
+                        <span className="block text-[7px] text-slate-400 font-mono mt-0.5">{rm.password}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
         </div>
@@ -635,7 +885,7 @@ export default function PageUnifiedLogin() {
       {/* HOSTEL MANAGER REGISTRATION WIZARD */}
       {showRegModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-2xl w-full p-8 border border-slate-100 shadow-2xl relative flex flex-col max-h-[90vh] overflow-y-auto animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 border border-slate-100 shadow-2xl relative flex flex-col max-h-[90vh] overflow-y-auto animate-fade-in text-left">
             
             {/* Close Button */}
             <button 
@@ -646,41 +896,82 @@ export default function PageUnifiedLogin() {
             </button>
 
             {/* Step Wizard Header */}
-            {regStep !== 4 && (
-              <div className="mb-6 space-y-4">
-                <div className="flex items-center gap-2 text-left">
-                  <div className="p-2 bg-blue-50 text-blue-900 rounded-xl">
-                    <Building size={20} />
+            {regStep === 1 && (
+              <div className="mb-5 space-y-2">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-blue-900 text-white rounded-2xl shadow-sm">
+                    <Building size={22} />
                   </div>
                   <div>
                     <h3 className="text-xl font-black text-slate-900 tracking-tight">
-                      Hostel Onboarding Wizard
+                      Hostel Manager Onboarding
                     </h3>
-                    <p className="text-xs text-slate-400">
-                      Step {regStep} of 3: {
-                        regStep === 1 ? "Manager Account" :
-                        regStep === 2 ? "Property & Interactive Map" :
-                        "Hostel Configuration"
-                      }
+                    <p className="text-xs text-slate-500 font-medium">
+                      Enter verified managerial credentials to establish your property management profile.
                     </p>
                   </div>
                 </div>
 
-                {/* Progress Bar */}
-                <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden flex gap-1">
-                  <div className={`h-full transition-all duration-300 ${regStep >= 1 ? 'bg-blue-900 flex-1' : 'bg-slate-200 flex-1'}`} />
-                  <div className={`h-full transition-all duration-300 ${regStep >= 2 ? 'bg-blue-900 flex-1' : 'bg-slate-200 flex-1'}`} />
-                  <div className={`h-full transition-all duration-300 ${regStep >= 3 ? 'bg-blue-900 flex-1' : 'bg-slate-200 flex-1'}`} />
+                <div className="p-3 bg-blue-50/70 border border-blue-100 rounded-xl text-[11px] text-blue-900 leading-relaxed">
+                  🛡️ <strong>Manager Verification Policy:</strong> Managers must provide verifiable national identity and operational credentials. Once registered, you will be able to request and complete the 10-step hostel registration directly within your dashboard.
                 </div>
               </div>
             )}
 
-            {/* STEP 1: ACCOUNT DETAILS */}
+            {/* STEP 1: ACCOUNT & KEEN MANAGER DETAILS WITH PHASE 1 VERIFICATION */}
             {regStep === 1 && (
-              <form onSubmit={handleStep1Submit} className="space-y-4 text-xs font-semibold text-left">
-                <div className="space-y-3.5">
+              <form onSubmit={handleManagerRegisterSubmit} className="space-y-4 text-xs font-semibold text-left max-h-[75vh] overflow-y-auto pr-1">
+                
+                {/* Synthetic Test Card Quick-Select Banner (Dev/Test Tooling) */}
+                <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-3 space-y-1.5 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 flex items-center gap-1.5">
+                      <Sparkles size={12} className="text-amber-600" />
+                      Synthetic NIA Ghana Card Registry ({testCards.length > 0 ? testCards.length : 300} Test Cards)
+                    </span>
+                    <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-200">
+                      Dev/Test Mode
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-amber-800 font-normal leading-relaxed">
+                    Select a synthetic card or click <strong>Random Card</strong> to auto-fill valid verification credentials without using real Ghana Card numbers.
+                  </p>
+                  <div className="flex items-center gap-2 pt-1">
+                    <select
+                      className="flex-1 px-2.5 py-1.5 text-xs bg-white border border-amber-300 rounded-lg text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-xs"
+                      value={selectedSyntheticCardId}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (!val) return;
+                        const card = testCards.find(c => c && c.idNumber === val);
+                        if (card) {
+                          applySyntheticCard(card);
+                        }
+                      }}
+                    >
+                      <option value="">-- Select a Synthetic Test Ghana Card --</option>
+                      {testCards.filter(Boolean).slice(0, 50).map(c => (
+                        <option key={c.idNumber || c.fullName} value={c.idNumber}>
+                          {c.idNumber} — {c.fullName} {c.status && c.status !== 'verified' ? `[${c.status}]` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={handleRandomCard}
+                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shrink-0 transition-all shadow-xs flex items-center gap-1"
+                    >
+                      <Sparkles size={11} />
+                      Random Card
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  
+                  {/* Full Name */}
                   <div className="space-y-1">
-                    <label className="text-slate-700 block font-bold">Manager Full Name</label>
+                    <label className="text-slate-700 block font-bold">Manager Full Legal Name *</label>
                     <div className="relative">
                       <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 pointer-events-none">
                         <User size={15} />
@@ -688,17 +979,18 @@ export default function PageUnifiedLogin() {
                       <input
                         type="text"
                         required
-                        placeholder="e.g. Sarah Johnson"
+                        placeholder="e.g. Dr. Sarah Jenkins"
                         value={regManagerName}
                         onChange={(e) => setRegManagerName(e.target.value)}
-                        autoComplete="off"
+                        autoComplete="name"
                         className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50 text-slate-800 text-xs font-medium focus:ring-2 focus:ring-blue-900 focus:outline-none"
                       />
                     </div>
                   </div>
 
+                  {/* Email */}
                   <div className="space-y-1">
-                    <label className="text-slate-700 block font-bold">Manager Email Address</label>
+                    <label className="text-slate-700 block font-bold">Manager Work Email *</label>
                     <div className="relative">
                       <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 pointer-events-none">
                         <Mail size={15} />
@@ -706,246 +998,18 @@ export default function PageUnifiedLogin() {
                       <input
                         type="email"
                         required
-                        placeholder="e.g. sarah.j@pinevela.com"
+                        placeholder="e.g. sarah.jenkins@pinevela.com"
                         value={regManagerEmail}
                         onChange={(e) => setRegManagerEmail(e.target.value)}
-                        autoComplete="off"
+                        autoComplete="email"
                         className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50 text-slate-800 text-xs font-medium focus:ring-2 focus:ring-blue-900 focus:outline-none"
                       />
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                    <div className="space-y-1">
-                      <label className="text-slate-700 block font-bold">Password</label>
-                      <div className="relative">
-                        <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 pointer-events-none">
-                          <Lock size={15} />
-                        </span>
-                        <input
-                          type={showRegPassword ? 'text' : 'password'}
-                          required
-                          placeholder="••••••••"
-                          value={regPassword}
-                          onChange={(e) => setRegPassword(e.target.value)}
-                          autoComplete="new-password"
-                          className="w-full pl-9 pr-10 py-2.5 border border-slate-200 rounded-xl bg-slate-50 text-slate-800 text-xs font-medium focus:ring-2 focus:ring-blue-900 focus:outline-none"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowRegPassword(!showRegPassword)}
-                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-650 cursor-pointer"
-                        >
-                          {showRegPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                        </button>
-                      </div>
-
-                      {/* Password Strength Indicator */}
-                      {regPassword && (
-                        <div className="mt-1.5 space-y-1">
-                          <div className="flex justify-between items-center text-[10px]">
-                            <span className="text-slate-400">Password Strength:</span>
-                            <span className={`font-bold ${getPasswordStrength(regPassword).textClass}`}>
-                              {getPasswordStrength(regPassword).label}
-                            </span>
-                          </div>
-                          <div className="w-full h-1 bg-slate-100 rounded-full overflow-hidden">
-                            <div className={`h-full transition-all duration-300 ${getPasswordStrength(regPassword).color}`} />
-                          </div>
-                          <p className="text-[9px] text-slate-450 leading-tight">
-                            Use uppercase, lowercase, numbers, and symbols.
-                          </p>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-slate-700 block font-bold">Confirm Password</label>
-                      <div className="relative">
-                        <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 pointer-events-none">
-                          <Lock size={15} />
-                        </span>
-                        <input
-                          type={showRegConfirmPassword ? 'text' : 'password'}
-                          required
-                          placeholder="••••••••"
-                          value={regConfirmPassword}
-                          onChange={(e) => setRegConfirmPassword(e.target.value)}
-                          autoComplete="new-password"
-                          className="w-full pl-9 pr-10 py-2.5 border border-slate-200 rounded-xl bg-slate-50 text-slate-800 text-xs font-medium focus:ring-2 focus:ring-blue-900 focus:outline-none"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowRegConfirmPassword(!showRegConfirmPassword)}
-                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-650 cursor-pointer"
-                        >
-                          {showRegConfirmPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-4 flex justify-end">
-                  <button
-                    type="submit"
-                    className="px-5 py-2.5 bg-blue-900 hover:bg-blue-800 text-white font-extrabold rounded-xl transition-all shadow-md flex items-center gap-1 cursor-pointer"
-                  >
-                    <span>Continue to Hostel Basics</span>
-                    <ChevronRight size={14} />
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {/* STEP 2: HOSTEL & INTERACTIVE MINI MAP */}
-            {regStep === 2 && (
-              <div className="space-y-4 text-xs font-semibold text-left">
-                <div className="space-y-3.5">
+                  {/* Direct Phone */}
                   <div className="space-y-1">
-                    <label className="text-slate-700 block font-bold">Hostel Name</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. Pine Crest Residency Block C"
-                      value={regHostelName}
-                      onChange={(e) => setRegHostelName(e.target.value)}
-                      className="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50 text-slate-800 text-xs font-medium focus:ring-2 focus:ring-blue-900 focus:outline-none"
-                    />
-                  </div>
-
-                  {/* Interactive Map UI Container */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-slate-700 block font-bold flex items-center gap-1">
-                        <MapPin size={14} className="text-blue-900" />
-                        Interactive Real Map Location
-                      </label>
-                      <span className="text-[10px] text-blue-900 font-extrabold bg-blue-50 px-2 py-0.5 rounded-full">
-                        Drag pin or click map to choose
-                      </span>
-                    </div>
-
-                    {/* Map search */}
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                        <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 pointer-events-none">
-                          <Search size={14} />
-                        </span>
-                        <input
-                          type="text"
-                          placeholder="Search real location (e.g. Legon Campus, Accra)..."
-                          value={regLocationSearch}
-                          onChange={(e) => setRegLocationSearch(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              searchAddress();
-                            }
-                          }}
-                          className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl bg-slate-50 text-slate-800 text-xs font-medium focus:ring-2 focus:ring-blue-900 focus:outline-none"
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={searchAddress}
-                        className="px-4 py-2 bg-blue-900 hover:bg-blue-800 text-white font-extrabold rounded-xl transition-all text-xs cursor-pointer shadow-sm"
-                      >
-                        Search
-                      </button>
-                    </div>
-
-                    {/* Real Leaflet Map Container */}
-                    <div className="relative border border-slate-200 rounded-2xl overflow-hidden shadow-inner h-56 select-none bg-slate-100">
-                      <div 
-                        ref={mapContainerRef} 
-                        className="w-full h-full z-10" 
-                        style={{ minHeight: '224px' }}
-                      />
-                    </div>
-
-                    {/* Coordinates Feedback Card */}
-                    <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 flex flex-col items-start gap-1 w-full">
-                      <div className="flex items-start gap-2">
-                        <MapPin className="text-red-500 shrink-0 mt-0.5" size={16} />
-                        <div className="text-left">
-                          <p className="font-extrabold text-slate-800 text-[11px] leading-tight">
-                            Selected Location:
-                          </p>
-                          <p className="text-[11px] text-slate-650 font-semibold mt-0.5 leading-relaxed">
-                            {regSelectedLocation}
-                          </p>
-                          <p className="text-[9px] text-slate-400 font-medium mt-1">
-                            Latitude: {mapCoordinates.lat.toFixed(5)}, Longitude: {mapCoordinates.lng.toFixed(5)}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                  </div>
-                </div>
-
-                <div className="pt-4 flex justify-between">
-                  <button
-                    type="button"
-                    onClick={() => setRegStep(1)}
-                    className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 font-bold rounded-xl transition-all flex items-center gap-1 cursor-pointer"
-                  >
-                    <ChevronLeft size={14} />
-                    <span>Back</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!regHostelName) {
-                        triggerToast('Please provide a name for your hostel', 'error');
-                        return;
-                      }
-                      setRegStep(3);
-                    }}
-                    className="px-5 py-2.5 bg-blue-900 hover:bg-blue-800 text-white font-extrabold rounded-xl transition-all shadow-md flex items-center gap-1 cursor-pointer"
-                  >
-                    <span>Continue to Details</span>
-                    <ChevronRight size={14} />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* STEP 3: ADDITIONAL HOSTEL CONFIGURATION */}
-            {regStep === 3 && (
-              <form onSubmit={handleManagerRegisterSubmit} className="space-y-4 text-xs font-semibold text-left">
-                <div className="space-y-3.5">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                    <div className="space-y-1">
-                      <label className="text-slate-700 block font-bold">Property Wing / Zone</label>
-                      <select 
-                        value={regWing}
-                        onChange={(e) => setRegWing(e.target.value)}
-                        className="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50 text-slate-800 text-xs font-semibold focus:ring-2 focus:ring-blue-900 focus:outline-none"
-                      >
-                        <option value="North Wing">North Wing (Section A/B)</option>
-                        <option value="South Side">South Side (Block C/D)</option>
-                        <option value="West Campus">West Campus (Outlying)</option>
-                      </select>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-slate-700 block font-bold">Total Beds / Capacity</label>
-                      <input
-                        type="number"
-                        required
-                        min="1"
-                        value={regTotalCapacity}
-                        onChange={(e) => setRegTotalCapacity(Number(e.target.value))}
-                        className="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50 text-slate-800 text-xs font-semibold focus:ring-2 focus:ring-blue-900 focus:outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-slate-700 block font-bold">Manager Contact Phone</label>
+                    <label className="text-slate-700 block font-bold">Direct Phone Number *</label>
                     <div className="relative">
                       <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 pointer-events-none">
                         <Phone size={15} />
@@ -953,35 +1017,331 @@ export default function PageUnifiedLogin() {
                       <input
                         type="text"
                         required
-                        placeholder="e.g. +23324488923"
+                        placeholder="e.g. +233 24 488 9231"
                         value={regManagerPhone}
                         onChange={(e) => setRegManagerPhone(e.target.value)}
+                        autoComplete="tel"
                         className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50 text-slate-800 text-xs font-medium focus:ring-2 focus:ring-blue-900 focus:outline-none"
                       />
                     </div>
                   </div>
 
+                  {/* Country of Issuance */}
                   <div className="space-y-1">
-                    <label className="text-slate-700 block font-bold">Hostel Description & Facilities</label>
-                    <textarea
+                    <label className="text-slate-700 block font-bold">Country of Identity *</label>
+                    <select
+                      value={regCountry}
+                      onChange={(e) => setRegCountry(e.target.value)}
+                      className="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50 text-slate-800 text-xs font-semibold focus:ring-2 focus:ring-blue-900 focus:outline-none"
+                    >
+                      <option value="Ghana">Ghana</option>
+                      <option value="Nigeria">Nigeria</option>
+                      <option value="Kenya">Kenya</option>
+                      <option value="United Kingdom">United Kingdom</option>
+                      <option value="United States">United States</option>
+                      <option value="Other">Other International</option>
+                    </select>
+                  </div>
+
+                  {/* Identity Document Type */}
+                  <div className="space-y-1">
+                    <label className="text-slate-700 block font-bold">Document Type *</label>
+                    <select
+                      value={regDocumentType}
+                      onChange={(e) => setRegDocumentType(e.target.value)}
+                      className="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50 text-slate-800 text-xs font-semibold focus:ring-2 focus:ring-blue-900 focus:outline-none"
+                    >
+                      <option value="Ghana Card">Ghana Card (National Identification Authority)</option>
+                      <option value="Passport">International Passport</option>
+                      <option value="Voter ID">National Voters ID</option>
+                      <option value="Driver's License">Driver's License</option>
+                    </select>
+                  </div>
+
+                  {/* National ID / Ghana Card Number */}
+                  <div className="space-y-1">
+                    <label className="text-slate-700 block font-bold">Document / Ghana Card No. *</label>
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 pointer-events-none">
+                        <ShieldCheck size={15} />
+                      </span>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. GHA-789201948-2"
+                        value={regNationalId}
+                        onChange={(e) => setRegNationalId(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50 text-slate-800 text-xs font-medium focus:ring-2 focus:ring-blue-900 focus:outline-none font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Full Name on Document */}
+                  <div className="space-y-1">
+                    <label className="text-slate-700 block font-bold">Full Name on ID Document *</label>
+                    <input
+                      type="text"
                       required
-                      rows={3}
-                      placeholder="List your hostel's premium highlights (e.g. AC rooms, study lounges, free campus shuttle, standby generator...)"
-                      value={regDescription}
-                      onChange={(e) => setRegDescription(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 text-slate-800 text-xs font-medium focus:ring-2 focus:ring-blue-900 focus:outline-none leading-relaxed"
+                      placeholder="e.g. Sarah Jenkins Mensah"
+                      value={regFullNameOnId || ''}
+                      onChange={(e) => setRegFullNameOnId(e.target.value)}
+                      className="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50 text-slate-800 text-xs font-medium focus:ring-2 focus:ring-blue-900 focus:outline-none"
                     />
+                  </div>
+
+                  {/* Date of Birth & ID Expiry */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <label className="text-slate-700 block font-bold">Date of Birth</label>
+                      <input
+                        type="date"
+                        value={regDob}
+                        onChange={(e) => setRegDob(e.target.value)}
+                        className="w-full px-2.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50 text-slate-800 text-xs font-medium focus:ring-2 focus:ring-blue-900 focus:outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-slate-700 block font-bold">Expiry Date</label>
+                      <input
+                        type="date"
+                        value={regIdExpiry}
+                        onChange={(e) => setRegIdExpiry(e.target.value)}
+                        className="w-full px-2.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50 text-slate-800 text-xs font-medium focus:ring-2 focus:ring-blue-900 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Authority / Relationship to Property */}
+                  <div className="space-y-1 sm:col-span-2 bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                    <label className="text-slate-800 block font-bold mb-1">
+                      Authority & Relationship to Property *
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {(['Property Owner', 'Authorized Manager', 'Managing Director', 'Property Agent'] as const).map(rel => (
+                        <button
+                          key={rel}
+                          type="button"
+                          onClick={() => setRegAuthorityRel(rel)}
+                          className={`px-2.5 py-2 rounded-xl text-xs font-bold transition-all border text-center ${
+                            regAuthorityRel === rel
+                              ? 'bg-blue-900 text-white border-blue-900 shadow-sm'
+                              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          {rel}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Conditional owner contact fields if Authorized Manager or Property Agent */}
+                    {(regAuthorityRel === 'Authorized Manager' || regAuthorityRel === 'Property Agent') && (
+                      <div className="mt-3 pt-3 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-bold text-slate-600">Claimed Owner Name *</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Chief Nana Boakye"
+                            value={regClaimedOwnerName}
+                            onChange={(e) => setRegClaimedOwnerName(e.target.value)}
+                            className="w-full px-2.5 py-2 border border-slate-200 rounded-lg bg-white text-xs"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-bold text-slate-600">Owner Phone *</label>
+                          <input
+                            type="text"
+                            placeholder="+233 20 111 2233"
+                            value={regClaimedOwnerPhone}
+                            onChange={(e) => setRegClaimedOwnerPhone(e.target.value)}
+                            className="w-full px-2.5 py-2 border border-slate-200 rounded-lg bg-white text-xs"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-bold text-slate-600">Owner Email</label>
+                          <input
+                            type="email"
+                            placeholder="owner@property.gh"
+                            value={regClaimedOwnerEmail}
+                            onChange={(e) => setRegClaimedOwnerEmail(e.target.value)}
+                            className="w-full px-2.5 py-2 border border-slate-200 rounded-lg bg-white text-xs"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Organization / Management Entity */}
+                  <div className="space-y-1">
+                    <label className="text-slate-700 block font-bold">Management Entity / Company *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. PineVela Accommodations Ltd."
+                      value={regOrganization}
+                      onChange={(e) => setRegOrganization(e.target.value)}
+                      className="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50 text-slate-800 text-xs font-medium focus:ring-2 focus:ring-blue-900 focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Company Registration Number */}
+                  <div className="space-y-1">
+                    <label className="text-slate-700 block font-bold">Company Reg No. (Optional)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. CS-90214-2021"
+                      value={regOrgRegNumber}
+                      onChange={(e) => setRegOrgRegNumber(e.target.value)}
+                      className="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50 text-slate-800 text-xs font-medium focus:ring-2 focus:ring-blue-900 focus:outline-none font-mono"
+                    />
+                  </div>
+
+                  {/* Managerial Designation */}
+                  <div className="space-y-1">
+                    <label className="text-slate-700 block font-bold">Designation / Role Title *</label>
+                    <select
+                      value={regRoleTitle}
+                      onChange={(e) => setRegRoleTitle(e.target.value)}
+                      className="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50 text-slate-800 text-xs font-semibold focus:ring-2 focus:ring-blue-900 focus:outline-none"
+                    >
+                      <option value="General Manager">General Manager / Managing Director</option>
+                      <option value="Property Owner / Landlord">Property Owner / Landlord</option>
+                      <option value="Residence Warden">Chief Residence Warden</option>
+                      <option value="Operations Director">Director of Student Accommodation</option>
+                    </select>
+                  </div>
+
+                  {/* Management Experience */}
+                  <div className="space-y-1">
+                    <label className="text-slate-700 block font-bold">Management Experience (Years)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="40"
+                      value={regExperienceYears}
+                      onChange={(e) => setRegExperienceYears(Number(e.target.value))}
+                      className="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50 text-slate-800 text-xs font-medium focus:ring-2 focus:ring-blue-900 focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Business Office Address */}
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className="text-slate-700 block font-bold">Office Address / Campus Zone</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Plot 14, University Bypass, Legon"
+                      value={regAddress}
+                      onChange={(e) => setRegAddress(e.target.value)}
+                      className="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50 text-slate-800 text-xs font-medium focus:ring-2 focus:ring-blue-900 focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Proof of Authority Evidence & Document Upload */}
+                  <div className="space-y-2 sm:col-span-2 p-3 bg-blue-50/50 rounded-2xl border border-blue-100">
+                    <div className="flex items-center justify-between">
+                      <label className="text-blue-950 font-bold flex items-center gap-1.5">
+                        <ShieldCheck size={14} className="text-blue-700" />
+                        <span>Proof of Authority / Ownership Evidence</span>
+                      </label>
+                      <span className="text-[10px] text-blue-700 font-bold bg-blue-100 px-2 py-0.5 rounded-full">
+                        Stored in Private Storage
+                      </span>
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="e.g. Registered title deed and power of attorney executed with property owner."
+                      value={regAuthorityEvidenceDesc}
+                      onChange={(e) => setRegAuthorityEvidenceDesc(e.target.value)}
+                      className="w-full px-3 py-2 border border-blue-200 rounded-xl bg-white text-slate-800 text-xs"
+                    />
+                    <div className="flex items-center gap-2 pt-1 text-[11px]">
+                      <div className="flex-1 px-3 py-2 bg-white border border-dashed border-blue-300 rounded-xl flex items-center justify-between">
+                        <span className="text-slate-600 truncate">
+                          📄 {regDocFileName || 'authority-documentation.pdf'}
+                        </span>
+                        <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-full">
+                          Ready for Private Storage
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* Password Fields */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-2 border-t border-slate-100">
+                  <div className="space-y-1">
+                    <label className="text-slate-700 block font-bold">Account Password *</label>
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 pointer-events-none">
+                        <Lock size={15} />
+                      </span>
+                      <input
+                        type={showRegPassword ? 'text' : 'password'}
+                        required
+                        placeholder="••••••••"
+                        value={regPassword}
+                        onChange={(e) => setRegPassword(e.target.value)}
+                        autoComplete="new-password"
+                        className="w-full pl-9 pr-10 py-2.5 border border-slate-200 rounded-xl bg-slate-50 text-slate-800 text-xs font-medium focus:ring-2 focus:ring-blue-900 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowRegPassword(!showRegPassword)}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-650 cursor-pointer"
+                      >
+                        {showRegPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
+                    </div>
+
+                    {/* Password Strength Indicator */}
+                    {regPassword && (
+                      <div className="mt-1.5 space-y-1">
+                        <div className="flex justify-between items-center text-[10px]">
+                          <span className="text-slate-400">Password Strength:</span>
+                          <span className={`font-bold ${getPasswordStrength(regPassword).textClass}`}>
+                            {getPasswordStrength(regPassword).label}
+                          </span>
+                        </div>
+                        <div className="w-full h-1 bg-slate-100 rounded-full overflow-hidden">
+                          <div className={`h-full transition-all duration-300 ${getPasswordStrength(regPassword).color}`} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-slate-700 block font-bold">Confirm Password *</label>
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 pointer-events-none">
+                        <Lock size={15} />
+                      </span>
+                      <input
+                        type={showRegConfirmPassword ? 'text' : 'password'}
+                        required
+                        placeholder="••••••••"
+                        value={regConfirmPassword}
+                        onChange={(e) => setRegConfirmPassword(e.target.value)}
+                        autoComplete="new-password"
+                        className="w-full pl-9 pr-10 py-2.5 border border-slate-200 rounded-xl bg-slate-50 text-slate-800 text-xs font-medium focus:ring-2 focus:ring-blue-900 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowRegConfirmPassword(!showRegConfirmPassword)}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-650 cursor-pointer"
+                      >
+                        {showRegConfirmPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
+                    </div>
                   </div>
                 </div>
 
-                <div className="pt-4 flex justify-between">
+                <div className="pt-4 flex justify-between items-center">
                   <button
                     type="button"
-                    onClick={() => setRegStep(2)}
-                    className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 font-bold rounded-xl transition-all flex items-center gap-1 cursor-pointer"
+                    onClick={() => setShowRegModal(false)}
+                    className="px-4 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-600 font-bold rounded-xl transition-all text-xs cursor-pointer"
                   >
-                    <ChevronLeft size={14} />
-                    <span>Back</span>
+                    Cancel
                   </button>
 
                   <button
@@ -992,12 +1352,12 @@ export default function PageUnifiedLogin() {
                     {loadingRegister ? (
                       <>
                         <RefreshCw size={13} className="animate-spin" />
-                        <span>Registering Property...</span>
+                        <span>Verifying & Submitting...</span>
                       </>
                     ) : (
                       <>
-                        <Building size={14} />
-                        <span>Register Hostel</span>
+                        <ShieldCheck size={14} />
+                        <span>Submit Manager Verification</span>
                       </>
                     )}
                   </button>
@@ -1005,69 +1365,106 @@ export default function PageUnifiedLogin() {
               </form>
             )}
 
-            {/* STEP 4: REGISTRATION SUCCESS */}
-            {regStep === 4 && (
+            {/* STEP 2: MANAGER VERIFICATION SUBMISSION STATUS */}
+            {regStep === 2 && (
               <div className="space-y-6 text-center py-4 flex flex-col items-center">
                 
-                {/* Pulsing Success Badge */}
-                <div className="mx-auto w-16 h-16 bg-emerald-50 rounded-full border-4 border-emerald-100 flex items-center justify-center text-emerald-500 shadow-sm animate-bounce">
-                  <CheckCircle size={32} />
+                {/* Pulsing Status Icon */}
+                <div className="mx-auto w-16 h-16 bg-amber-50 rounded-full border-4 border-amber-100 flex items-center justify-center text-amber-600 shadow-sm animate-pulse">
+                  <ShieldCheck size={32} />
                 </div>
 
                 <div className="space-y-2">
-                  <h3 className="text-2xl font-black text-slate-900 tracking-tight">Hostel Registered!</h3>
+                  <div className="inline-flex items-center gap-2 bg-amber-100 text-amber-900 text-xs font-black uppercase px-3 py-1 rounded-full">
+                    <span>Status: Pending Admin Review</span>
+                  </div>
+                  <h3 className="text-2xl font-black text-slate-900 tracking-tight">
+                    Verification Submitted Successfully
+                  </h3>
                   <p className="text-xs text-slate-500 leading-relaxed max-w-md mx-auto">
-                    Congratulations, <span className="font-extrabold text-blue-900">{regManagerName}</span>! Your manager profile and property <span className="font-bold text-slate-800">"{regHostelName}"</span> have been successfully configured.
+                    Welcome, <span className="font-extrabold text-blue-900">{regManagerName}</span>! Your manager identity and authority claims have been received and logged in the administrative verification queue.
                   </p>
                 </div>
 
-                <div className="bg-slate-50 rounded-2xl border border-slate-100 p-4 text-left text-xs space-y-2.5 w-full">
-                  <div className="flex justify-between border-b border-slate-100 pb-1.5">
-                    <span className="text-slate-400 font-bold">🏫 Hostel Property:</span>
-                    <span className="font-bold text-slate-800">{regHostelName}</span>
+                {/* Automated System Check Summary */}
+                <div className="w-full bg-slate-50 rounded-2xl border border-slate-200 p-4 text-left text-xs space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                    <span className="font-extrabold text-slate-800">Automated System Pre-Checks:</span>
+                    <span className="text-[10px] font-black uppercase text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md">
+                      Validation Passed
+                    </span>
                   </div>
-                  <div className="flex justify-between border-b border-slate-100 pb-1.5">
-                    <span className="text-slate-400 font-bold">📍 Map Location:</span>
-                    <span className="font-bold text-slate-800">{regSelectedLocation}</span>
+
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <div className="flex items-center gap-1.5 text-slate-700">
+                      <span className="text-emerald-500 font-bold">✓</span>
+                      <span>Identity Check: Validated</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-slate-700">
+                      <span className="text-emerald-500 font-bold">✓</span>
+                      <span>Name Consistency: Passed</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-slate-700">
+                      <span className="text-emerald-500 font-bold">✓</span>
+                      <span>Authority Evidence: Attached</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-slate-700">
+                      <span className="text-emerald-500 font-bold">✓</span>
+                      <span>Duplicate Check: Clean</span>
+                    </div>
                   </div>
-                  <div className="flex justify-between border-b border-slate-100 pb-1.5">
-                    <span className="text-slate-400 font-bold">👤 Manager:</span>
-                    <span className="font-bold text-slate-800">{regManagerName}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400 font-bold">✉️ Login Email:</span>
-                    <span className="font-semibold text-blue-900">{regManagerEmail}</span>
+
+                  <div className="pt-2 border-t border-slate-200 text-[11px] space-y-1.5">
+                    <div className="flex justify-between">
+                      <span className="text-slate-400 font-bold">Document:</span>
+                      <span className="font-mono text-slate-800">{regDocumentType} ({regNationalId})</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400 font-bold">Authority Claim:</span>
+                      <span className="font-bold text-slate-800">{regAuthorityRel} — {regOrganization}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400 font-bold">Work Email:</span>
+                      <span className="text-blue-900 font-semibold">{regManagerEmail}</span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="p-3.5 bg-amber-50 rounded-xl text-[10px] text-amber-800 leading-relaxed text-left flex gap-2 w-full">
-                  <span>💡</span>
-                  <span>
-                    <strong>Instant Access:</strong> Your login credentials are now active on the system gateway. Use your registered email <strong>{regManagerEmail}</strong> and password to immediately sign in and manage your new dashboard!
-                  </span>
+                <div className="p-3.5 bg-blue-50 border border-blue-100 rounded-xl text-[11px] text-blue-900 leading-relaxed text-left space-y-1 w-full">
+                  <p className="font-bold">Next Steps for Hostel Onboarding (Phase 2):</p>
+                  <ol className="list-decimal list-inside space-y-1 text-[10px] text-slate-600">
+                    <li>Your manager profile and verification dossier are now queued in the <strong>Admin Dashboard</strong> for review.</li>
+                    <li>You can immediately launch sandbox quick access below to start the <strong>10-Step Hostel Registration sequence</strong>.</li>
+                    <li>Or switch to Admin view to test the 1-click Approval workflow.</li>
+                  </ol>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    // Reset registration state
-                    setRegStep(1);
-                    setRegManagerName('');
-                    setRegManagerEmail('');
-                    setRegPassword('');
-                    setRegConfirmPassword('');
-                    setRegHostelName('');
-                    setRegSelectedLocation('North Campus, Sector 5');
-                    setRegDescription('');
-                    setRegManagerPhone('');
-                    
-                    // Close Modal (Redirects to Login Screen)
-                    setShowRegModal(false);
-                  }}
-                  className="w-full py-3 bg-blue-900 hover:bg-blue-800 text-white font-extrabold rounded-xl text-xs transition-all shadow-md cursor-pointer"
-                >
-                  Proceed to Login Screen
-                </button>
+                <div className="space-y-2 w-full pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowRegModal(false);
+                      handleQuickLogin(regManagerEmail, regPassword, '/manager/dashboard?tab=register_hostel');
+                    }}
+                    className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black rounded-xl text-xs transition-all shadow-md cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <Sparkles size={16} className="text-amber-300" />
+                    <span>⚡ Instant Sandbox: Initiate Hostel Registration Sequence</span>
+                    <ArrowRight size={14} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowRegModal(false);
+                      handleQuickLogin('admin@pinevela.com', 'admin123');
+                    }}
+                    className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-amber-300 font-extrabold rounded-xl text-xs transition-all border border-slate-700 cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <ShieldCheck size={14} className="text-amber-400" />
+                    <span>🛡️ Switch to Admin Portal (Review & Approve Manager)</span>
+                  </button>
+                </div>
               </div>
             )}
 

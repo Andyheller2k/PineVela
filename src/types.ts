@@ -1,3 +1,109 @@
+export interface HostelBlockConfig {
+  id: string;
+  name: string;
+  floors: number;
+  totalRooms: number;
+  roomPrefix: string;
+  startNum: number;
+  bedsPerRoom: number;
+}
+
+export interface HostelRegistrationDraft {
+  // Step 1: Basic Information
+  name: string;
+  description: string;
+  hostelType: 'University hostel' | 'Private hostel' | 'Residential hostel' | 'Student accommodation' | 'Other';
+  customHostelType?: string;
+  genderCategory: 'Male' | 'Female' | 'Mixed';
+  status: 'Open' | 'Full' | 'Under Maintenance';
+  yearEstablished: number;
+  contactEmail: string;
+  contactPhone: string;
+  alternativePhone: string;
+  website: string;
+  wing: 'North Wing' | 'South Side' | 'East Side' | 'West Campus' | 'Other';
+
+  // Step 2: Address Details
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  region: string;
+  district: string;
+  country: string;
+  postalCode: string;
+  digitalAddress: string; // GhanaPost GPS (e.g. GA-183-9024)
+  landmark: string;
+
+  // Step 3: Map Location
+  latitude: number;
+  longitude: number;
+  formattedAddress?: string;
+  isLocationConfirmed: boolean;
+
+  // Step 4: Hostel Image
+  imageFile?: File | null;
+  imageUrl: string;
+  imagePreviewUrl?: string;
+  imagePath?: string;
+  imageStorageType?: 'supabase' | 'local' | 'external';
+
+  // Step 5: Capacity & Structure
+  totalBlocks: number;
+  totalFloors: number;
+  totalRooms: number;
+  totalBeds: number;
+  maximumCapacity: number;
+  blocksList: HostelBlockConfig[];
+
+  // Step 6: Facilities & Amenities
+  facilities: string[];
+  customFacilities: string[];
+
+  // Step 7: Rules & Policies
+  checkInTime: string;
+  checkOutTime: string;
+  minStay: string;
+  maxStay: string;
+  guestPolicy: string;
+  curfew: string;
+  smokingPolicy: 'Strictly Non-Smoking' | 'Designated Areas Only' | 'Prohibited';
+  petPolicy: 'No Pets' | 'Service Animals Only' | 'Allowed with Approval';
+  noisePolicy: string;
+  cancellationPolicy: string;
+  customRules: string[];
+
+  // Step 8: Pricing & Payment
+  defaultFee: number;
+  paymentFrequency: 'Per Academic Year' | 'Per Semester' | 'Monthly' | 'Quarterly';
+  securityDeposit: number;
+  applicationFee: number;
+  currency: 'GHS' | 'USD' | 'EUR' | 'GBP';
+
+  // Step 9: Manager Assignment
+  assignedManagerId?: string;
+  managerName: string;
+  managerEmail: string;
+  managerPhone: string;
+  isNewManager: boolean;
+
+  // Verification & Authority Ownership
+  authorityRelationship?: 'Property Owner' | 'Authorized Manager' | 'Company/Organization Representative' | 'Other';
+  ownerName?: string;
+  ownerPhone?: string;
+  ownerEmail?: string;
+  proofOfOwnershipType?: string;
+  proofOfOwnershipFileName?: string;
+  proofOfOwnershipUrl?: string;
+  onboardingPaymentStatus?: 'Pending' | 'Paid';
+  onboardingPaymentReference?: string;
+  onboardingPaymentAmount?: number;
+
+  // Step 10: Review, Confirmation & Draft State
+  agreeTerms: boolean;
+  accuracyCertified: boolean;
+  lastDraftSavedAt?: string;
+}
+
 export interface Hostel {
   id: string;
   name: string;
@@ -8,13 +114,66 @@ export interface Hostel {
   totalCapacity: number;
   availableSpaces: number;
   image: string;
+  imageUrl?: string;
+  price?: number;
+  totalBlocks?: number;
   managerName: string;
   managerPhone: string;
   managerEmail: string;
+  managerId?: string;
   description: string;
   rating?: number;
   registrationDate?: string;
   subscriptionPaid?: boolean;
+  isApproved?: boolean;
+  approvalStatus?: 'Approved' | 'Pending Approval' | 'Rejected';
+  blocks?: any[];
+  amenities?: string[];
+  facilities?: string[];
+  hostel_type?: string;
+  gender?: string;
+  year_established?: number;
+  contact_email?: string;
+  contact_phone?: string;
+  alternative_phone?: string;
+  website?: string;
+  address_line_1?: string;
+  address_line_2?: string;
+  city?: string;
+  region?: string;
+  country?: string;
+  postal_code?: string;
+  digital_address?: string;
+  landmark?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  image_url?: string;
+  image_path?: string;
+  capacity?: number;
+  rules?: any;
+  pricing?: any;
+}
+
+export interface ManagerRegistrationRequest {
+  id: string;
+  managerId: string;
+  managerName: string;
+  managerEmail: string;
+  managerPhone: string;
+  nationalId: string;
+  organization: string;
+  roleTitle: string;
+  experienceYears?: number;
+  propertyName?: string;
+  proposedHostelName?: string;
+  proposedLocation?: string;
+  proposedCapacity?: number;
+  reason?: string;
+  notes?: string;
+  status: 'pending' | 'approved' | 'rejected' | 'Pending' | 'Approved' | 'Rejected';
+  requestedAt?: string;
+  createdAt?: string;
+  approvedAt?: string;
 }
 
 export interface IssueReport {
@@ -109,3 +268,157 @@ export type ActiveScreen =
   | 'manager-hostel-dashboard' // Page 10 (Single Hostel Manager Dashboard)
   | 'staff-dashboard' // New Staff Dashboard Screen
 ;
+
+// ==========================================
+// PINEVELA VERIFICATION & ONBOARDING SYSTEM
+// ==========================================
+
+export interface ManagerVerificationRecord {
+  id: string;
+  managerId: string;
+  managerName: string;
+  managerEmail: string;
+  managerPhone: string;
+  country: string;
+  idDocumentType: 'Ghana Card' | 'Passport' | "Driver's License" | 'Voter ID';
+  hashedIdNumber: string; // SHA-256 hashed test identifier
+  maskedIdNumber: string; // e.g. GHA-*****001-1
+  fullNameOnId: string;
+  dateOfBirth?: string;
+  idExpiryDate?: string;
+  idVerificationStatus: 'verified' | 'invalid' | 'already_verified' | 'suspended';
+  
+  // Authority Claim
+  authorityRelationship: 'Property Owner' | 'Authorized Manager' | 'Company/Organization Representative' | 'Other';
+  claimedOwnerName?: string;
+  claimedOwnerPhone?: string;
+  claimedOwnerEmail?: string;
+  organizationName?: string;
+  organizationRegNumber?: string;
+  authorityEvidenceDescription?: string;
+  authorityEvidenceFileName?: string;
+  authorityEvidenceUrl?: string;
+  authorityStatus: 'pending' | 'verified' | 'flagged' | 'missing_evidence';
+
+  // System Validation Checks
+  systemChecks: {
+    identity: 'verified' | 'failed';
+    phone: 'verified' | 'failed';
+    email: 'verified' | 'failed';
+    authorityEvidence: 'submitted' | 'missing';
+    informationConsistency: 'passed' | 'flagged';
+    duplicateManager: 'clean' | 'flagged';
+    previousHistory: 'clean' | 'flagged';
+  };
+
+  status: 'pending' | 'approved' | 'rejected' | 'more_info_required' | 'suspended';
+  adminNotes?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface HostelVerificationRecord {
+  id: string;
+  hostelId: string;
+  hostelName: string;
+  location: string;
+  campusZone?: string;
+  addressLine1?: string;
+  digitalAddress: string; // GhanaPost GPS (e.g. GA-183-9024)
+  totalCapacity: number;
+  totalRooms: number;
+  totalBlocks: number;
+  pricePerYear: number;
+  currency: string;
+  facilities: string[];
+  imageUrl?: string;
+
+  // Manager details
+  managerId: string;
+  managerName: string;
+  managerEmail: string;
+  managerPhone: string;
+  managerApproved: boolean;
+
+  // Ownership & Authority
+  authorityRelationship: 'Property Owner' | 'Authorized Manager' | 'Company/Organization Representative' | 'Other';
+  ownerOperatorName: string;
+  ownerOperatorPhone: string;
+  ownerOperatorEmail?: string;
+  proofOfOwnershipType: string;
+  proofOfOwnershipFileName?: string;
+  proofOfOwnershipUrl?: string;
+
+  // System validation
+  systemValidation: {
+    missingInfo: boolean;
+    digitalAddressFormatValid: boolean;
+    duplicateHostelCheck: 'clean' | 'flagged';
+    duplicateRegistrationCheck: 'clean' | 'flagged';
+    managerApproved: boolean;
+    identityVerified: boolean;
+    ownershipEvidencePresent: boolean;
+    conflictingInfo: boolean;
+    capacityPricingValid: boolean;
+  };
+  validationPassed: boolean;
+
+  // GHS 50 Onboarding Payment
+  paymentStatus: 'pending' | 'paid' | 'exempt';
+  paymentReference?: string;
+  paymentAmount: number; // 50.00
+  paymentDate?: string;
+
+  status: 'draft' | 'submitted' | 'system_validation' | 'payment_required' | 'payment_confirmed' | 'under_admin_review' | 'approved' | 'more_info_required' | 'rejected' | 'suspended';
+  adminNotes?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  submittedAt: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface VerificationDocument {
+  id: string;
+  ownerType: 'manager' | 'hostel';
+  ownerId: string;
+  documentType: string;
+  fileName: string;
+  filePath: string;
+  fileUrl?: string;
+  fileSize?: number;
+  mimeType?: string;
+  isSensitive: boolean;
+  uploadedAt: string;
+}
+
+export interface VerificationAuditLog {
+  id: string;
+  action: string;
+  targetType: 'manager' | 'hostel' | 'payment';
+  targetId: string;
+  targetName?: string;
+  performedBy: string;
+  role: string;
+  details: Record<string, any>;
+  ipAddress?: string;
+  timestamp: string;
+}
+
+export interface OnboardingPaymentRecord {
+  id: string;
+  hostelId: string;
+  hostelName: string;
+  managerId: string;
+  managerName: string;
+  amount: number; // 50.00
+  currency: 'GHS';
+  status: 'pending' | 'paid' | 'refunded';
+  reference: string;
+  agreementAcknowledged: boolean;
+  paymentMethod: 'Manual Confirmation (Direct Agreement)';
+  paidAt: string;
+}
+

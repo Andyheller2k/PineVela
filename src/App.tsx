@@ -113,6 +113,10 @@ function AppContent() {
     }
   };
 
+  const handleHostelRegistered = (newHostel: Hostel) => {
+    setHostels(prev => [newHostel, ...prev.filter(h => h.id !== newHostel.id)]);
+  };
+
   const handleUpdateHostelsOnServer = async (updatedList: Hostel[]) => {
     // Determine which hostel was updated or created
     try {
@@ -307,6 +311,7 @@ function AppContent() {
                   issueReports={issueReports}
                   activities={activities}
                   onUpdateHostels={handleUpdateHostelsOnServer}
+                  onHostelRegistered={handleHostelRegistered}
                   onUpdateBookingStatus={handleUpdateBookingStatusOnServer}
                 />
               </PageWrapper>
@@ -336,6 +341,7 @@ function AppContent() {
                   issueReports={issueReports}
                   activities={activities}
                   onUpdateHostels={handleUpdateHostelsOnServer}
+                  onHostelRegistered={handleHostelRegistered}
                   onUpdateBookingStatus={handleUpdateBookingStatusOnServer}
                 />
               </PageWrapper>

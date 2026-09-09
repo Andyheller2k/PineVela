@@ -1,0 +1,491 @@
+{
+  "hostels": [
+    {
+      "id": "hostel-1",
+      "name": "Pine Crest Residency",
+      "location": "North Campus, Sector 5, Accra",
+      "wing": "North Wing",
+      "status": "Open",
+      "bedsLeft": 12,
+      "totalCapacity": 120,
+      "availableSpaces": 12,
+      "price": 3500,
+      "image": "https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=800&q=80",
+      "imageUrl": "https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=800&q=80",
+      "managerName": "Sarah Johnson",
+      "managerPhone": "+23324488923",
+      "managerEmail": "sarah.j@pinevela.com",
+      "description": "A beautiful and serene student residential community featuring modern air-conditioned master suites, standard shared rooms, free shuttle transport, high-speed fiber-optic WiFi, and a 24/7 learning library.",
+      "rating": 4.8,
+      "registrationDate": "2026-01-15",
+      "subscriptionPaid": true,
+      "isApproved": true,
+      "approvalStatus": "Approved"
+    },
+    {
+      "id": "hostel-2",
+      "name": "Emerald Heights Block A",
+      "location": "Main Campus, East Wing, Accra",
+      "wing": "North Wing",
+      "status": "Full",
+      "bedsLeft": 0,
+      "totalCapacity": 180,
+      "availableSpaces": 0,
+      "price": 4200,
+      "image": "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=800&q=80",
+      "imageUrl": "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=800&q=80",
+      "managerName": "Maxwell Mensah",
+      "managerPhone": "+23350299882",
+      "managerEmail": "maxwell.m@pinevela.com",
+      "description": "Located in the premium core zone of the campus, Emerald Heights offers direct walking paths to major lecture halls, high-security smart access gates, indoor game arenas, and spacious study halls.",
+      "rating": 4.6,
+      "registrationDate": "2026-02-10",
+      "subscriptionPaid": true,
+      "isApproved": true,
+      "approvalStatus": "Approved"
+    },
+    {
+      "id": "hostel-3",
+      "name": "Sapphire Gardens",
+      "location": "West Campus, Block B, Accra",
+      "wing": "South Side",
+      "status": "Open",
+      "bedsLeft": 28,
+      "totalCapacity": 250,
+      "availableSpaces": 28,
+      "price": 3800,
+      "image": "https://images.unsplash.com/photo-1568605114967-8130f3a36994?auto=format&fit=crop&w=800&q=80",
+      "imageUrl": "https://images.unsplash.com/photo-1568605114967-8130f3a36994?auto=format&fit=crop&w=800&q=80",
+      "managerName": "David Kojo",
+      "managerPhone": "+23324599812",
+      "managerEmail": "david.k@pinevela.com",
+      "description": "Known for its scenic garden landscaping, Sapphire Gardens offers spacious single and dual-occupancy options, student kitchenettes on every floor, modern sports fields, and a standby power generator.",
+      "rating": 4.9,
+      "registrationDate": "2026-03-01",
+      "subscriptionPaid": true,
+      "isApproved": true,
+      "approvalStatus": "Approved"
+    },
+    {
+      "id": "hostel-4",
+      "name": "Pine Ridge Annex",
+      "location": "South Campus, Sector 9, Accra",
+      "wing": "South Side",
+      "status": "Under Maintenance",
+      "bedsLeft": 15,
+      "totalCapacity": 90,
+      "availableSpaces": 15,
+      "price": 3200,
+      "image": "https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=800&q=80",
+      "imageUrl": "https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=800&q=80",
+      "managerName": "Angela Owusu",
+      "managerPhone": "+23324119934",
+      "managerEmail": "angela.o@pinevela.com",
+      "description": "Compact and highly convenient annex with direct campus bus connection, quiet reading corners, and solar-powered backup lighting.",
+      "rating": 4.5,
+      "registrationDate": "2026-03-15",
+      "subscriptionPaid": true,
+      "isApproved": true,
+      "approvalStatus": "Approved"
+    }
+  ],
+  "bookingRequests": [
+    {
+      "id": "book-1",
+      "studentName": "Sarah Connor",
+      "studentId": "STU-882",
+      "roomType": "Superior Suite",
+      "hostelName": "Emerald Heights Block A",
+      "avatar": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80",
+      "status": "Pending"
+    },
+    {
+      "id": "book-2",
+      "studentName": "Marcus Wright",
+      "studentId": "STU-102",
+      "roomType": "Standard Twin",
+      "hostelName": "Emerald Heights Block A",
+      "avatar": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80",
+      "status": "Pending"
+    },
+    {
+      "id": "book-3",
+      "studentName": "Kyle Reese",
+      "studentId": "STU-994",
+      "roomType": "Emerald Single",
+      "hostelName": "Emerald Heights Block A",
+      "avatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80",
+      "status": "Pending"
+    }
+  ],
+  "issueReports": [
+    {
+      "id": "issue-1",
+      "title": "Leaking Pipe in Washroom",
+      "category": "Plumbing",
+      "urgency": "High",
+      "description": "The main water supply pipe in the Block B washroom has a steady leak, flooding the second stall corridor.",
+      "photos": [
+        "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=400&q=80"
+      ],
+      "contactMethod": "In-app Notification",
+      "studentName": "Sarah Connor",
+      "studentId": "STU-882",
+      "hostelName": "Pine Crest Residency",
+      "blockFloor": "Block B, 4th Floor",
+      "roomBed": "Room 402, Bed A",
+      "status": "Pending",
+      "date": "2026-06-28"
+    },
+    {
+      "id": "issue-2",
+      "title": "AC Unit Not Cooling",
+      "category": "Electrical",
+      "urgency": "Medium",
+      "description": "The air conditioner in room 302 runs but only blows warm air, making studying during daytime very difficult.",
+      "photos": [],
+      "contactMethod": "Email",
+      "studentName": "David K.",
+      "studentId": "STU-2024-1024",
+      "hostelName": "Sapphire Gardens",
+      "blockFloor": "West Wing, 3rd Floor",
+      "roomBed": "Room 302, Bed B",
+      "status": "Pending",
+      "date": "2026-06-27"
+    }
+  ],
+  "activities": [
+    {
+      "id": "act-1",
+      "text": "Maintenance Task #T-992 marked as resolved.",
+      "time": "12 mins ago",
+      "type": "success"
+    },
+    {
+      "id": "act-2",
+      "text": "New manager added to Sapphire Gardens.",
+      "time": "1 hour ago",
+      "type": "info"
+    },
+    {
+      "id": "act-3",
+      "text": "Emerald Heights Block B status changed to 'Maintenance'.",
+      "time": "4 hours ago",
+      "type": "warning"
+    },
+    {
+      "id": "act-4",
+      "text": "Low occupancy alert triggered for Ivory Towers.",
+      "time": "Yesterday",
+      "type": "danger"
+    }
+  ],
+  "hostelVerifications": [
+    {
+      "id": "hv-001",
+      "hostelId": "hostel-pending-001",
+      "hostelName": "Heritage Palace Residency",
+      "location": "Legon Campus East Gate, Accra",
+      "campusZone": "University of Ghana (East Gate)",
+      "addressLine1": "Plot 44 University Ring Road",
+      "digitalAddress": "GA-183-9024",
+      "totalCapacity": 140,
+      "totalRooms": 40,
+      "totalBlocks": 3,
+      "pricePerYear": 4200,
+      "currency": "GHS",
+      "facilities": [
+        "High Speed Wi-Fi",
+        "24/7 Security & CCTV",
+        "Standby Generator",
+        "Private Bathrooms",
+        "Study Lounge"
+      ],
+      "imageUrl": "https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=800&q=80",
+      "managerId": "manager_101",
+      "managerName": "Anthony Davis",
+      "managerEmail": "manager@pinevela.com",
+      "managerPhone": "+233 24 123 4567",
+      "managerApproved": true,
+      "authorityRelationship": "Authorized Manager",
+      "ownerOperatorName": "Heritage Estates GH",
+      "ownerOperatorPhone": "+233 20 882 1928",
+      "ownerOperatorEmail": "director@heritageestates.com",
+      "proofOfOwnershipType": "Management Contract & Owner Consent Letter",
+      "proofOfOwnershipFileName": "Heritage_Palace_Management_Deed.pdf",
+      "proofOfOwnershipUrl": "https://docs.pinevela.com/auth/Heritage_Palace_Management_Deed.pdf",
+      "systemValidation": {
+        "missingInfo": false,
+        "digitalAddressFormatValid": true,
+        "duplicateHostelCheck": "clean",
+        "duplicateRegistrationCheck": "clean",
+        "managerApproved": true,
+        "identityVerified": true,
+        "ownershipEvidencePresent": true,
+        "conflictingInfo": false,
+        "capacityPricingValid": true
+      },
+      "validationPassed": true,
+      "paymentStatus": "paid",
+      "paymentReference": "PAY-PV50-2026-99120",
+      "paymentAmount": 50,
+      "paymentDate": "2026-09-09T08:38:03.246Z",
+      "status": "under_admin_review",
+      "adminNotes": "Onboarding fee GHS 50 paid. Digital address GA-183-9024 verified on GhanaPost GPS.",
+      "submittedAt": "2026-09-09T08:38:03.246Z",
+      "createdAt": "2026-09-09T08:38:03.246Z"
+    }
+  ],
+  "managerRegistrationRequests": [
+    {
+      "id": "req-mgr-001",
+      "managerId": "manager_101",
+      "managerName": "Anthony Davis",
+      "managerEmail": "manager@pinevela.com",
+      "managerPhone": "+233 24 123 4567",
+      "nationalId": "GHA-892019482-1",
+      "organization": "Apex Hostels Management Ltd.",
+      "roleTitle": "General Manager",
+      "experienceYears": 6,
+      "propertyName": "Pine Crest Residency Block C",
+      "notes": "Official application to onboard Pine Crest Residency annex and manage room allocation.",
+      "status": "approved",
+      "requestedAt": "2026-09-07T14:38:03.245Z",
+      "approvedAt": "2026-09-08T14:38:03.245Z"
+    }
+  ],
+  "verificationAuditLogs": [
+    {
+      "id": "val-001",
+      "action": "MANAGER_VERIFIED_IDENTITY",
+      "targetType": "manager",
+      "targetId": "manager_101",
+      "targetName": "Anthony Davis",
+      "performedBy": "NIA Synthetic Test Engine",
+      "role": "system",
+      "details": {
+        "documentType": "Ghana Card",
+        "hashedId": "1e3840782f425d6fe96b3fb517525e90af51277cd154d13b70b4ec823b7433a0",
+        "status": "verified"
+      },
+      "timestamp": "2026-09-05T14:38:03.246Z"
+    },
+    {
+      "id": "val-002",
+      "action": "MANAGER_APPROVED",
+      "targetType": "manager",
+      "targetId": "manager_101",
+      "targetName": "Anthony Davis",
+      "performedBy": "SuperAdmin",
+      "role": "admin",
+      "details": {
+        "reason": "Identity verified and management contract validated."
+      },
+      "timestamp": "2026-09-07T14:38:03.246Z"
+    },
+    {
+      "id": "val-003",
+      "action": "ONBOARDING_FEE_PAID",
+      "targetType": "payment",
+      "targetId": "PAY-PV50-2026-99120",
+      "targetName": "Heritage Palace Residency",
+      "performedBy": "Anthony Davis",
+      "role": "manager",
+      "details": {
+        "amount": 50,
+        "currency": "GHS",
+        "reference": "PAY-PV50-2026-99120"
+      },
+      "timestamp": "2026-09-09T08:38:03.246Z"
+    }
+  ],
+  "users": [
+    {
+      "email": "student@pinevela.com",
+      "username": "student",
+      "password": "student123",
+      "user": {
+        "id": "student_882",
+        "name": "Sarah Connor",
+        "role": "student",
+        "token": "token_student_882"
+      }
+    },
+    {
+      "email": "student2@pinevela.com",
+      "username": "marcus",
+      "password": "student123",
+      "user": {
+        "id": "student_102",
+        "name": "Marcus Wright",
+        "role": "student",
+        "token": "token_student_102"
+      }
+    },
+    {
+      "email": "student3@pinevela.com",
+      "username": "kyle",
+      "password": "student123",
+      "user": {
+        "id": "student_994",
+        "name": "Kyle Reese",
+        "role": "student",
+        "token": "token_student_994"
+      }
+    },
+    {
+      "email": "manager@pinevela.com",
+      "username": "manager",
+      "password": "manager123",
+      "user": {
+        "id": "manager_101",
+        "name": "Anthony Davis",
+        "role": "manager",
+        "token": "token_manager_101"
+      }
+    },
+    {
+      "email": "admin@pinevela.com",
+      "username": "admin",
+      "password": "admin123",
+      "user": {
+        "id": "admin_001",
+        "name": "System Administrator",
+        "role": "admin",
+        "token": "token_admin_001"
+      }
+    },
+    {
+      "email": "staff@pinevela.com",
+      "username": "staff",
+      "password": "staff123",
+      "user": {
+        "id": "staff-1",
+        "name": "John Doe (Plumber)",
+        "role": "staff",
+        "token": "token_staff_201"
+      }
+    }
+  ],
+  "notifications": [
+    {
+      "id": "notif-1",
+      "studentId": "STU-2024-8842",
+      "title": "Welcome to PineVela Residencies",
+      "message": "Your room assignment in Starlight Residency has been successfully activated. Use your digital key to unlock.",
+      "type": "success",
+      "date": "2026-06-28",
+      "read": false
+    },
+    {
+      "id": "notif-2",
+      "studentId": "STU-2024-8842",
+      "title": "Pre-checkin Meeting Approved",
+      "message": "Your pre-checkin video call meeting scheduled for 2026-06-25 at 10:30 has been Approved.",
+      "type": "info",
+      "date": "2026-06-24",
+      "read": true
+    }
+  ],
+  "chatMessages": [
+    {
+      "id": "msg-g1",
+      "channelType": "global",
+      "channelId": "global",
+      "senderId": "student_882",
+      "senderName": "Sarah (Resilience)",
+      "senderAvatar": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80",
+      "messageType": "text",
+      "content": "Hey everyone! Welcome to the PineVela student lounge. How is the study hall in your block?",
+      "createdAt": "2026-09-09T11:38:03.245Z"
+    },
+    {
+      "id": "msg-g2",
+      "channelType": "global",
+      "channelId": "global",
+      "senderId": "student_102",
+      "senderName": "Marcus the Techie",
+      "senderAvatar": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80",
+      "messageType": "text",
+      "content": "It is pretty quiet here in Emerald Heights. The AC is working fine.",
+      "createdAt": "2026-09-09T12:38:03.245Z"
+    },
+    {
+      "id": "msg-h1",
+      "channelType": "hostel",
+      "channelId": "hostel-1",
+      "senderId": "student_882",
+      "senderName": "Sarah (Resilience)",
+      "senderAvatar": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80",
+      "messageType": "text",
+      "content": "Hello neighbors! Has anyone seen the warden? Need to ask about parking slots.",
+      "createdAt": "2026-09-09T10:38:03.245Z"
+    },
+    {
+      "id": "msg-h2",
+      "channelType": "hostel",
+      "channelId": "hostel-1",
+      "senderId": "manager_101",
+      "senderName": "Anthony Davis (Manager)",
+      "senderAvatar": "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=150&q=80",
+      "messageType": "text",
+      "content": "Hello Sarah, parking registration can be done at the desk. I will be in my office from 9 AM.",
+      "createdAt": "2026-09-09T10:50:03.245Z"
+    },
+    {
+      "id": "msg-d1",
+      "channelType": "dm",
+      "channelId": "room-kyle-sarah",
+      "senderId": "student_994",
+      "senderName": "Kyle R.",
+      "senderAvatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80",
+      "messageType": "text",
+      "content": "Hey Sarah, do you have the notes for the Operating Systems lecture?",
+      "createdAt": "2026-09-09T13:38:03.245Z"
+    },
+    {
+      "id": "msg-d2",
+      "channelType": "dm",
+      "channelId": "room-kyle-sarah",
+      "senderId": "student_882",
+      "senderName": "Sarah (Resilience)",
+      "senderAvatar": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80",
+      "messageType": "text",
+      "content": "Sure! I will upload the PDF to our chat here in a second.",
+      "createdAt": "2026-09-09T14:08:03.245Z"
+    }
+  ],
+  "dmRooms": [
+    {
+      "id": "room-marcus-sarah",
+      "user1Id": "student_102",
+      "user2Id": "student_882",
+      "status": "pending",
+      "createdAt": "2026-09-09T14:38:03.242Z"
+    },
+    {
+      "id": "room-kyle-sarah",
+      "user1Id": "student_994",
+      "user2Id": "student_882",
+      "status": "accepted",
+      "createdAt": "2026-09-09T14:38:03.245Z"
+    }
+  ],
+  "chatProfiles": [
+    {
+      "studentId": "student_882",
+      "nickname": "Sarah (Resilience)",
+      "avatarUrl": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80"
+    },
+    {
+      "studentId": "student_102",
+      "nickname": "Marcus the Techie",
+      "avatarUrl": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80"
+    },
+    {
+      "studentId": "student_994",
+      "nickname": "Kyle R.",
+      "avatarUrl": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80"
+    }
+  ]
+}
