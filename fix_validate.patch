@@ -1,0 +1,15 @@
+--- src/components/HostelRegistration.tsx
++++ src/components/HostelRegistration.tsx
+@@ -278,13 +278,6 @@
+       if (!formData.defaultFee || formData.defaultFee <= 0) {
+         errors.defaultFee = 'Registration fee must be greater than 0';
+       }
+-    } else if (step === 9) {
+-      if (!user?.name && !formData.managerName.trim()) errors.managerName = 'Manager name is required';
+-      if (!formData.managerEmail.trim() || !formData.managerEmail.includes('@')) {
+-        errors.managerEmail = 'Valid manager email is required';
+-      }
+-      if (!formData.managerPhone.trim()) errors.managerPhone = 'Manager phone number is required';
+     } else if (step === 9) {
+       if (!formData.agreeTerms) errors.agreeTerms = 'You must confirm the registration policies';
+       if (!formData.accuracyCertified) errors.accuracyCertified = 'You must certify the accuracy of all entered data';

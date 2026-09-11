@@ -14,6 +14,9 @@ export interface PersistentStore {
   chatMessages: any[];
   dmRooms: any[];
   chatProfiles: any[];
+  boardRequests?: any[];
+  meetings?: any[];
+  managerAccountSettings?: Record<string, any>;
   platformSettings: {
     registrationFee: number;
     commission: number;
@@ -53,18 +56,21 @@ export function loadPersistentStore(defaultStore: PersistentStore): PersistentSt
     const parsed = JSON.parse(raw);
     
     const result: PersistentStore = {
-      hostels: Array.isArray(parsed.hostels) ? parsed.hostels : defaultStore.hostels,
+      hostels: (Array.isArray(parsed.hostels) && parsed.hostels.length > 0) ? parsed.hostels : defaultStore.hostels,
       bookingRequests: Array.isArray(parsed.bookingRequests) ? parsed.bookingRequests : defaultStore.bookingRequests,
       issueReports: Array.isArray(parsed.issueReports) ? parsed.issueReports : defaultStore.issueReports,
       activities: Array.isArray(parsed.activities) ? parsed.activities : defaultStore.activities,
       hostelVerifications: Array.isArray(parsed.hostelVerifications) ? parsed.hostelVerifications : defaultStore.hostelVerifications,
-      managerRegistrationRequests: Array.isArray(parsed.managerRegistrationRequests) ? parsed.managerRegistrationRequests : defaultStore.managerRegistrationRequests,
+      managerRegistrationRequests: (Array.isArray(parsed.managerRegistrationRequests) && parsed.managerRegistrationRequests.length > 0) ? parsed.managerRegistrationRequests : defaultStore.managerRegistrationRequests,
       verificationAuditLogs: Array.isArray(parsed.verificationAuditLogs) ? parsed.verificationAuditLogs : defaultStore.verificationAuditLogs,
-      users: Array.isArray(parsed.users) ? parsed.users : defaultStore.users,
+      users: (Array.isArray(parsed.users) && parsed.users.length > 0) ? parsed.users : defaultStore.users,
       notifications: Array.isArray(parsed.notifications) ? parsed.notifications : defaultStore.notifications,
       chatMessages: Array.isArray(parsed.chatMessages) ? parsed.chatMessages : defaultStore.chatMessages,
       dmRooms: Array.isArray(parsed.dmRooms) ? parsed.dmRooms : defaultStore.dmRooms,
       chatProfiles: Array.isArray(parsed.chatProfiles) ? parsed.chatProfiles : defaultStore.chatProfiles,
+      boardRequests: Array.isArray(parsed.boardRequests) ? parsed.boardRequests : (defaultStore.boardRequests || []),
+      meetings: Array.isArray(parsed.meetings) ? parsed.meetings : (defaultStore.meetings || []),
+      managerAccountSettings: (parsed.managerAccountSettings && typeof parsed.managerAccountSettings === 'object') ? parsed.managerAccountSettings : (defaultStore.managerAccountSettings || {}),
       platformSettings: parsed.platformSettings || defaultStore.platformSettings,
     };
 

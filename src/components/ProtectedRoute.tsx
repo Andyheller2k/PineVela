@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Navigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import PineLogo from './PineLogo';
+import LogoutConfirmationModal from './LogoutConfirmationModal';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -10,6 +11,7 @@ interface ProtectedRouteProps {
 
 export default function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
   const { user, loading, logout } = useAuth();
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   if (loading) {
     return (
@@ -66,13 +68,21 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
           <div className="flex flex-col gap-2.5">
             <NavigateToRoleDashboard role={user.role} />
             <button
-              onClick={logout}
-              className="w-full py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-xs transition-all"
+              onClick={() => setShowLogoutConfirm(true)}
+              className="w-full py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-xs transition-all cursor-pointer"
             >
               Sign out and change account
             </button>
           </div>
         </div>
+
+        <LogoutConfirmationModal
+          isOpen={showLogoutConfirm}
+          onClose={() => setShowLogoutConfirm(false)}
+          onConfirm={logout}
+          userRole={user.role}
+          userName={user.name}
+        />
       </div>
     );
   }

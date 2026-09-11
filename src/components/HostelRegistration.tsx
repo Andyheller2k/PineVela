@@ -67,11 +67,15 @@ interface HostelRegistrationProps {
   currentUserId?: string;
 }
 
+import { useAuth } from '../context/AuthContext';
+
 export default function HostelRegistration({
   onSuccess,
   onCancel,
   currentUserId
 }: HostelRegistrationProps) {
+  const { user } = useAuth();
+  
   // Master 10-Step Draft Initial State
   const initialDraftState: HostelRegistrationDraft = {
     // Step 1: Basic Info
@@ -98,6 +102,8 @@ export default function HostelRegistration({
     postalCode: '',
     digitalAddress: '',
     landmark: '',
+    campusProximity: '5-10 Mins Walk',
+    campusProximityDetails: 'Shuttle & walking routes',
 
     // Step 3: Map Location
     latitude: 5.6506,
@@ -154,7 +160,7 @@ export default function HostelRegistration({
     managerPhone: '',
     isNewManager: true,
 
-    // Step 10: Confirmation
+    // Step 9: Confirmation
     agreeTerms: false,
     accuracyCertified: false
   };
@@ -185,8 +191,7 @@ export default function HostelRegistration({
     { num: 6, title: 'Facilities', icon: ShieldCheck, desc: 'Amenities & utilities' },
     { num: 7, title: 'Policies', icon: FileText, desc: 'Curfew, rules & refund' },
     { num: 8, title: 'Pricing', icon: DollarSign, desc: 'Fees & payment cycles' },
-    { num: 9, title: 'Manager', icon: UserCheck, desc: 'Hostel administrator' },
-    { num: 10, title: 'Review & Submit', icon: CheckCircle2, desc: 'Verification & commitment' }
+    { num: 9, title: 'Review & Submit', icon: CheckCircle2, desc: 'Verification & commitment' }
   ];
 
   // 1. Load draft from localStorage on mount
@@ -275,12 +280,6 @@ export default function HostelRegistration({
         errors.defaultFee = 'Registration fee must be greater than 0';
       }
     } else if (step === 9) {
-      if (!formData.managerName.trim()) errors.managerName = 'Manager name is required';
-      if (!formData.managerEmail.trim() || !formData.managerEmail.includes('@')) {
-        errors.managerEmail = 'Valid manager email is required';
-      }
-      if (!formData.managerPhone.trim()) errors.managerPhone = 'Manager phone number is required';
-    } else if (step === 10) {
       if (!formData.agreeTerms) errors.agreeTerms = 'You must confirm the registration policies';
       if (!formData.accuracyCertified) errors.accuracyCertified = 'You must certify the accuracy of all entered data';
     }
@@ -291,7 +290,7 @@ export default function HostelRegistration({
 
   const handleNext = () => {
     if (validateStep(currentStep)) {
-      if (currentStep < 10) {
+      if (currentStep < 9) {
         setCurrentStep((prev) => prev + 1);
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
@@ -397,7 +396,7 @@ export default function HostelRegistration({
 
   // Final Atomic Submission
   const handleFinalSubmit = async () => {
-    if (!validateStep(10)) return;
+    if (!validateStep(9)) return;
 
     setIsSubmitting(true);
     setSubmitError(null);
@@ -462,10 +461,15 @@ export default function HostelRegistration({
         postalCode: formData.postalCode,
         digitalAddress: formData.digitalAddress,
         landmark: formData.landmark,
+        campusProximity: formData.campusProximity || '5-10 Mins Walk',
+        campusProximityDetails: formData.campusProximityDetails || 'Shuttle & walking routes',
         latitude: formData.latitude,
         longitude: formData.longitude,
         imageUrl: finalImageUrl,
+        image: finalImageUrl,
+        exteriorPhotoUrl: finalImageUrl,
         imagePath: finalImagePath,
+        hostelName: formData.name.trim(),
         totalCapacity: formData.maximumCapacity,
         capacity: formData.maximumCapacity,
         totalBeds: formData.maximumCapacity,
@@ -494,10 +498,12 @@ export default function HostelRegistration({
           applicationFee: formData.applicationFee,
           currency: formData.currency
         },
-        managerName: formData.managerName,
-        managerEmail: formData.managerEmail,
-        managerPhone: formData.managerPhone,
-        assignedManagerId: formData.assignedManagerId
+        managerId: currentUserId || user?.id || `MGR-${Date.now()}`,
+        managerName: user?.name || formData.managerName || 'Anthony Davis',
+        managerEmail: user?.email || formData.managerEmail || 'manager@pinevela.com',
+        managerPhone: user?.phone || formData.managerPhone || formData.contactPhone || '+233 24 123 4567',
+        managerPhoto: user?.photo || user?.avatar || (user as any)?.photoUrl || (user as any)?.avatarUrl || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
+        assignedManagerId: currentUserId || user?.id || ''
       };
 
       const res = await fetch('/api/hostels/register', {
@@ -676,7 +682,7 @@ export default function HostelRegistration({
               Multi-Step Hostel Onboarding
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Complete all 10 registration steps. Submission commits atomically to the persistent database on final step.
+              Complete all 9 registration steps. Submission commits atomically to the persistent database on final step.
             </p>
           </div>
 
@@ -710,7 +716,7 @@ export default function HostelRegistration({
           </div>
         </div>
 
-        {/* 10 Step Progress Nav */}
+        {/* 9 Step Progress Nav */}
         <div className="overflow-x-auto pb-2 -mx-2 px-2 no-scrollbar">
           <div className="flex items-center gap-2 min-w-max">
             {STEPS.map((s) => {
@@ -1039,6 +1045,30 @@ export default function HostelRegistration({
                       value={formData.landmark}
                       onChange={(e) => updateFormData({ landmark: e.target.value })}
                       className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-900 text-slate-800"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700">Campus Proximity Time/Walk <span className="text-rose-500">*</span></label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 5-10 Mins Walk"
+                      value={formData.campusProximity || ''}
+                      onChange={(e) => updateFormData({ campusProximity: e.target.value })}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-900 text-slate-800"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700">Campus Proximity Details <span className="text-rose-500">*</span></label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Shuttle & walking routes"
+                      value={formData.campusProximityDetails || ''}
+                      onChange={(e) => updateFormData({ campusProximityDetails: e.target.value })}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-900 text-slate-800"
+                      required
                     />
                   </div>
                 </div>
@@ -1478,77 +1508,11 @@ export default function HostelRegistration({
               </div>
             )}
 
-            {/* STEP 9: MANAGER ASSIGNMENT */}
+            {/* STEP 10: REVIEW, CERTIFICATION & SUBMIT */}
             {currentStep === 9 && (
               <div className="space-y-6">
                 <div>
-                  <h3 className="text-lg font-black text-slate-900 tracking-tight">Step 9: Resident Manager Assignment</h3>
-                  <p className="text-xs text-slate-500">Assign a designated hostel manager for daily operations, approvals, and student care.</p>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="sm:col-span-2 space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700">
-                      Resident Manager Full Name <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Sarah Johnson, Anthony Davis"
-                      value={formData.managerName}
-                      onChange={(e) => updateFormData({ managerName: e.target.value })}
-                      className={`w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-900 text-slate-800 ${
-                        validationErrors.managerName ? 'border-rose-400 bg-rose-50/30' : 'border-slate-200'
-                      }`}
-                    />
-                    {validationErrors.managerName && (
-                      <p className="text-[11px] text-rose-600 font-semibold">{validationErrors.managerName}</p>
-                    )}
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700">
-                      Manager Official Email <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="email"
-                      placeholder="manager@pinevela.com"
-                      value={formData.managerEmail}
-                      onChange={(e) => updateFormData({ managerEmail: e.target.value })}
-                      className={`w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-900 text-slate-800 ${
-                        validationErrors.managerEmail ? 'border-rose-400 bg-rose-50/30' : 'border-slate-200'
-                      }`}
-                    />
-                    {validationErrors.managerEmail && (
-                      <p className="text-[11px] text-rose-600 font-semibold">{validationErrors.managerEmail}</p>
-                    )}
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700">
-                      Manager Direct Mobile / WhatsApp <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="tel"
-                      placeholder="+233 24 123 4567"
-                      value={formData.managerPhone}
-                      onChange={(e) => updateFormData({ managerPhone: e.target.value })}
-                      className={`w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-900 text-slate-800 ${
-                        validationErrors.managerPhone ? 'border-rose-400 bg-rose-50/30' : 'border-slate-200'
-                      }`}
-                    />
-                    {validationErrors.managerPhone && (
-                      <p className="text-[11px] text-rose-600 font-semibold">{validationErrors.managerPhone}</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* STEP 10: REVIEW, CERTIFICATION & SUBMIT */}
-            {currentStep === 10 && (
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-black text-slate-900 tracking-tight">Step 10: Final Review & Atomic Submission</h3>
+                  <h3 className="text-lg font-black text-slate-900 tracking-tight">Step 9: Final Review & Atomic Submission</h3>
                   <p className="text-xs text-slate-500">
                     Verify all property data before executing atomic database insertion and image upload.
                   </p>
@@ -1600,9 +1564,8 @@ export default function HostelRegistration({
                       Assigned Management
                     </span>
                     <div>
-                      <p className="text-sm font-extrabold text-slate-900">{formData.managerName || 'None'}</p>
-                      <p className="text-xs text-slate-600">{formData.managerEmail || 'No email'}</p>
-                      <p className="text-xs text-slate-600">{formData.managerPhone || 'No phone'}</p>
+                      <p className="text-sm font-extrabold text-slate-900">{user?.name || 'Unknown Manager'}</p>
+                      <p className="text-xs text-slate-600">{user?.email || 'No email associated'}</p>
                     </div>
                     <div className="border-t border-slate-200/80 pt-2 text-xs">
                       <span className="text-slate-400 block text-[10px] uppercase font-bold">GPS Coordinates</span>
@@ -1950,22 +1913,35 @@ export default function HostelRegistration({
 
         {/* Bottom Navigation Buttons */}
         <div className="border-t border-slate-100 pt-6 mt-6 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={handleBack}
-            disabled={currentStep === 1 || isSubmitting}
-            className={`w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold border transition-colors ${
-              currentStep === 1 || isSubmitting
-                ? 'opacity-40 cursor-not-allowed text-slate-400 border-slate-200'
-                : 'text-slate-700 border-slate-200 bg-white hover:bg-slate-50'
-            }`}
-          >
-            <ArrowLeft size={15} />
-            <span>Previous Step</span>
-          </button>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={handleBack}
+              disabled={currentStep === 1 || isSubmitting}
+              className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold border transition-colors ${
+                currentStep === 1 || isSubmitting
+                  ? 'opacity-40 cursor-not-allowed text-slate-400 border-slate-200'
+                  : 'text-slate-700 border-slate-200 bg-white hover:bg-slate-50'
+              }`}
+            >
+              <ArrowLeft size={15} />
+              <span>Previous Step</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                saveDraftToStorage(formData);
+                onCancel();
+              }}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold text-blue-600 bg-blue-50 border border-blue-200 hover:bg-blue-100 transition-colors"
+            >
+              <Save size={15} />
+              <span>Save & Exit</span>
+            </button>
+          </div>
 
           <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
-            {currentStep < 10 ? (
+            {currentStep < 9 ? (
               <button
                 type="button"
                 onClick={handleNext}

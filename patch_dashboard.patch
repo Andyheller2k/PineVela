@@ -1,0 +1,76 @@
+--- src/components/PageManagerDashboard.tsx
++++ src/components/PageManagerDashboard.tsx
+@@ -7,9 +7,9 @@
+ import { 
+   Building2, Users, DollarSign, CheckCircle2, XCircle, Clock, Plus, 
+   ShieldCheck, LogOut, Search, Home, Hotel, Coffee, UserPlus, 
+-  AlertCircle, Check, Sparkles, ArrowRight, Layers, Wrench, Settings
++  AlertCircle, Check, Sparkles, ArrowRight, Layers, Wrench, Settings, Bell
+ } from 'lucide-react';
+ import { motion, AnimatePresence } from 'motion/react';
+ 
+ export default function PageManagerDashboard() {
+   const { user, logout, apiFetch } = useAuth();
+@@ -16,9 +16,10 @@
+   const { user, logout, apiFetch } = useAuth();
+   const navigate = useNavigate();
+ 
+-  const [activeTab, setActiveTab] = useState<'overview' | 'properties' | 'blocks' | 'staff' | 'maintenance'>('overview');
++  const [activeTab, setActiveTab] = useState<'overview' | 'properties' | 'blocks' | 'staff' | 'maintenance' | 'notifications'>('notifications');
+   const [loading, setLoading] = useState(true);
+   const [toastMessage, setToastMessage] = useState<string | null>(null);
+   const [selectedBlock, setSelectedBlock] = useState<any | null>(null);
++  const [showRegistration, setShowRegistration] = useState(false);
+ 
+   // Manager specific states
+@@ -28,8 +29,10 @@
+ 
+   // Check if manager has approved properties
+   const hasApprovedProperty = properties.some(p => p.status === 'Approved' || p.status === 'Active');
++  const hasAnyProperty = properties.length > 0;
+ 
+   const triggerToast = (msg: string) => {
+     setToastMessage(msg);
+@@ -67,6 +70,11 @@
+       } else {
+         setActivities([]);
+       }
++      
++      // Determine initial tab after fetching properties
++      if (managerProperties.length > 0) {
++        setActiveTab('overview');
++      }
+     } catch (err) {
+       console.error("Error loading manager data:", err);
+     } finally {
+@@ -128,11 +136,11 @@
+           {/* Navigation Tabs */}
+           <nav className="space-y-2">
+             <p className="px-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Operations Center</p>
+             {[
+-              { id: 'overview', label: 'Dashboard Overview', icon: ShieldCheck, sub: 'Live metrics & activity', locked: false },
+-              { id: 'properties', label: 'My Properties', icon: Building2, sub: 'Manage registered spaces', locked: false },
++              { id: 'overview', label: 'Dashboard Overview', icon: ShieldCheck, sub: 'Live metrics & activity', locked: !hasApprovedProperty },
++              { id: 'properties', label: 'My Properties', icon: Building2, sub: 'Manage registered spaces', locked: !hasApprovedProperty },
+               { id: 'blocks', label: 'Blocks & Rooms', icon: Layers, sub: 'Physical property structure', locked: !hasApprovedProperty },
+               { id: 'staff', label: 'Staff Management', icon: Users, sub: 'Manage your personnel', locked: !hasApprovedProperty },
+-              { id: 'maintenance', label: 'Maintenance', icon: Wrench, badge: activeIssues > 0 ? activeIssues : null, sub: 'Track active issues', locked: !hasApprovedProperty }
++              { id: 'maintenance', label: 'Maintenance', icon: Wrench, badge: activeIssues > 0 ? activeIssues : null, sub: 'Track active issues', locked: !hasApprovedProperty },
++              { id: 'notifications', label: 'Notifications', icon: Bell, badge: !hasApprovedProperty ? 1 : null, sub: 'System alerts', locked: false }
+             ].map(tab => {
+               const Icon = tab.icon;
+               const isActive = activeTab === tab.id;
+@@ -158,11 +166,10 @@
+                     </div>
+                     <div>
+                       <div className="text-xs font-semibold tracking-wide flex items-center gap-2">
+                         {tab.label}
+-                        {isLocked && <span className="text-[9px] bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded-md uppercase">Locked</span>}
+                       </div>
+                       <div className={`text-[10px] font-normal ${isActive && !isLocked ? 'text-blue-100' : 'text-slate-500'}`}>{tab.sub}</div>
+                     </div>
+                   </div>
+                   {tab.badge && !isLocked ? (
+@@ -176,14 +183,14 @@
+           </nav>
+         </div>

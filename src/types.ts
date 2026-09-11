@@ -33,6 +33,8 @@ export interface HostelRegistrationDraft {
   postalCode: string;
   digitalAddress: string; // GhanaPost GPS (e.g. GA-183-9024)
   landmark: string;
+  campusProximity?: string; // e.g. "5-10 Mins Walk"
+  campusProximityDetails?: string; // e.g. "Shuttle & walking routes"
 
   // Step 3: Map Location
   latitude: number;
@@ -84,6 +86,7 @@ export interface HostelRegistrationDraft {
   managerName: string;
   managerEmail: string;
   managerPhone: string;
+  managerPhoto?: string;
   isNewManager: boolean;
 
   // Verification & Authority Ownership
@@ -120,6 +123,7 @@ export interface Hostel {
   managerName: string;
   managerPhone: string;
   managerEmail: string;
+  managerPhoto?: string;
   managerId?: string;
   description: string;
   rating?: number;
@@ -127,6 +131,7 @@ export interface Hostel {
   subscriptionPaid?: boolean;
   isApproved?: boolean;
   approvalStatus?: 'Approved' | 'Pending Approval' | 'Rejected';
+  isDeleted?: boolean;
   blocks?: any[];
   amenities?: string[];
   facilities?: string[];
@@ -152,6 +157,8 @@ export interface Hostel {
   capacity?: number;
   rules?: any;
   pricing?: any;
+  campusProximity?: string;
+  campusProximityDetails?: string;
 }
 
 export interface HostelManager {
@@ -454,5 +461,62 @@ export interface OnboardingPaymentRecord {
   agreementAcknowledged: boolean;
   paymentMethod: 'Manual Confirmation (Direct Agreement)';
   paidAt: string;
+}
+
+export interface MeetingLog {
+  id: string;
+  hostelId?: string;
+  hostelName?: string;
+  managerId: string;
+  managerName: string;
+  requesterId?: string;
+  requesterName: string;
+  requesterType: 'student' | 'staff' | 'external' | 'administrator';
+  requesterEmail: string;
+  requesterPhone: string;
+  roomOrUnit?: string;
+  topic: string;
+  category: 'Room / Accommodation' | 'Maintenance Follow-up' | 'Payment / Billing' | 'Staff Operational Shift' | 'Disciplinary / Grievance' | 'General Consultation';
+  date: string; // YYYY-MM-DD
+  timeSlot: string; // e.g. "10:00 AM - 10:30 AM"
+  mode: 'In-Person (Admin Office)' | 'Google Meet / Video' | 'Phone Call';
+  status: 'Pending' | 'Approved' | 'Completed' | 'Rejected' | 'Rescheduled' | 'Cancelled';
+  meetingLinkOrVenue?: string;
+  notes?: string;
+  managerResponseNotes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface ManagerAccountSettings {
+  managerId: string;
+  notifications: {
+    emailAlerts: boolean;
+    smsAlerts: boolean;
+    maintenanceTicketAlerts: boolean;
+    bookingApplicationAlerts: boolean;
+    meetingRequestAlerts: boolean;
+  };
+  security: {
+    twoFactorAuth: boolean;
+    sessionTimeoutMinutes: number;
+    requirePasswordForPayouts: boolean;
+  };
+  meetingAvailability: {
+    allowStudentBookings: boolean;
+    allowStaffBookings: boolean;
+    workingDays: string[];
+    officeHoursStart: string;
+    officeHoursEnd: string;
+    slotDurationMinutes: number;
+    meetingModes: string[];
+    autoConfirmMeetings: boolean;
+    officeLocation: string;
+  };
+  emergencyContact: {
+    contactName: string;
+    contactPhone: string;
+    contactRelation: string;
+  };
 }
 

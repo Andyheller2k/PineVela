@@ -1,0 +1,61 @@
+--- src/components/PageAdminDashboard.tsx
++++ src/components/PageAdminDashboard.tsx
+@@ -825,8 +825,8 @@
+         {activeTab === 'residents' && (
+           <div className="space-y-6 animate-fadeIn relative z-10">
+             <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-white/80 border border-blue-200/80 p-6 rounded-3xl backdrop-blur-xl shadow-xl">
+               <div>
+-                <h3 className="text-xl font-bold text-slate-900">Residents Management</h3>
++                <h3 className="text-xl font-bold text-slate-900">Resident Approvals & Management</h3>
+                 <p className="text-xs text-slate-500">Subdivided into Hostels, Hotels, and Lounges residents. Review and approve registrations before they go live on PineVela.</p>
+               </div>
+               <button
+@@ -838,10 +838,42 @@
+               </button>
+             </div>
+ 
++            {/* PENDING APPROVALS SECTION */}
++            {residents.filter(r => r.status === 'Pending').length > 0 && (
++              <div className="bg-amber-50/80 border border-amber-200 p-6 rounded-3xl shadow-xl space-y-4">
++                <h4 className="text-lg font-bold text-amber-900 flex items-center gap-2">
++                  <AlertCircle className="w-5 h-5" />
++                  <span>Pending Resident Approvals ({residents.filter(r => r.status === 'Pending').length})</span>
++                </h4>
++                <div className="grid grid-cols-1 gap-4">
++                  {residents.filter(r => r.status === 'Pending').map(res => (
++                    <div key={res.id} className="flex flex-col md:flex-row items-start md:items-center justify-between bg-white border border-amber-200 p-4 rounded-2xl gap-4 shadow-sm">
++                      <div className="space-y-1">
++                        <div className="flex items-center space-x-3">
++                          <span className="font-bold text-slate-900 text-sm">{res.name}</span>
++                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">Awaiting Approval</span>
++                        </div>
++                        <p className="text-xs text-slate-600">
++                          Email: <span className="text-slate-900 font-semibold">{res.email}</span> | Residence: <span className="text-blue-600 font-semibold">{res.residenceName}</span> ({res.roomNumber})
++                        </p>
++                      </div>
++                      <div className="flex items-center space-x-3">
++                        <button
++                          onClick={() => {
++                            const updated = residents.map(r => r.id === res.id ? { ...r, status: 'Live & Approved' } : r);
++                            saveResidentsToStorage(updated);
++                            triggerToast(`Resident ${res.name} approved and live.`);
++                          }}
++                          className="text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-6 rounded-xl transition-all cursor-pointer shadow-sm"
++                        >
++                          Approve Resident
++                        </button>
++                      </div>
++                    </div>
++                  ))}
++                </div>
++              </div>
++            )}
++
+             {/* Residents List Subdivided */}
+             <div className="space-y-6">
+               {['Hostel', 'Hotel', 'Lounge'].map((category) => {
+-                const catResidents = residents.filter(r => (r.category || 'Hostel') === category);
++                const catResidents = residents.filter(r => (r.category || 'Hostel') === category && r.status !== 'Pending');
+                 return (
+                   <div key={category} className="bg-white/80 border border-blue-200/80 p-6 rounded-3xl backdrop-blur-xl shadow-xl space-y-4">
+                     <div className="flex items-center justify-between border-b border-blue-100 pb-4">

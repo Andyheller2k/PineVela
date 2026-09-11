@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Hostel } from '../types';
 import PineLogo from './PineLogo';
-import { Search, MapPin, Phone, ArrowRight, X, Sparkles, Shield, User, MessageSquare, Landmark, Layers, ChevronDown, HelpCircle, Navigation } from 'lucide-react';
+import { Search, MapPin, Phone, ArrowRight, X, Sparkles, Shield, User, MessageSquare, Landmark, Layers, ChevronDown, HelpCircle, Navigation, LogOut, ShieldCheck, Wifi, Zap, BedDouble, Building2, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import FAQAccordion from './FAQAccordion';
 import TestimonialsCarousel from './TestimonialsCarousel';
+import { useAuth } from '../context/AuthContext';
+import LogoutConfirmationModal from './LogoutConfirmationModal';
 
 import welcomeBg from '../../assets/welcome_bg.jpg';
 import hostelsBg from '../../assets/hostels_bg.jpg';
@@ -31,6 +33,9 @@ export default function Page1Public({
   const [scrollPercent, setScrollPercent] = useState(0);
   const [activeSection, setActiveSection] = useState('welcome-section');
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
+
+  const { user, logout } = useAuth();
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -211,12 +216,27 @@ export default function Page1Public({
             </div>
 
             <div className="flex items-center gap-4 text-sm font-medium">
-              <button
-                onClick={() => onNavigate('student-login')}
-                className="px-5 py-2.5 bg-blue-900 hover:bg-blue-800 text-white font-extrabold rounded-xl text-xs shadow-md transition-all cursor-pointer"
-              >
-                Login
-              </button>
+              {user ? (
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-bold text-slate-800 hidden sm:inline">
+                    {user.name} ({user.role})
+                  </span>
+                  <button
+                    onClick={() => setShowLogoutConfirm(true)}
+                    className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-extrabold rounded-xl text-xs shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Logout</span>
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => onNavigate('student-login')}
+                  className="px-5 py-2.5 bg-blue-900 hover:bg-blue-800 text-white font-extrabold rounded-xl text-xs shadow-md transition-all cursor-pointer"
+                >
+                  Login
+                </button>
+              )}
             </div>
           </div>
         </header>
@@ -439,9 +459,12 @@ export default function Page1Public({
                   {/* Image and Status Ribbon */}
                   <div className="relative h-44 w-full bg-slate-100 overflow-hidden">
                     <img
-                      src={hostel?.image || hostel?.imageUrl || 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=800&q=80'}
+                      src={hostel?.image || hostel?.imageUrl || (hostel as any)?.exteriorPhotoUrl || (hostel as any)?.imagePreviewUrl || (hostel as any)?.images?.[0] || 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=800&q=80'}
                       alt={hostel?.name || 'Hostel'}
                       referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=800&q=80';
+                      }}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
                     
@@ -470,15 +493,26 @@ export default function Page1Public({
 
                     {/* Manager Details */}
                     <div className="pt-3 border-t border-slate-100 flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-slate-100 overflow-hidden border border-slate-200 shrink-0 flex items-center justify-center font-bold text-xs text-blue-900">
-                        {hostel.managerName?.[0] || hostel.name?.[0] || 'H'}
-                      </div>
-                      <div className="text-left text-xs min-w-0">
-                        <p className="font-bold text-slate-800 truncate">{hostel.managerName || 'Resident Manager'}</p>
+                      {hostel.managerPhoto || (hostel as any).managerAvatar ? (
+                        <img
+                          src={hostel.managerPhoto || (hostel as any).managerAvatar}
+                          alt={hostel.managerName || 'Manager'}
+                          className="w-9 h-9 rounded-full object-cover border-2 border-white shadow-xs shrink-0"
+                        />
+                      ) : (
+                        <div className="w-9 h-9 rounded-full bg-blue-50 text-blue-900 overflow-hidden border border-blue-200 shrink-0 flex items-center justify-center font-bold text-xs">
+                          {hostel.managerName?.[0] || hostel.name?.[0] || 'M'}
+                        </div>
+                      )}
+                      <div className="text-left text-xs min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <p className="font-bold text-slate-800 truncate">{hostel.managerName || 'Resident Manager'}</p>
+                          <span className="text-[9px] font-extrabold text-emerald-700 bg-emerald-100/80 px-1.5 py-0.2 rounded shrink-0">Verified</span>
+                        </div>
                         <p className="text-slate-400 text-[10px] font-medium">Hostel Manager</p>
-                        <p className="text-slate-500 text-[10px] flex items-center gap-0.5 mt-0.5">
-                          <Phone size={10} />
-                          {hostel.managerPhone || 'Direct Line Available'}
+                        <p className="text-slate-500 text-[10px] flex items-center gap-1 mt-0.5">
+                          <Phone size={10} className="text-slate-400" />
+                          <span>{hostel.managerPhone || '+233 24 123 4567'}</span>
                         </p>
                       </div>
                     </div>
@@ -781,138 +815,300 @@ export default function Page1Public({
         </div>
       </footer>
 
-      {/* Page 2: Hostel Details Slide-out Drawer */}
+      {/* Page 2: Enlarged Full-Screen Hostel Details View */}
       <AnimatePresence>
         {selectedHostel && (
-          <>
-            {/* Backdrop */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              onClick={onCloseDrawer}
-              className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40"
-            />
-
-            {/* Drawer Panel */}
-            <motion.div
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed inset-y-0 right-0 max-w-xl w-full bg-white shadow-2xl z-50 flex flex-col overflow-y-auto border-l border-slate-100"
-            >
-              {/* Drawer Header */}
-              <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between z-10">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.98 }}
+            transition={{ duration: 0.25, ease: 'easeOut' }}
+            className="fixed inset-0 z-50 bg-gradient-to-br from-sky-100 via-blue-50 to-indigo-100/95 backdrop-blur-3xl overflow-y-auto flex flex-col"
+          >
+            {/* Top Full-Width Header Bar */}
+            <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-2xl border-b border-sky-200/80 px-4 sm:px-8 py-3.5 flex items-center justify-between shadow-xs">
+              <div className="flex items-center gap-3">
                 <button
                   onClick={onCloseDrawer}
-                  className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors flex items-center gap-2 text-slate-600 text-xs font-bold"
+                  className="px-3.5 py-2 bg-sky-100/80 hover:bg-sky-200/80 text-sky-950 font-black rounded-xl text-xs transition-colors flex items-center gap-2 cursor-pointer border border-sky-200/60"
                 >
-                  <span>←</span>
-                  <span>Hostel Details</span>
+                  <ArrowRight className="w-4 h-4 rotate-180" />
+                  <span>Back to All Hostels</span>
+                </button>
+                <div className="hidden sm:flex items-center gap-2 border-l border-sky-200/80 pl-3">
+                  <span className="text-sm font-black text-slate-950">{selectedHostel.name}</span>
+                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 bg-emerald-100 text-emerald-900 rounded-md border border-emerald-200">
+                    PineVela Accredited
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => onNavigate('student-login')}
+                  className="px-5 py-2 bg-blue-900 hover:bg-blue-800 text-white font-black rounded-xl text-xs shadow-md transition-all cursor-pointer"
+                >
+                  Student Login
                 </button>
                 <button
                   onClick={onCloseDrawer}
-                  className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-700 transition-colors"
+                  className="w-9 h-9 rounded-full bg-sky-100/80 hover:bg-sky-200 text-sky-900 flex items-center justify-center transition-colors cursor-pointer border border-sky-200/60"
+                  title="Close Full Screen View"
                 >
                   <X size={18} />
                 </button>
               </div>
+            </header>
 
-              {/* Drawer Content */}
-              <div className="p-6 space-y-6 flex-1">
-                {/* Cover Image with Status Overlay */}
-                <div className="relative h-64 w-full bg-slate-100 rounded-2xl overflow-hidden shadow-sm">
-                  <img
-                    src={selectedHostel?.image || selectedHostel?.imageUrl || 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=800&q=80'}
-                    alt={selectedHostel?.name || 'Hostel'}
-                    referrerPolicy="no-referrer"
-                    className="w-full h-full object-cover"
-                  />
-                  <span className="absolute top-4 left-4 bg-emerald-500 text-white text-xs uppercase font-extrabold px-3 py-1 rounded-full shadow-md">
-                    {selectedHostel?.status || 'Active'}
+            {/* Main Content Area */}
+            <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 md:p-8 space-y-8 text-slate-950">
+              {/* Full Screen Banner / Hero Image */}
+              <div className="relative w-full h-[320px] sm:h-[420px] md:h-[480px] rounded-3xl overflow-hidden shadow-2xl border border-white/80 bg-blue-50 group">
+                <img
+                  src={selectedHostel?.image || selectedHostel?.imageUrl || (selectedHostel as any)?.exteriorPhotoUrl || (selectedHostel as any)?.imagePreviewUrl || (selectedHostel as any)?.images?.[0] || 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=1200&q=80'}
+                  alt={selectedHostel.name}
+                  referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=1200&q=80';
+                  }}
+                  className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-700"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-sky-950/80 via-sky-950/20 to-transparent" />
+
+                {/* Badges Floating Top Right */}
+                <div className="absolute top-4 right-4 flex flex-wrap gap-2 items-center">
+                  <span className="bg-emerald-500/95 text-white text-xs font-black px-3.5 py-1.5 rounded-full shadow-lg backdrop-blur-md uppercase tracking-wider flex items-center gap-1.5">
+                    <ShieldCheck size={14} />
+                    <span>{selectedHostel.status || 'Active Accreditation'}</span>
+                  </span>
+                  <span className="bg-blue-900/95 text-white text-xs font-black px-3.5 py-1.5 rounded-full shadow-lg backdrop-blur-md uppercase tracking-wider flex items-center gap-1.5">
+                    <BedDouble size={14} />
+                    <span>{selectedHostel.bedsLeft ?? selectedHostel.availableSpaces ?? selectedHostel.totalCapacity ?? 0} Beds Available</span>
                   </span>
                 </div>
 
-                {/* View-only Notice */}
-                <div className="bg-blue-50 border border-blue-100 rounded-xl p-3.5 flex items-center gap-2.5 text-blue-900 text-xs font-semibold">
-                  <span>🛡️</span>
-                  <span>View-only — no room access from this screen</span>
-                </div>
-
-                {/* Info Details */}
-                <div className="space-y-2">
-                  <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-                    {selectedHostel.name}
-                  </h2>
-                  <div className="flex items-center gap-1 text-slate-500 text-xs">
-                    <MapPin size={14} className="text-slate-400" />
-                    <span>{selectedHostel.location}</span>
+                {/* Hero Overlay Details Bottom Left */}
+                <div className="absolute bottom-6 left-6 right-6 flex flex-col md:flex-row md:items-end justify-between gap-4 text-white">
+                  <div className="space-y-2 max-w-2xl">
+                    <div className="flex items-center gap-2">
+                      <span className="bg-amber-400 text-slate-950 text-[10px] font-black uppercase px-2.5 py-1 rounded-md tracking-wider">
+                        Premium Residence
+                      </span>
+                      <span className="text-xs font-semibold text-slate-200 flex items-center gap-1">
+                        <MapPin size={13} className="text-amber-400" />
+                        {selectedHostel.location}
+                      </span>
+                    </div>
+                    <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight text-white drop-shadow-md">
+                      {selectedHostel.name}
+                    </h1>
                   </div>
-                </div>
 
-                <p className="text-slate-600 text-sm leading-relaxed">
-                  {selectedHostel.description}
-                </p>
-
-                {/* Capacity & Spaces Grid */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Capacity</span>
-                    <span className="text-xl font-extrabold text-slate-800 block mt-1">{selectedHostel.totalCapacity ?? 120} Beds</span>
-                  </div>
-                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Available Spaces</span>
-                    <span className="text-xl font-extrabold text-blue-950 block mt-1">{selectedHostel.bedsLeft ?? selectedHostel.availableSpaces ?? 0}</span>
-                  </div>
-                </div>
-
-                {/* Key Information section */}
-                <div className="space-y-3 pt-2">
-                  <h3 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
-                    <span className="text-amber-500">ℹ️</span> Key Information
-                  </h3>
-                  <div className="bg-amber-50/50 border border-amber-100/60 rounded-xl p-4 text-xs text-slate-600 space-y-2">
-                    <div className="flex justify-between">
-                      <span className="font-medium">Electricity Availability</span>
-                      <span className="text-emerald-600 font-bold">24/7 Backup</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="font-medium">WiFi Speed</span>
-                      <span className="text-slate-800 font-bold">Up to 150 Mbps</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="font-medium">Laundry Room</span>
-                      <span className="text-slate-800 font-bold">Included (Bi-weekly)</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="font-medium">Security</span>
-                      <span className="text-emerald-600 font-bold">CCTV & Gate Guard</span>
-                    </div>
+                  {/* Pricing Badge Overlay */}
+                  <div className="bg-white/15 backdrop-blur-xl border border-white/30 p-4 rounded-2xl flex flex-col items-start md:items-end shrink-0 shadow-2xl">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-200">Annual Academic Fee</span>
+                    <span className="text-2xl sm:text-3xl font-black text-amber-300">
+                      GHS {(selectedHostel.price || 3500).toLocaleString()}
+                    </span>
+                    <span className="text-[10px] text-slate-200 font-medium">Includes utility, maintenance & high-speed wifi</span>
                   </div>
                 </div>
               </div>
 
-              {/* Drawer Sticky Footer with Actions */}
-              <div className="sticky bottom-0 bg-slate-50 border-t border-slate-100 p-6 space-y-4">
-                <p className="text-[11px] text-slate-500 text-center">
-                  Ready to book or manage? Log in to access specific rooms and your workspace.
-                </p>
-                
-                <button
-                  onClick={() => onNavigate('student-login')}
-                  className="w-full py-3 bg-blue-900 hover:bg-blue-850 text-white rounded-xl font-extrabold text-xs text-center shadow-lg shadow-blue-900/10 transition-all"
-                >
-                  Login to Continue
-                </button>
+              {/* Highlighted Stat Cards Grid (Crystal Glass Tabs) */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-white/70 backdrop-blur-xl p-5 rounded-2xl border border-white/90 shadow-lg shadow-sky-900/5 flex flex-col">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-600">Total Capacity</span>
+                  <span className="text-2xl font-black text-slate-950 mt-1">{selectedHostel.totalCapacity ?? 120} Beds</span>
+                  <span className="text-xs text-slate-700 mt-1 font-bold">Fully certified beds</span>
+                </div>
+
+                <div className="bg-emerald-50/70 backdrop-blur-xl border border-emerald-200/80 p-5 rounded-2xl shadow-lg shadow-emerald-900/5 flex flex-col">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-emerald-900">Available Spaces</span>
+                  <span className="text-2xl font-black text-emerald-950 mt-1">
+                    {selectedHostel.bedsLeft ?? selectedHostel.availableSpaces ?? 0} Beds Left
+                  </span>
+                  <span className="text-xs text-emerald-900 mt-1 font-bold">Immediate booking ready</span>
+                </div>
+
+                <div className="bg-blue-50/70 backdrop-blur-xl border border-blue-200/80 p-5 rounded-2xl shadow-lg shadow-blue-900/5 flex flex-col">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-blue-900">Verification Status</span>
+                  <span className="text-xl font-black text-blue-950 mt-1 flex items-center gap-1.5">
+                    <ShieldCheck className="w-5 h-5 text-blue-800" />
+                    <span>Verified Hostel</span>
+                  </span>
+                  <span className="text-xs text-blue-900 mt-1 font-bold">Inspected & Accredited</span>
+                </div>
+
+                <div className="bg-amber-50/70 backdrop-blur-xl border border-amber-200/80 p-5 rounded-2xl shadow-lg shadow-amber-900/5 flex flex-col">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-amber-900">Campus Proximity</span>
+                  <span className="text-xl font-black text-amber-950 mt-1">
+                    {selectedHostel?.campusProximity || (selectedHostel as any)?.campus_proximity || '5-10 Mins Walk'}
+                  </span>
+                  <span className="text-xs text-amber-900 mt-1 font-bold">
+                    {selectedHostel?.campusProximityDetails || (selectedHostel as any)?.campus_proximity_details || 'Shuttle & walking routes'}
+                  </span>
+                </div>
               </div>
 
-            </motion.div>
-          </>
+              {/* Two-Column Deep Details Section */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                {/* Left Column (8 cols) */}
+                <div className="lg:col-span-8 space-y-8">
+                  {/* Property Overview Crystal Glass Card */}
+                  <div className="bg-white/70 backdrop-blur-xl p-6 sm:p-8 rounded-3xl border border-white/90 shadow-lg shadow-sky-900/5 space-y-4">
+                    <h2 className="text-xl font-black text-slate-950 tracking-tight flex items-center gap-2">
+                      <Building2 className="w-5 h-5 text-blue-900" />
+                      <span>About {selectedHostel.name}</span>
+                    </h2>
+                    <p className="text-sm text-slate-800 leading-relaxed font-semibold">
+                      {selectedHostel.description || `${selectedHostel.name} offers high-quality student housing tailored for university students. Designed with modern architecture, spacious rooms, and round-the-clock security, it provides an ideal environment for academic focus and community life.`}
+                    </p>
+                  </div>
+
+                  {/* Highlighted Facilities & Amenities Crystal Glass Card */}
+                  <div className="bg-white/70 backdrop-blur-xl p-6 sm:p-8 rounded-3xl border border-white/90 shadow-lg shadow-sky-900/5 space-y-6">
+                    <h2 className="text-xl font-black text-slate-950 tracking-tight flex items-center gap-2">
+                      <Zap className="w-5 h-5 text-amber-500" />
+                      <span>Residence Features & Amenities</span>
+                    </h2>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="p-4 bg-white/80 backdrop-blur-md rounded-2xl border border-sky-100 flex items-start gap-3 shadow-xs">
+                        <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-900 flex items-center justify-center font-extrabold shrink-0">
+                          <Zap size={20} />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-black text-slate-950">24/7 Power Backup</h4>
+                          <p className="text-[11px] text-slate-700 font-bold mt-0.5">Heavy-duty automatic generator ensuring zero power interruptions during study hours.</p>
+                        </div>
+                      </div>
+
+                      <div className="p-4 bg-white/80 backdrop-blur-md rounded-2xl border border-sky-100 flex items-start gap-3 shadow-xs">
+                        <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-900 flex items-center justify-center font-extrabold shrink-0">
+                          <Wifi size={20} />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-black text-slate-950">Campus Fiber WiFi</h4>
+                          <p className="text-[11px] text-slate-700 font-bold mt-0.5">High-speed unlimited broadband access available across all blocks and study hubs.</p>
+                        </div>
+                      </div>
+
+                      <div className="p-4 bg-white/80 backdrop-blur-md rounded-2xl border border-sky-100 flex items-start gap-3 shadow-xs">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-900 flex items-center justify-center font-extrabold shrink-0">
+                          <ShieldCheck size={20} />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-black text-slate-950">CCTV & Gate Guard</h4>
+                          <p className="text-[11px] text-slate-700 font-bold mt-0.5">Electronic biometric/ID gates with 24-hour uniformed security officers on duty.</p>
+                        </div>
+                      </div>
+
+                      <div className="p-4 bg-white/80 backdrop-blur-md rounded-2xl border border-sky-100 flex items-start gap-3 shadow-xs">
+                        <div className="w-10 h-10 rounded-xl bg-sky-100 text-sky-900 flex items-center justify-center font-extrabold shrink-0">
+                          <CheckCircle2 size={20} />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-black text-slate-950">Clean Running Water</h4>
+                          <p className="text-[11px] text-slate-700 font-bold mt-0.5">Treated borehole water reserve tanks providing continuous water flow to all floors.</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Standard Room Configuration Overview */}
+                  <div className="bg-white/70 backdrop-blur-xl p-6 sm:p-8 rounded-3xl border border-white/90 shadow-lg shadow-sky-900/5 space-y-4">
+                    <h2 className="text-xl font-black text-slate-950 tracking-tight flex items-center gap-2">
+                      <BedDouble className="w-5 h-5 text-blue-900" />
+                      <span>Room Configuration Options</span>
+                    </h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+                      <div className="p-4 bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-2xl text-center space-y-2 shadow-xs">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Option A</span>
+                        <h4 className="text-sm font-black text-slate-950">1-in-a-Room Private</h4>
+                        <p className="text-xs text-blue-900 font-black">GHS {(selectedHostel.price ? selectedHostel.price * 1.5 : 5200).toLocaleString()}</p>
+                        <p className="text-[10px] text-slate-700 font-bold">Private washroom & study desk</p>
+                      </div>
+
+                      <div className="p-4 bg-blue-50/80 backdrop-blur-md border border-blue-200 rounded-2xl text-center space-y-2 relative overflow-hidden shadow-xs">
+                        <span className="absolute top-0 right-0 bg-blue-900 text-white text-[9px] font-black px-2 py-0.5 rounded-bl-lg">POPULAR</span>
+                        <span className="text-[10px] font-black uppercase tracking-wider text-blue-800">Option B</span>
+                        <h4 className="text-sm font-black text-slate-950">2-in-a-Room Shared</h4>
+                        <p className="text-xs text-blue-900 font-black">GHS {(selectedHostel.price || 3500).toLocaleString()}</p>
+                        <p className="text-[10px] text-slate-700 font-bold">En-suite washroom & dual wardrobes</p>
+                      </div>
+
+                      <div className="p-4 bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-2xl text-center space-y-2 shadow-xs">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Option C</span>
+                        <h4 className="text-sm font-black text-slate-950">4-in-a-Room Economy</h4>
+                        <p className="text-xs text-blue-900 font-black">GHS {(selectedHostel.price ? selectedHostel.price * 0.75 : 2600).toLocaleString()}</p>
+                        <p className="text-[10px] text-slate-700 font-bold">Spacious layout & shared facilities</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Column (4 cols) */}
+                <div className="lg:col-span-4 space-y-6">
+                  {/* Resident Manager Profile Card (Crystal Glass) */}
+                  <div className="bg-white/70 backdrop-blur-xl p-6 rounded-3xl border border-white/90 shadow-lg shadow-sky-900/5 space-y-4">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                      <User size={14} className="text-blue-900" />
+                      <span>Resident Property Manager</span>
+                    </h3>
+
+                    <div className="flex items-center gap-4">
+                      {selectedHostel.managerPhoto || (selectedHostel as any).managerAvatar ? (
+                        <img
+                          src={selectedHostel.managerPhoto || (selectedHostel as any).managerAvatar}
+                          alt={selectedHostel.managerName || 'Manager'}
+                          className="w-14 h-14 rounded-2xl object-cover border-2 border-blue-100 shadow-sm shrink-0"
+                        />
+                      ) : (
+                        <div className="w-14 h-14 rounded-2xl bg-blue-900 text-white flex items-center justify-center font-black text-lg shadow-sm shrink-0">
+                          {selectedHostel.managerName?.[0] || 'M'}
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <h4 className="text-base font-black text-slate-950 truncate">
+                            {selectedHostel.managerName || 'Anthony Davis'}
+                          </h4>
+                          <span className="text-[9px] font-black text-emerald-900 bg-emerald-100 px-1.5 py-0.5 rounded shrink-0">
+                            Verified
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-600 font-bold truncate">{selectedHostel.managerEmail || 'manager@pinevela.com'}</p>
+                        <p className="text-xs text-blue-900 font-black mt-1">{selectedHostel.managerPhone || '+233 24 123 4567'}</p>
+                      </div>
+                    </div>
+
+                    <a
+                      href={`tel:${selectedHostel.managerPhone || '+233241234567'}`}
+                      className="w-full py-3 bg-blue-900 hover:bg-blue-800 text-white font-black rounded-xl text-xs flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer"
+                    >
+                      <Phone size={14} />
+                      <span>Call Property Manager</span>
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </main>
+          </motion.div>
         )}
       </AnimatePresence>
 
+      {/* Logout Confirmation Modal */}
+      <LogoutConfirmationModal
+        isOpen={showLogoutConfirm}
+        onClose={() => setShowLogoutConfirm(false)}
+        onConfirm={() => {
+          logout();
+          setShowLogoutConfirm(false);
+        }}
+        userRole={user?.role}
+        userName={user?.name}
+      />
     </div>
   );
 }

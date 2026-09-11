@@ -14,6 +14,12 @@ export interface AuthenticatedUser {
   address?: string;
   isVerified?: boolean;
   verificationStatus?: string;
+  photo?: string;
+  avatar?: string;
+  photoUrl?: string;
+  avatarUrl?: string;
+  hasApprovedHostel?: boolean;
+  hostelStatus?: string;
 }
 
 interface AuthContextType {
@@ -45,9 +51,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           });
           if (res.ok) {
             const userData = await res.json();
+            let hasApprovedHostel = false;
+            let hostelStatus = 'None';
+
+            if (userData.role === 'manager') {
+              try {
+                const hostelRes = await fetch('/api/manager/my-hostel', {
+                  headers: {
+                    'Authorization': `Bearer ${savedToken}`,
+                    'Content-Type': 'application/json'
+                  }
+                });
+                if (hostelRes.ok) {
+                  const hostelData = await hostelRes.json();
+                  if (hostelData?.hostel) {
+                    const h = hostelData.hostel;
+                    const isApproved = h.isApproved === true || h.isApproved === 'true' || h.approvalStatus === 'Approved' || h.approvalStatus === 'approved' || h.status === 'Approved' || h.status === 'approved' || h.status === 'Active' || h.status === 'active' || h.status === 'Open' || h.status === 'open';
+                    hasApprovedHostel = isApproved;
+                    hostelStatus = h.approvalStatus || h.status || 'Pending';
+                  }
+                }
+              } catch (e) {
+                console.error("Error prefetching hostel status during auth init:", e);
+              }
+            }
+
             setUser({
               ...userData,
-              token: savedToken
+              token: savedToken,
+              hasApprovedHostel,
+              hostelStatus
             });
           } else {
             // Token is invalid/expired
@@ -82,11 +115,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const userData: AuthenticatedUser = await res.json();
+    let hasApprovedHostel = false;
+    let hostelStatus = 'None';
+
+    if (userData.role === 'manager') {
+      try {
+        const hostelRes = await fetch('/api/manager/my-hostel', {
+          headers: {
+            'Authorization': `Bearer ${userData.token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        if (hostelRes.ok) {
+          const hostelData = await hostelRes.json();
+          if (hostelData?.hostel) {
+            const h = hostelData.hostel;
+            const isApproved = h.isApproved === true || h.isApproved === 'true' || h.approvalStatus === 'Approved' || h.approvalStatus === 'approved' || h.status === 'Approved' || h.status === 'approved' || h.status === 'Active' || h.status === 'active' || h.status === 'Open' || h.status === 'open';
+            hasApprovedHostel = isApproved;
+            hostelStatus = h.approvalStatus || h.status || 'Pending';
+          }
+        }
+      } catch (e) {
+        console.error("Error prefetching hostel status during login:", e);
+      }
+    }
+
+    const finalUser = {
+      ...userData,
+      hasApprovedHostel,
+      hostelStatus
+    };
+
     localStorage.setItem('pinevela_session_token', userData.token);
     localStorage.setItem('token', userData.token);
     localStorage.setItem('pinevela_auth_token', userData.token);
-    setUser(userData);
-    return userData;
+    setUser(finalUser);
+    return finalUser;
   };
 
   const setSessionUser = (newSessionUser: AuthenticatedUser) => {

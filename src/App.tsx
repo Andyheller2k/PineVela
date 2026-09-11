@@ -10,6 +10,7 @@ import Page1Public from './components/Page1Public';
 import PageUnifiedLogin from './components/PageUnifiedLogin';
 import PageManagerOnboarding from './components/PageManagerOnboarding';
 import PageAdminDashboard from './components/PageAdminDashboard';
+import PageManagerDashboard from './components/PageManagerDashboard';
 
 // Elegant wrapper for transition animations
 function PageWrapper({ children, noAnimation = false }: { children: React.ReactNode; noAnimation?: boolean }) {
@@ -46,6 +47,24 @@ function AppContent() {
   const [activities, setActivities] = useState<any[]>([]);
   const [loadingData, setLoadingData] = useState<boolean>(true);
   const [selectedPublicHostel, setSelectedPublicHostel] = useState<Hostel | null>(null);
+
+  // Refetch hostels on every route change (e.g., when returning to landing page after admin approval)
+  useEffect(() => {
+    const refreshHostels = async () => {
+      try {
+        const response = await fetch('/api/hostels');
+        if (response.ok) {
+          const hostelsList = await response.json();
+          if (Array.isArray(hostelsList)) {
+            setHostels(hostelsList);
+          }
+        }
+      } catch (err) {
+        console.warn("Notice refreshing hostels on route change:", err);
+      }
+    };
+    refreshHostels();
+  }, [location.pathname]);
 
   // Synchronize data from the backend
   useEffect(() => {
@@ -201,7 +220,12 @@ function AppContent() {
           element={
             <PageWrapper>
               <Page1Public
-                hostels={hostels.length > 0 ? hostels : []}
+                hostels={hostels.filter(h => {
+                  if (h.isDeleted) return false;
+                  const isApproved = h.isApproved === true || h.approvalStatus === 'Approved' || (h as any).status === 'Approved';
+                  const isExplicitPending = (h.approvalStatus === 'Pending Approval' || (h as any).status === 'Pending Approval') && h.isApproved !== true;
+                  return isApproved && !isExplicitPending;
+                })}
                 selectedHostel={selectedPublicHostel}
                 onSelectHostel={(hostel) => setSelectedPublicHostel(hostel)}
                 onCloseDrawer={() => setSelectedPublicHostel(null)}
@@ -240,6 +264,18 @@ function AppContent() {
             <ProtectedRoute allowedRoles={['admin']}>
               <PageWrapper>
                 <PageAdminDashboard />
+              </PageWrapper>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* 2D. MANAGER DASHBOARD ROUTE */}
+        <Route
+          path="/manager/dashboard"
+          element={
+            <ProtectedRoute allowedRoles={['manager']}>
+              <PageWrapper>
+                <PageManagerDashboard />
               </PageWrapper>
             </ProtectedRoute>
           }

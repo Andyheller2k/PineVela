@@ -22,6 +22,9 @@ import {
   dbGetMeetings,
   dbCreateMeeting,
   dbUpdateMeeting,
+  dbDeleteMeeting,
+  dbGetManagerAccountSettings,
+  dbUpdateManagerAccountSettings,
   dbGetNotifications,
   dbCreateNotification,
   dbMarkNotificationRead,
@@ -54,7 +57,12 @@ import {
   dbCreateOnboardingPayment,
   dbAssignHostelManager,
   dbGetSettings,
-  dbUpdateSettings
+  dbUpdateSettings,
+  getStoreInstance,
+  dbDeleteHostel,
+  dbGetBoardRequests,
+  dbCreateBoardRequest,
+  dbUpdateBoardRequest
 } from "./localDb.js";
 import {
   defaultVerificationProvider,
@@ -65,8 +73,34 @@ import {
 } from "./verificationService.js";
 import { loadPersistentStore, savePersistentStore } from "./persistentDb.js";
 
-// Stateful backend baseline datasets
-const defaultHostels: any[] = [];
+// Stateful backend baseline datasets - only 1 registered manager and accredited property
+const defaultHostels: any[] = [
+  {
+    id: 'hostel-1',
+    name: 'Emerald Heights Block A',
+    location: 'Legon Campus East Gate, Accra',
+    wing: 'North Wing',
+    status: 'Approved',
+    isApproved: true,
+    approvalStatus: 'Approved',
+    bedsLeft: 18,
+    totalCapacity: 120,
+    availableSpaces: 18,
+    price: 3500,
+    image: 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=800&q=80',
+    imageUrl: 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=800&q=80',
+    managerName: 'Anthony Davis',
+    managerPhone: '+233 24 123 4567',
+    managerEmail: 'manager@pinevela.com',
+    managerPhoto: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
+    managerId: 'manager_101',
+    description: 'Premier air-conditioned residential accommodation for university scholars with fiber-optic Wi-Fi and 24/7 security.',
+    rating: 4.9,
+    registrationDate: '2026-01-15',
+    subscriptionPaid: true,
+    hostel_type: 'Hostel'
+  }
+];
 
 const initialHostels: any[] = defaultHostels;
 
@@ -100,40 +134,7 @@ const initialBookingRequests = [
   }
 ];
 
-const initialIssueReports = [
-  {
-    id: 'issue-1',
-    title: 'Leaking Pipe in Washroom',
-    category: 'Plumbing',
-    urgency: 'High',
-    description: 'The main water supply pipe in the Block B washroom has a steady leak, flooding the second stall corridor.',
-    photos: ['https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=400&q=80'],
-    contactMethod: 'In-app Notification',
-    studentName: 'Sarah Connor',
-    studentId: 'STU-882',
-    hostelName: 'Pine Crest Residency',
-    blockFloor: 'Block B, 4th Floor',
-    roomBed: 'Room 402, Bed A',
-    status: 'Pending',
-    date: '2026-06-28'
-  },
-  {
-    id: 'issue-2',
-    title: 'AC Unit Not Cooling',
-    category: 'Electrical',
-    urgency: 'Medium',
-    description: 'The air conditioner in room 302 runs but only blows warm air, making studying during daytime very difficult.',
-    photos: [],
-    contactMethod: 'Email',
-    studentName: 'David K.',
-    studentId: 'STU-2024-1024',
-    hostelName: 'Sapphire Gardens',
-    blockFloor: 'West Wing, 3rd Floor',
-    roomBed: 'Room 302, Bed B',
-    status: 'Pending',
-    date: '2026-06-27'
-  }
-];
+const initialIssueReports: any[] = [];
 
 const initialActivities = [
   {
@@ -169,26 +170,7 @@ let issueReports = [...initialIssueReports];
 let activities = [...initialActivities];
 let platformSettings: any;
 
-const initialStaff = [
-  {
-    id: 'staff-1',
-    name: 'John Doe',
-    role: 'Plumber',
-    phone: '+23324123456',
-    contactMethod: 'WhatsApp',
-    email: 'john.doe@pinevela.com',
-    hostelId: 'hostel-1'
-  },
-  {
-    id: 'staff-2',
-    name: 'Jane Smith',
-    role: 'Electrician',
-    phone: '+23324123457',
-    contactMethod: 'Email',
-    email: 'jane.smith@pinevela.com',
-    hostelId: 'hostel-1'
-  }
-];
+const initialStaff: any[] = [];
 let staff = [...initialStaff];
 
 // Chat state containers
@@ -299,30 +281,7 @@ let chatMessages: any[] = [
   }
 ];
 
-let meetings = [
-  {
-    id: 'meet-1',
-    studentId: 'STU-2024-8842',
-    studentName: 'Alex Thompson',
-    hostelName: 'Pine Crest Residency',
-    type: 'In-Person',
-    date: '2026-06-30',
-    time: '14:00',
-    reason: 'Discuss room double occupancy guidelines and rules.',
-    status: 'Pending'
-  },
-  {
-    id: 'meet-2',
-    studentId: 'STU-2024-8842',
-    studentName: 'Alex Thompson',
-    hostelName: 'Pine Crest Residency',
-    type: 'Video Call',
-    date: '2026-06-25',
-    time: '10:30',
-    reason: 'Pre-checkin query about high speed internet access.',
-    status: 'Approved'
-  }
-];
+let meetings: any[] = [];
 
 let notifications = [
   {
@@ -628,6 +587,12 @@ let MOCK_USERS = [
     user: {
       id: 'manager_101',
       name: 'Anthony Davis',
+      email: 'manager@pinevela.com',
+      phone: '+233 24 123 4567',
+      photo: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
+      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
+      photoUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
+      avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
       role: 'manager',
       token: 'token_manager_101'
     }
@@ -668,26 +633,10 @@ let MOCK_USERS = [
   }
 ];
 
-// Load Persistent Local Storage
-const persistentData = loadPersistentStore({
+// Load Persistent Local Storage through unified store instance
+const persistentData = getStoreInstance({
   hostels: defaultHostels,
-  bookingRequests: initialBookingRequests,
-  issueReports: initialIssueReports,
-  activities: initialActivities,
-  hostelVerifications,
-  managerRegistrationRequests: managerRequests,
-  verificationAuditLogs,
-  users: MOCK_USERS,
-  notifications,
-  chatMessages,
-  dmRooms,
-  chatProfiles,
-  platformSettings: {
-    registrationFee: 3500,
-    commission: 5,
-    announcement: 'Welcome to PineVela Academic Year 2026/2027.',
-    maintenanceMode: false
-  }
+  users: MOCK_USERS
 });
 
 hostels = persistentData.hostels;
@@ -695,7 +644,12 @@ bookingRequests = persistentData.bookingRequests;
 issueReports = persistentData.issueReports;
 activities = persistentData.activities;
 hostelVerifications = persistentData.hostelVerifications;
-managerRequests = persistentData.managerRegistrationRequests;
+const seenInitialReqIds = new Set<string>();
+managerRequests = (persistentData.managerRegistrationRequests || []).filter(r => {
+  if (!r?.id || seenInitialReqIds.has(r.id)) return false;
+  seenInitialReqIds.add(r.id);
+  return true;
+});
 verificationAuditLogs = persistentData.verificationAuditLogs;
 MOCK_USERS = persistentData.users;
 notifications = persistentData.notifications;
@@ -705,21 +659,21 @@ chatProfiles = persistentData.chatProfiles;
 platformSettings = persistentData.platformSettings;
 
 export function syncStore(): void {
-  savePersistentStore({
-    hostels,
-    bookingRequests,
-    issueReports,
-    activities,
-    hostelVerifications,
-    managerRegistrationRequests: managerRequests,
-    verificationAuditLogs,
-    users: MOCK_USERS,
-    notifications,
-    chatMessages,
-    dmRooms,
-    chatProfiles,
-    platformSettings
-  });
+  persistentData.hostels = hostels;
+  persistentData.bookingRequests = bookingRequests;
+  persistentData.issueReports = issueReports;
+  persistentData.activities = activities;
+  persistentData.hostelVerifications = hostelVerifications;
+  persistentData.managerRegistrationRequests = managerRequests;
+  persistentData.verificationAuditLogs = verificationAuditLogs;
+  persistentData.users = MOCK_USERS;
+  persistentData.notifications = notifications;
+  persistentData.chatMessages = chatMessages;
+  persistentData.dmRooms = dmRooms;
+  persistentData.chatProfiles = chatProfiles;
+  persistentData.platformSettings = platformSettings;
+
+  savePersistentStore(persistentData);
 }
 
 async function startServer() {
@@ -1332,6 +1286,114 @@ async function startServer() {
     res.json(req.user);
   });
 
+  // Update profile details (e.g. photo, name, phone, etc.) and sync everywhere
+  const handleProfileUpdate = async (req: any, res: any) => {
+    try {
+      const { name, phone, photo, avatar, photoUrl, avatarUrl, organization, roleTitle, address } = req.body;
+      const userId = req.user.id;
+      const cleanEmail = (req.user.email || '').toLowerCase().trim();
+
+      const userIndex = MOCK_USERS.findIndex(u => 
+        (u.user && u.user.id === userId) || 
+        (u.user && u.user.email && cleanEmail && u.user.email.toLowerCase().trim() === cleanEmail) ||
+        (u.email && cleanEmail && u.email.toLowerCase().trim() === cleanEmail)
+      );
+
+      if (userIndex === -1) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const targetUserObj: any = MOCK_USERS[userIndex];
+      const isUserVerified = Boolean(
+        targetUserObj.user?.isVerified === true ||
+        targetUserObj.user?.verificationStatus === 'approved' ||
+        targetUserObj.user?.verificationStatus === 'verified' ||
+        req.user?.isVerified === true ||
+        req.user?.verificationStatus === 'approved' ||
+        req.user?.verificationStatus === 'verified'
+      );
+
+      const updatedPhoto = photo || avatar || photoUrl || avatarUrl || req.user.photo || req.user.avatar || req.user.photoUrl;
+      const updatedName = name || req.user.name;
+      const updatedPhone = phone || req.user.phone;
+      const updatedOrg = isUserVerified
+        ? (targetUserObj.user?.organization || req.user.organization || organization)
+        : (organization !== undefined ? organization : req.user.organization);
+      const updatedRoleTitle = isUserVerified
+        ? (targetUserObj.user?.roleTitle || req.user.roleTitle || roleTitle)
+        : (roleTitle !== undefined ? roleTitle : req.user.roleTitle);
+      const updatedAddress = address !== undefined ? address : req.user.address;
+
+      targetUserObj.user = {
+        ...(targetUserObj.user || {}),
+        name: updatedName,
+        phone: updatedPhone,
+        photo: updatedPhoto,
+        avatar: updatedPhoto,
+        photoUrl: updatedPhoto,
+        avatarUrl: updatedPhoto,
+        organization: updatedOrg,
+        roleTitle: updatedRoleTitle,
+        address: updatedAddress
+      };
+
+      if (targetUserObj.name !== undefined) targetUserObj.name = updatedName;
+      if (targetUserObj.phone !== undefined) targetUserObj.phone = updatedPhone;
+      if (targetUserObj.avatar !== undefined) targetUserObj.avatar = updatedPhoto;
+
+      // Sync across all registered hostels if user is manager or staff
+      const currentHostels = await dbGetHostels(hostels);
+      for (const h of currentHostels) {
+        if (
+          (h.managerId && h.managerId === userId) || 
+          (h.assignedManagerId && h.assignedManagerId === userId) || 
+          (h.managerEmail && cleanEmail && h.managerEmail.toLowerCase().trim() === cleanEmail)
+        ) {
+          h.managerName = updatedName;
+          h.managerPhone = updatedPhone;
+          h.managerPhoto = updatedPhoto;
+          h.managerAvatar = updatedPhoto;
+          await dbUpdateHostel(h.id, {
+            managerName: updatedName,
+            managerPhone: updatedPhone,
+            managerPhoto: updatedPhoto,
+            managerAvatar: updatedPhoto
+          }, hostels);
+        }
+      }
+
+      // Sync across managerRequests and managerVerifications
+      for (const mr of managerRequests) {
+        if (mr.managerId === userId || (mr.managerEmail && cleanEmail && mr.managerEmail.toLowerCase().trim() === cleanEmail)) {
+          mr.managerName = updatedName;
+          mr.managerPhone = updatedPhone;
+          if (updatedOrg) mr.organization = updatedOrg;
+          if (updatedRoleTitle) mr.roleTitle = updatedRoleTitle;
+        }
+      }
+      for (const mv of managerVerifications) {
+        if (mv.managerId === userId || (mv.managerEmail && cleanEmail && mv.managerEmail.toLowerCase().trim() === cleanEmail)) {
+          mv.managerName = updatedName;
+          mv.managerPhone = updatedPhone;
+        }
+      }
+
+      syncStore();
+
+      return res.json({
+        success: true,
+        user: targetUserObj.user,
+        message: "Profile updated successfully across all records."
+      });
+    } catch (err: any) {
+      console.error("Profile update error:", err);
+      return res.status(500).json({ error: err.message || "Failed to update profile" });
+    }
+  };
+
+  app.put("/api/auth/profile", requireAuth(), handleProfileUpdate);
+  app.post("/api/auth/profile", requireAuth(), handleProfileUpdate);
+
   // --- Manager Requests Endpoints ---
   app.get("/api/manager-requests", async (req: any, res) => {
     const currentRequests = await dbGetManagerRequests(managerRequests);
@@ -1488,18 +1550,46 @@ async function startServer() {
 
       // Update manager in MOCK_USERS
       const matchedUser = MOCK_USERS.find(
-        u => u.user.id === target.managerId || (u.email && u.email.toLowerCase().trim() === cleanEmail)
+        u => (target.managerId && u.user.id === target.managerId) || (u.email && u.email.toLowerCase().trim() === cleanEmail)
       );
       if (matchedUser) {
         (matchedUser.user as any).isVerified = true;
         (matchedUser.user as any).verificationStatus = 'approved';
       }
 
+      // Also ensure any matching hostel for this manager is approved & active
+      const currentHostels = await dbGetHostels(hostels);
+      let matchedHostelFound = false;
+      for (const h of currentHostels) {
+        const isMgr = (h.managerId && target.managerId && h.managerId === target.managerId) ||
+                      (h.assignedManagerId && target.managerId && h.assignedManagerId === target.managerId) ||
+                      (h.managerEmail && cleanEmail && h.managerEmail.toLowerCase().trim() === cleanEmail) ||
+                      (target.propertyName && h.name && h.name.toLowerCase().trim() === target.propertyName.toLowerCase().trim()) ||
+                      (target.proposedHostelName && h.name && h.name.toLowerCase().trim() === target.proposedHostelName.toLowerCase().trim());
+        if (isMgr) {
+          matchedHostelFound = true;
+          h.isApproved = true;
+          h.approvalStatus = 'Approved';
+          h.status = 'Open';
+          h.managerId = target.managerId || h.managerId;
+          h.managerEmail = target.managerEmail || cleanEmail || h.managerEmail;
+          h.managerName = target.managerName || h.managerName;
+          await dbUpdateHostel(h.id, {
+            isApproved: true,
+            approvalStatus: 'Approved',
+            status: 'Open',
+            managerId: h.managerId,
+            managerEmail: h.managerEmail,
+            managerName: h.managerName
+          }, hostels);
+        }
+      }
+
       syncStore();
 
       await dbCreateActivity({
         id: `act-new-${Date.now()}`,
-        text: `Admin APPROVED hostel registration request for Manager "${target.managerName}" (${target.propertyName || target.proposedHostelName}).`,
+        text: `Admin APPROVED manager account for "${target.managerName}". Manager can now log in and register property.`,
         time: 'Just now',
         type: 'success'
       }, activities);
@@ -2949,9 +3039,11 @@ async function startServer() {
       // Attach manager information if manager registered
       if (isManager) {
         registrationData.assignedManagerId = req.user.id;
-        registrationData.managerName = req.user.name || registrationData.managerName;
-        registrationData.managerEmail = req.user.email || registrationData.managerEmail;
-        registrationData.managerPhone = req.user.phone || registrationData.managerPhone;
+        registrationData.managerId = req.user.id;
+        registrationData.managerName = req.user.name || registrationData.managerName || 'Anthony Davis';
+        registrationData.managerEmail = req.user.email || registrationData.managerEmail || 'manager@pinevela.com';
+        registrationData.managerPhone = req.user.phone || registrationData.managerPhone || '+233 24 123 4567';
+        registrationData.managerPhoto = req.user.photo || req.user.avatar || (req.user as any).photoUrl || (req.user as any).avatarUrl || registrationData.managerPhoto || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80';
       }
 
       const result = await dbRegisterHostelAtomic(registrationData, hostels, req.user?.id);
@@ -2960,11 +3052,21 @@ async function startServer() {
       if (isManager) {
         result.hostel.isApproved = false;
         result.hostel.approvalStatus = 'Pending Approval';
+        result.hostel.status = 'Pending Approval';
         result.hostel.managerId = req.user.id;
+        result.hostel.managerName = registrationData.managerName;
+        result.hostel.managerEmail = registrationData.managerEmail;
+        result.hostel.managerPhone = registrationData.managerPhone;
+        result.hostel.managerPhoto = registrationData.managerPhoto;
         await dbUpdateHostel(result.hostel.id, {
           isApproved: false,
           approvalStatus: 'Pending Approval',
-          managerId: req.user.id
+          status: 'Pending Approval',
+          managerId: req.user.id,
+          managerName: registrationData.managerName,
+          managerEmail: registrationData.managerEmail,
+          managerPhone: registrationData.managerPhone,
+          managerPhoto: registrationData.managerPhoto
         }, hostels);
 
         // Also create/sync HostelVerificationRecord for the Compliance Center
@@ -2976,11 +3078,12 @@ async function startServer() {
           location: result.hostel.location || `${result.hostel.city || 'Accra'}, Ghana`,
           digitalAddress: result.hostel.digitalAddress || 'GA-183-9022',
           managerId: req.user.id,
-          managerName: req.user.name || result.hostel.managerName || 'Hostel Manager',
-          managerEmail: req.user.email || result.hostel.managerEmail,
-          managerPhone: req.user.phone || result.hostel.managerPhone,
+          managerName: registrationData.managerName,
+          managerEmail: registrationData.managerEmail,
+          managerPhone: registrationData.managerPhone,
+          managerPhoto: registrationData.managerPhoto,
           proofOfOwnershipType: 'Land Title / Municipal Registration',
-          proofOfOwnershipDocumentUrl: result.hostel.imageUrl || 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=400&q=80',
+          proofOfOwnershipDocumentUrl: result.hostel.imageUrl || result.hostel.image || 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=400&q=80',
           proofOfOwnershipDocumentFileName: 'property-deed.pdf',
           authorityRelationship: 'Property Owner',
           paymentStatus: 'paid',
@@ -2993,6 +3096,7 @@ async function startServer() {
           pricePerYear: result.hostel.price || 3500,
           currency: result.hostel.currency || 'GHS',
           imageUrl: result.hostel.imageUrl || result.hostel.image,
+          image: result.hostel.image || result.hostel.imageUrl,
           status: 'under_admin_review',
           systemValidation: {
             digitalAddressFormatValid: true,
@@ -3011,18 +3115,18 @@ async function startServer() {
 
         await dbCreateActivity({
           id: `act-new-${Date.now()}`,
-          text: `Manager "${req.user.name}" completed 10-step registration for "${result.hostel.name}". Pending final Admin verification.`,
+          text: `Manager "${registrationData.managerName}" submitted "${result.hostel.name}" for Admin Approval.`,
           time: 'Just now',
           type: 'warning'
         }, activities);
       } else {
         result.hostel.isApproved = true;
         result.hostel.approvalStatus = 'Approved';
-        result.hostel.status = 'Open';
+        result.hostel.status = 'Approved';
         await dbUpdateHostel(result.hostel.id, {
           isApproved: true,
           approvalStatus: 'Approved',
-          status: 'Open'
+          status: 'Approved'
         }, hostels);
 
         await dbCreateActivity({
@@ -3041,10 +3145,13 @@ async function startServer() {
     }
   });
 
-  // Admin Final Verification & Approval of registered hostel
+  // Admin Final Verification & Approval or Rejection of registered hostel
   app.put("/api/hostels/:id/verify", requireAuth(["admin"]), async (req: any, res) => {
     try {
       const { id } = req.params;
+      const { status, isApproved, approvalStatus, adminNotes } = req.body || {};
+      const isRejection = status === 'Rejected' || isApproved === false || approvalStatus === 'Rejected';
+
       const allHostels = await dbGetHostels(hostels);
       let target = allHostels.find(h => h.id === id) || hostels.find(h => h.id === id);
       if (!target) {
@@ -3053,27 +3160,147 @@ async function startServer() {
           name: req.body?.name || `Hostel ${id}`,
           location: req.body?.location || 'Campus Zone, Accra',
           wing: req.body?.wing || 'North Wing',
-          status: 'Open',
+          status: isRejection ? 'Rejected' : 'Open',
           bedsLeft: Number(req.body?.bedsLeft ?? 50),
           totalCapacity: Number(req.body?.totalCapacity ?? 100),
           availableSpaces: Number(req.body?.availableSpaces ?? 50),
           price: Number(req.body?.price ?? 3500),
           rating: 4.8,
-          isApproved: true,
-          approvalStatus: 'Approved'
+          isApproved: !isRejection,
+          approvalStatus: isRejection ? 'Rejected' : 'Approved'
         };
         await dbCreateHostel(target, hostels);
       } else {
-        target.isApproved = true;
-        target.approvalStatus = 'Approved';
-        target.status = 'Open';
+        if (isRejection) {
+          target.isApproved = false;
+          target.approvalStatus = 'Rejected';
+          target.status = 'Rejected';
+          await dbUpdateHostel(id, {
+            isApproved: false,
+            approvalStatus: 'Rejected',
+            status: 'Rejected'
+          }, hostels);
 
-        await dbUpdateHostel(id, {
-          isApproved: true,
-          approvalStatus: 'Approved',
-          status: 'Open'
-        }, hostels);
+          const vRecord = hostelVerifications.find(v => v.hostelId === id);
+          if (vRecord) {
+            vRecord.status = 'rejected';
+            vRecord.reviewedAt = new Date().toISOString();
+            vRecord.adminNotes = adminNotes || 'Rejected by Administrator';
+            await dbUpdateHostelVerificationStatus(vRecord.id, 'rejected', vRecord.adminNotes, req.user?.name || 'Admin');
+          }
+
+          syncStore();
+
+          await dbCreateActivity({
+            id: `act-new-${Date.now()}`,
+            text: `Admin REJECTED hostel registration for "${target.name}".`,
+            time: 'Just now',
+            type: 'warning'
+          }, activities);
+
+          return res.json({ success: true, hostel: target, message: `Hostel "${target.name}" rejected.` });
+        } else {
+          target.isApproved = true;
+          target.approvalStatus = 'Approved';
+          target.status = 'Open';
+
+          await dbUpdateHostel(id, {
+            isApproved: true,
+            approvalStatus: 'Approved',
+            status: 'Open'
+          }, hostels);
+
+          const vRecord = hostelVerifications.find(v => v.hostelId === id || (v.hostelName && target.name && v.hostelName.toLowerCase() === target.name.toLowerCase()));
+          if (vRecord) {
+            vRecord.status = 'approved';
+            vRecord.verifiedAt = new Date().toISOString();
+            await dbUpdateHostelVerificationStatus(vRecord.id, 'approved', adminNotes || 'Approved by Administrator', req.user?.name || 'Admin');
+          }
+
+          // Sync and mark manager account as verified
+          const cleanEmail = (target.managerEmail || vRecord?.managerEmail || '').toLowerCase().trim();
+          const mgrId = target.managerId || target.assignedManagerId || vRecord?.managerId;
+          const matchedUser = MOCK_USERS.find(
+            u => (mgrId && u.user.id === mgrId) || (cleanEmail && u.email && u.email.toLowerCase().trim() === cleanEmail)
+          );
+          if (matchedUser) {
+            (matchedUser.user as any).isVerified = true;
+            (matchedUser.user as any).verificationStatus = 'approved';
+
+            // Programmatically deliver a welcome message to the manager's messenger inbox from the admin
+            try {
+              const adminId = req.user?.id || 'admin_101';
+              const managerId = matchedUser.user.id;
+              
+              // Find or create DM room
+              let existingRoom = dmRooms.find(r => 
+                (r.user1Id === adminId && r.user2Id === managerId) ||
+                (r.user1Id === managerId && r.user2Id === adminId)
+              );
+              
+              let roomId;
+              if (existingRoom) {
+                roomId = existingRoom.id;
+                existingRoom.status = 'accepted';
+              } else {
+                roomId = `room-${adminId.substring(0, 5)}-${managerId.substring(0, 5)}-${Date.now()}`;
+                const newRoom = {
+                  id: roomId,
+                  user1Id: adminId,
+                  user2Id: managerId,
+                  status: 'accepted',
+                  createdAt: new Date().toISOString()
+                };
+                await dbCreateDMRoom(newRoom, dmRooms);
+              }
+
+              // Create welcome message
+              const welcomeContent = `Welcome to PineVela! Your hostel property "${target.name}" has been officially approved by the university housing board. You can now access your manager dashboard, view operational statistics, and start accepting direct student residence bookings. Let us know if you need any assistance managing your hostel.`;
+              
+              const newMsg = {
+                id: `msg-welcome-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+                channelType: 'dm',
+                channelId: roomId,
+                senderId: adminId,
+                senderName: req.user?.name || 'PineVela Admin',
+                senderAvatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
+                messageType: 'text',
+                content: welcomeContent,
+                reactions: {},
+                createdAt: new Date().toISOString()
+              };
+              
+              await dbCreateChatMessage(newMsg, chatMessages);
+
+              // Create system notification for the manager
+              await dbCreateNotification({
+                id: `notif-welcome-${Date.now()}`,
+                studentId: managerId,
+                title: 'Hostel Approved & Welcomed',
+                message: `Congratulations! Your hostel property "${target.name}" is approved. Check your messenger for the welcome message from PineVela Admin.`,
+                category: 'verification',
+                date: new Date().toISOString().split('T')[0],
+                read: false
+              }, notifications);
+            } catch (chatErr) {
+              console.error("Error creating welcome chat message for approved manager:", chatErr);
+            }
+          }
+
+          const mReq = managerRequests.find(r => 
+            (mgrId && r.managerId === mgrId) || 
+            (cleanEmail && r.managerEmail && r.managerEmail.toLowerCase().trim() === cleanEmail) ||
+            (r.propertyName && target.name && r.propertyName.toLowerCase() === target.name.toLowerCase())
+          );
+          if (mReq) {
+            mReq.status = 'approved';
+            (mReq as any).isApproved = true;
+            await dbUpdateManagerRequestStatus(mReq.id, 'approved');
+          }
+        }
       }
+
+      syncStore();
 
       await dbCreateActivity({
         id: `act-new-${Date.now()}`,
@@ -3085,6 +3312,93 @@ async function startServer() {
       return res.json({ success: true, hostel: target });
     } catch (err: any) {
       return res.status(500).json({ error: err.message || "Failed to verify hostel" });
+    }
+  });
+
+  // Admin Delete Residence Endpoint
+  app.delete("/api/hostels/:id", requireAuth(["admin"]), async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const idx = hostels.findIndex(h => h.id === id);
+      if (idx >= 0) {
+        hostels.splice(idx, 1);
+      }
+      await dbDeleteHostel(id);
+      syncStore();
+      return res.json({ success: true, message: "Hostel removed successfully" });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message || "Failed to delete hostel" });
+    }
+  });
+
+  // --- Manager Operational Requests to Admin Board ---
+  app.get("/api/board-requests", requireAuth(["admin", "manager"]), async (req: any, res) => {
+    try {
+      const all = await dbGetBoardRequests();
+      if (req.user?.role === 'manager') {
+        const filtered = all.filter(r => r.managerId === req.user?.id || r.managerEmail === req.user?.email);
+        return res.json(filtered);
+      }
+      return res.json(all);
+    } catch (err: any) {
+      return res.status(500).json({ error: "Failed to fetch board requests" });
+    }
+  });
+
+  app.post("/api/board-requests", requireAuth(["manager"]), async (req: any, res) => {
+    try {
+      const { subject, category, priority, message, hostelName } = req.body;
+      if (!subject || !message) {
+        return res.status(400).json({ error: "Subject and message are required" });
+      }
+      const newReq = await dbCreateBoardRequest({
+        managerId: req.user?.id || 'manager_101',
+        managerName: req.user?.name || 'Resident Manager',
+        managerEmail: req.user?.email || 'manager@pinevela.com',
+        managerPhone: req.user?.phone || '+233 24 123 4567',
+        managerPhoto: req.user?.photo || req.user?.avatar || '',
+        hostelName: hostelName || 'Registered Property',
+        category: category || 'General Inquiry',
+        priority: priority || 'Normal',
+        subject,
+        message,
+        status: 'Pending'
+      });
+
+      await dbCreateActivity({
+        id: `act-new-${Date.now()}`,
+        text: `Manager ${req.user?.name || 'Anthony Davis'} submitted request to Admin Board: "${subject}"`,
+        time: 'Just now',
+        type: 'info'
+      }, activities);
+
+      syncStore();
+      return res.status(201).json(newReq);
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message || "Failed to create board request" });
+    }
+  });
+
+  app.put("/api/board-requests/:id", requireAuth(["admin"]), async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { status, adminNotes } = req.body;
+      const updated = await dbUpdateBoardRequest(id, { status, adminNotes });
+      if (!updated) {
+        return res.status(404).json({ error: "Request not found" });
+      }
+
+      await dbCreateActivity({
+        id: `act-new-${Date.now()}`,
+        text: `Admin updated board request "${updated.subject}" to ${status}`,
+        time: 'Just now',
+        type: 'success'
+      }, activities);
+
+      syncStore();
+      return res.json(updated);
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message || "Failed to update board request" });
     }
   });
 
@@ -3405,61 +3719,241 @@ async function startServer() {
     res.status(200).json({ success: true });
   });
 
-  // --- Meetings Endpoints ---
-  app.get("/api/meetings", requireAuth(), async (req, res) => {
-    const list = await dbGetMeetings(meetings);
-    res.json(list);
-  });
-
-  app.post("/api/meetings", requireAuth(["student"]), async (req: any, res) => {
-    const newMeeting = {
-      id: `meet-new-${Date.now()}`,
-      status: 'Pending',
-      studentName: req.user.name,
-      studentId: req.user.id,
-      ...req.body
-    };
-    const saved = await dbCreateMeeting(newMeeting, meetings);
-    await dbCreateActivity({
-      id: `act-meet-${Date.now()}`,
-      text: `New meeting request from ${saved.studentName} for a ${saved.type}`,
-      time: 'Just now',
-      type: 'info'
-    }, activities);
-    res.status(201).json(saved);
-  });
-
-  app.put("/api/meetings/:id", requireAuth(["admin", "manager"]), async (req: any, res) => {
-    const { id } = req.params;
-    const { status } = req.body;
-    const list = await dbGetMeetings(meetings);
-    const idx = list.findIndex(m => m.id === id);
-    if (idx === -1) {
-      return res.status(404).json({ error: "Meeting request not found" });
+  // --- Manager Account Settings Endpoints ---
+  app.get("/api/manager/account-settings", requireAuth(["manager", "admin"]), async (req: any, res) => {
+    try {
+      const managerId = req.user.id || 'manager_101';
+      const settings = await dbGetManagerAccountSettings(managerId);
+      res.json(settings);
+    } catch (err: any) {
+      console.error("Error fetching manager account settings:", err);
+      res.status(500).json({ error: "Failed to load account settings" });
     }
-    
-    const updated = await dbUpdateMeeting(id, status, meetings);
-    
-    // Auto-create a notification when status changes!
-    const notifText = `Your meeting request (${updated.type} on ${updated.date} at ${updated.time}) has been ${status}.`;
-    await dbCreateNotification({
-      id: `notif-${Date.now()}`,
-      studentId: updated.studentId,
-      title: `Meeting ${status}`,
-      message: notifText,
-      type: status === 'Approved' ? 'success' : 'warning',
-      date: new Date().toISOString().split('T')[0],
-      read: false
-    }, notifications);
+  });
 
-    await dbCreateActivity({
-      id: `act-meet-upd-${Date.now()}`,
-      text: `Meeting request for ${updated.studentName} was ${status}`,
-      time: 'Just now',
-      type: status === 'Approved' ? 'success' : 'danger'
-    }, activities);
+  app.put("/api/manager/account-settings", requireAuth(["manager", "admin"]), async (req: any, res) => {
+    try {
+      const managerId = req.user.id || 'manager_101';
+      const updated = await dbUpdateManagerAccountSettings(managerId, req.body);
+      res.json(updated);
+    } catch (err: any) {
+      console.error("Error updating manager account settings:", err);
+      res.status(500).json({ error: "Failed to update account settings" });
+    }
+  });
 
-    res.json(updated);
+  // --- Change Password Endpoint ---
+  app.post("/api/auth/change-password", requireAuth(), async (req: any, res) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
+      if (!newPassword || newPassword.length < 6) {
+        return res.status(400).json({ error: "New password must be at least 6 characters long." });
+      }
+
+      const userId = req.user.id;
+      const userIndex = MOCK_USERS.findIndex(u => (u.user && u.user.id === userId) || u.username === req.user.username);
+      if (userIndex === -1) {
+        return res.status(404).json({ error: "User account not found." });
+      }
+
+      // Check current password if provided
+      if (currentPassword && MOCK_USERS[userIndex].password && MOCK_USERS[userIndex].password !== currentPassword) {
+        return res.status(400).json({ error: "Incorrect current password." });
+      }
+
+      MOCK_USERS[userIndex].password = newPassword;
+      syncStore();
+
+      return res.json({ success: true, message: "Password updated successfully." });
+    } catch (err: any) {
+      console.error("Password change error:", err);
+      return res.status(500).json({ error: err.message || "Failed to update password." });
+    }
+  });
+
+  // --- Dynamic Meetings Endpoints (No static mockup data) ---
+  app.get("/api/meetings", requireAuth(), async (req: any, res) => {
+    try {
+      const list = await dbGetMeetings(meetings);
+      const userRole = req.user.role;
+      const userId = req.user.id;
+      const userEmail = (req.user.email || '').toLowerCase().trim();
+
+      if (userRole === 'admin') {
+        return res.json(list);
+      }
+
+      if (userRole === 'manager') {
+        // Find meetings associated with this manager
+        const filtered = list.filter((m: any) => 
+          m.managerId === userId || 
+          !m.managerId || 
+          (m.managerEmail && userEmail && m.managerEmail.toLowerCase().trim() === userEmail)
+        );
+        return res.json(filtered);
+      }
+
+      // If student or staff, return meetings created by or involving them
+      const userMeetings = list.filter((m: any) => 
+        m.studentId === userId || 
+        m.requesterId === userId ||
+        (m.requesterEmail && userEmail && m.requesterEmail.toLowerCase().trim() === userEmail) ||
+        (m.studentEmail && userEmail && m.studentEmail.toLowerCase().trim() === userEmail)
+      );
+      return res.json(userMeetings);
+    } catch (err: any) {
+      console.error("Error fetching meetings:", err);
+      res.status(500).json({ error: "Failed to fetch meeting records" });
+    }
+  });
+
+  app.post("/api/meetings", requireAuth(), async (req: any, res) => {
+    try {
+      const {
+        requesterName,
+        requesterType,
+        requesterEmail,
+        requesterPhone,
+        roomOrUnit,
+        topic,
+        reason,
+        category,
+        date,
+        time,
+        timeSlot,
+        mode,
+        type,
+        notes,
+        hostelId,
+        hostelName,
+        managerId,
+        managerName
+      } = req.body;
+
+      const finalRequesterName = requesterName || req.user.name || 'Anonymous User';
+      const finalRequesterType = requesterType || (req.user.role === 'staff' ? 'staff' : req.user.role === 'manager' ? 'administrator' : 'student');
+      const finalTopic = topic || reason || 'General Meeting Consultation';
+      const finalDate = date || new Date().toISOString().split('T')[0];
+      const finalTimeSlot = timeSlot || time || '10:00 AM - 10:30 AM';
+      const finalMode = mode || type || 'In-Person (Admin Office)';
+
+      const newMeeting = {
+        id: `meet-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        hostelId: hostelId || 'hostel-1',
+        hostelName: hostelName || 'Emerald Heights Block A',
+        managerId: managerId || 'manager_101',
+        managerName: managerName || 'Anthony Davis',
+        requesterId: req.user.id,
+        studentId: req.user.id,
+        requesterName: finalRequesterName,
+        studentName: finalRequesterName,
+        requesterType: finalRequesterType,
+        requesterEmail: requesterEmail || req.user.email || `${req.user.name.toLowerCase().replace(/\s+/g, '')}@student.pinevela.com`,
+        requesterPhone: requesterPhone || req.user.phone || '+233 24 000 0000',
+        roomOrUnit: roomOrUnit || 'Room 204',
+        topic: finalTopic,
+        reason: finalTopic,
+        category: category || 'Room / Accommodation',
+        date: finalDate,
+        time: finalTimeSlot,
+        timeSlot: finalTimeSlot,
+        mode: finalMode,
+        type: finalMode,
+        status: 'Pending',
+        meetingLinkOrVenue: finalMode.includes('Google Meet') ? 'https://meet.google.com/pnv-hostel-admin' : 'Hostel Admin Office (Room 101)',
+        notes: notes || '',
+        managerResponseNotes: '',
+        createdAt: new Date().toISOString()
+      };
+
+      const saved = await dbCreateMeeting(newMeeting, meetings);
+
+      await dbCreateActivity({
+        id: `act-meet-${Date.now()}`,
+        text: `New meeting requested by ${finalRequesterName} (${finalRequesterType}): "${finalTopic}" on ${finalDate}`,
+        time: 'Just now',
+        type: 'info'
+      }, activities);
+
+      res.status(201).json(saved);
+    } catch (err: any) {
+      console.error("Meeting creation error:", err);
+      res.status(500).json({ error: "Failed to schedule meeting request" });
+    }
+  });
+
+  app.put("/api/meetings/:id", requireAuth(["admin", "manager", "staff"]), async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { status, managerResponseNotes, meetingLinkOrVenue, date, timeSlot, time, mode } = req.body;
+      const list = await dbGetMeetings(meetings);
+      const targetMeeting = list.find((m: any) => m.id === id);
+      if (!targetMeeting) {
+        return res.status(404).json({ error: "Meeting log not found" });
+      }
+
+      const updates: any = {};
+      if (status !== undefined) updates.status = status;
+      if (managerResponseNotes !== undefined) updates.managerResponseNotes = managerResponseNotes;
+      if (meetingLinkOrVenue !== undefined) updates.meetingLinkOrVenue = meetingLinkOrVenue;
+      if (date !== undefined) updates.date = date;
+      if (timeSlot !== undefined) {
+        updates.timeSlot = timeSlot;
+        updates.time = timeSlot;
+      }
+      if (time !== undefined && !timeSlot) {
+        updates.time = time;
+        updates.timeSlot = time;
+      }
+      if (mode !== undefined) {
+        updates.mode = mode;
+        updates.type = mode;
+      }
+      updates.updatedAt = new Date().toISOString();
+
+      const updated = await dbUpdateMeeting(id, updates, meetings);
+
+      // Create notification for requester
+      const recipientId = targetMeeting.studentId || targetMeeting.requesterId;
+      if (recipientId) {
+        const notifStatus = status || 'Updated';
+        await dbCreateNotification({
+          id: `notif-meet-${Date.now()}`,
+          studentId: recipientId,
+          title: `Meeting Request ${notifStatus}`,
+          message: `Your meeting on "${targetMeeting.topic || targetMeeting.reason}" on ${updated.date} at ${updated.timeSlot || updated.time} has been ${notifStatus.toLowerCase()}.${managerResponseNotes ? ` Notes: "${managerResponseNotes}"` : ''}`,
+          type: notifStatus === 'Approved' || notifStatus === 'Completed' ? 'success' : notifStatus === 'Rejected' || notifStatus === 'Cancelled' ? 'danger' : 'info',
+          date: new Date().toISOString().split('T')[0],
+          read: false
+        }, notifications);
+      }
+
+      await dbCreateActivity({
+        id: `act-meet-upd-${Date.now()}`,
+        text: `Meeting "${targetMeeting.topic || targetMeeting.reason}" was marked as ${status || 'updated'}`,
+        time: 'Just now',
+        type: status === 'Approved' ? 'success' : status === 'Rejected' ? 'danger' : 'info'
+      }, activities);
+
+      res.json(updated);
+    } catch (err: any) {
+      console.error("Meeting update error:", err);
+      res.status(500).json({ error: "Failed to update meeting record" });
+    }
+  });
+
+  app.delete("/api/meetings/:id", requireAuth(["admin", "manager"]), async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const success = await dbDeleteMeeting(id, meetings);
+      if (!success) {
+        return res.status(404).json({ error: "Meeting record not found or could not be removed" });
+      }
+      res.json({ success: true, message: "Meeting log deleted successfully." });
+    } catch (err: any) {
+      console.error("Meeting deletion error:", err);
+      res.status(500).json({ error: "Failed to delete meeting log" });
+    }
   });
 
   // --- Notifications Endpoints ---

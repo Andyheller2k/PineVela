@@ -1,0 +1,7 @@
+--- src/components/PageManagerDashboard.tsx
++++ src/components/PageManagerDashboard.tsx
+@@ -4,6 +4,7 @@
+ import PineLogo from './PineLogo';
++import HostelRegistration from './HostelRegistration';
+ import { 
+   Building2, Users, DollarSign, CheckCircle2, XCircle, Clock, Plus, 

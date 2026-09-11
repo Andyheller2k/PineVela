@@ -9,7 +9,11 @@ export function generateUUID(): string {
 // Memory store initialized from disk
 let memoryStore: PersistentStore | null = null;
 
-function getStore(defaults?: { hostels: any[]; users: any[] }): PersistentStore {
+export function getStoreInstance(defaults?: { hostels: any[]; users: any[] }): PersistentStore {
+  return getStore(defaults);
+}
+
+export function getStore(defaults?: { hostels: any[]; users: any[] }): PersistentStore {
   if (!memoryStore) {
     const emptyDefault: PersistentStore = {
       hostels: defaults?.hostels || [],
@@ -24,6 +28,7 @@ function getStore(defaults?: { hostels: any[]; users: any[] }): PersistentStore 
       chatMessages: [],
       dmRooms: [],
       chatProfiles: [],
+      boardRequests: [],
       platformSettings: {
         registrationFee: 3500,
         commission: 5,
@@ -36,7 +41,7 @@ function getStore(defaults?: { hostels: any[]; users: any[] }): PersistentStore 
   return memoryStore;
 }
 
-function persistStore(): void {
+export function persistStore(): void {
   if (memoryStore) {
     savePersistentStore(memoryStore);
   }
@@ -249,6 +254,91 @@ export async function dbUpdateMeeting(id: string, updates: any, ..._args: any[])
   return { id, ...updates };
 }
 
+export async function dbDeleteMeeting(id: string, ..._args: any[]): Promise<boolean> {
+  const store = getStore();
+  if ((store as any).meetings) {
+    const idx = (store as any).meetings.findIndex((item: any) => item.id === id);
+    if (idx !== -1) {
+      (store as any).meetings.splice(idx, 1);
+      persistStore();
+      return true;
+    }
+  }
+  return false;
+}
+
+export async function dbGetManagerAccountSettings(managerId: string): Promise<any> {
+  const store = getStore();
+  if (!store.managerAccountSettings) store.managerAccountSettings = {};
+  const existing = store.managerAccountSettings[managerId];
+  if (existing) return existing;
+
+  const defaults = {
+    managerId,
+    notifications: {
+      emailAlerts: true,
+      smsAlerts: true,
+      maintenanceTicketAlerts: true,
+      bookingApplicationAlerts: true,
+      meetingRequestAlerts: true
+    },
+    security: {
+      twoFactorAuth: false,
+      sessionTimeoutMinutes: 60,
+      requirePasswordForPayouts: true
+    },
+    meetingAvailability: {
+      allowStudentBookings: true,
+      allowStaffBookings: true,
+      workingDays: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+      officeHoursStart: "09:00",
+      officeHoursEnd: "17:00",
+      slotDurationMinutes: 30,
+      meetingModes: ["In-Person (Admin Office)", "Google Meet / Video", "Phone Call"],
+      autoConfirmMeetings: false,
+      officeLocation: "Hostel Admin Office (Room 101)"
+    },
+    emergencyContact: {
+      contactName: "Facility Emergency Lead",
+      contactPhone: "+233 24 000 0000",
+      contactRelation: "Duty Supervisor"
+    }
+  };
+  store.managerAccountSettings[managerId] = defaults;
+  persistStore();
+  return defaults;
+}
+
+export async function dbUpdateManagerAccountSettings(managerId: string, updates: any): Promise<any> {
+  const store = getStore();
+  if (!store.managerAccountSettings) store.managerAccountSettings = {};
+  const current = await dbGetManagerAccountSettings(managerId);
+  const updated = {
+    ...current,
+    ...updates,
+    managerId,
+    notifications: {
+      ...(current.notifications || {}),
+      ...(updates.notifications || {})
+    },
+    security: {
+      ...(current.security || {}),
+      ...(updates.security || {})
+    },
+    meetingAvailability: {
+      ...(current.meetingAvailability || {}),
+      ...(updates.meetingAvailability || {})
+    },
+    emergencyContact: {
+      ...(current.emergencyContact || {}),
+      ...(updates.emergencyContact || {})
+    }
+  };
+  store.managerAccountSettings[managerId] = updated;
+  persistStore();
+  return updated;
+}
+
 // 7. Notifications
 export async function dbGetNotifications(userId?: string | any[], ..._args: any[]): Promise<any[]> {
   const store = getStore();
@@ -410,33 +500,47 @@ export async function dbAcceptDMRoom(roomId: string, ..._args: any[]): Promise<a
 // 13. Atomic Hostel Registration
 export async function dbRegisterHostelAtomic(registrationPayload: any, fallbackHostels?: any[], ..._args: any[]): Promise<any> {
   const store = getStore({ hostels: fallbackHostels || [], users: [] });
-  const hostelId = registrationPayload.hostelId || generateUUID();
+  const hostelId = registrationPayload.hostelId || registrationPayload.id || generateUUID();
   
+  const resolvedName = registrationPayload.name || registrationPayload.hostelName || 'Registered Hostel';
+  const resolvedImage = registrationPayload.imageUrl || registrationPayload.image || registrationPayload.exteriorPhotoUrl || registrationPayload.imagePreviewUrl || (Array.isArray(registrationPayload.images) && registrationPayload.images[0]) || 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=800&q=80';
+  const resolvedLocation = registrationPayload.location || (registrationPayload.addressLine1 ? `${registrationPayload.addressLine1}, ${registrationPayload.city || 'Accra'}` : (registrationPayload.address || registrationPayload.city || 'Accra, Ghana'));
+  const resolvedPrice = Number(registrationPayload.price || registrationPayload.pricing?.defaultFee || registrationPayload.pricingTiers?.[0]?.price || 3500);
+  const resolvedCapacity = Number(registrationPayload.maximumCapacity || registrationPayload.totalCapacity || registrationPayload.totalBeds || 100);
+  const resolvedManagerPhoto = registrationPayload.managerPhoto || registrationPayload.managerAvatar || registrationPayload.avatar || registrationPayload.photo || '';
+
   const hostelRecord = {
     id: hostelId,
-    name: registrationPayload.hostelName || 'Registered Hostel',
-    location: registrationPayload.address || registrationPayload.city || 'Accra, Ghana',
-    wing: registrationPayload.blocksList?.[0]?.name || 'Main Block',
-    status: 'Open',
-    bedsLeft: registrationPayload.totalCapacity || 100,
-    totalCapacity: registrationPayload.totalCapacity || 100,
-    availableSpaces: registrationPayload.totalCapacity || 100,
-    price: registrationPayload.pricingTiers?.[0]?.price || 3500,
-    image: registrationPayload.exteriorPhotoUrl || 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=800&q=80',
-    imageUrl: registrationPayload.exteriorPhotoUrl || 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=800&q=80',
+    name: resolvedName,
+    location: resolvedLocation,
+    wing: registrationPayload.wing || (registrationPayload.blocksList?.[0]?.name ? registrationPayload.blocksList[0].name : 'North Wing'),
+    status: registrationPayload.status || 'Pending Approval',
+    bedsLeft: resolvedCapacity,
+    totalCapacity: resolvedCapacity,
+    availableSpaces: resolvedCapacity,
+    price: resolvedPrice,
+    image: resolvedImage,
+    imageUrl: resolvedImage,
+    exteriorPhotoUrl: resolvedImage,
+    imagePreviewUrl: resolvedImage,
     managerName: registrationPayload.managerName || 'Property Manager',
     managerPhone: registrationPayload.managerPhone || '+233 24 000 0000',
     managerEmail: registrationPayload.managerEmail || '',
-    managerId: registrationPayload.managerId,
+    managerPhoto: resolvedManagerPhoto,
+    managerId: registrationPayload.managerId || registrationPayload.assignedManagerId,
     description: registrationPayload.description || 'Hostel property profile and configurations.',
     rating: 5.0,
     registrationDate: new Date().toISOString().split('T')[0],
     subscriptionPaid: true,
-    isApproved: false,
-    approvalStatus: 'Pending Approval',
+    isApproved: Boolean(registrationPayload.isApproved),
+    approvalStatus: registrationPayload.approvalStatus || (registrationPayload.isApproved ? 'Approved' : 'Pending Approval'),
     blocksList: registrationPayload.blocksList || [],
     pricingTiers: registrationPayload.pricingTiers || [],
-    amenities: registrationPayload.amenities || []
+    facilities: registrationPayload.facilities || [],
+    amenities: registrationPayload.facilities || registrationPayload.amenities || [],
+    campusProximity: registrationPayload.campusProximity || '5-10 Mins Walk',
+    campusProximityDetails: registrationPayload.campusProximityDetails || 'Shuttle & walking routes',
+    hostel_type: registrationPayload.hostelType || registrationPayload.hostel_type || 'Hostel'
   };
 
   const existingIdx = store.hostels.findIndex((h: any) => h.id === hostelId || (h.managerEmail && registrationPayload.managerEmail && h.managerEmail.toLowerCase() === registrationPayload.managerEmail.toLowerCase()));
@@ -453,7 +557,14 @@ export async function dbRegisterHostelAtomic(registrationPayload: any, fallbackH
     hostelName: hostelRecord.name,
     managerName: hostelRecord.managerName,
     managerEmail: hostelRecord.managerEmail,
-    status: 'Pending Approval',
+    managerPhone: hostelRecord.managerPhone,
+    managerPhoto: hostelRecord.managerPhoto,
+    imageUrl: hostelRecord.imageUrl,
+    image: hostelRecord.image,
+    price: hostelRecord.price,
+    location: hostelRecord.location,
+    totalCapacity: hostelRecord.totalCapacity,
+    status: hostelRecord.isApproved ? 'Approved' : 'Pending Approval',
     submittedAt: new Date().toISOString()
   };
   if (!store.hostelVerifications) store.hostelVerifications = [];
@@ -488,14 +599,33 @@ export async function dbSaveManagerProfile(profile: any, ..._args: any[]): Promi
 
 export async function dbGetManagerRequests(..._args: any[]): Promise<any[]> {
   const store = getStore();
-  return store.managerRegistrationRequests || [];
+  const list = store.managerRegistrationRequests || [];
+  const seenIds = new Set<string>();
+  const uniqueList: any[] = [];
+  for (const item of list) {
+    if (item && item.id) {
+      if (!seenIds.has(item.id)) {
+        seenIds.add(item.id);
+        uniqueList.push(item);
+      }
+    }
+  }
+  return uniqueList;
 }
 
 export async function dbCreateManagerRequest(req: any, ..._args: any[]): Promise<any> {
   const store = getStore();
   if (!store.managerRegistrationRequests) store.managerRegistrationRequests = [];
-  const newReq = { ...req, id: req.id || `mreq-${Date.now()}`, submittedAt: new Date().toISOString() };
-  store.managerRegistrationRequests.unshift(newReq);
+  const id = req.id || `mreq-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  const newReq = { ...req, id, submittedAt: req.submittedAt || new Date().toISOString() };
+  
+  // Replace if exists, else unshift
+  const existingIdx = store.managerRegistrationRequests.findIndex((m: any) => m.id === id || (req.managerId && m.managerId === req.managerId));
+  if (existingIdx >= 0) {
+    store.managerRegistrationRequests[existingIdx] = { ...store.managerRegistrationRequests[existingIdx], ...newReq };
+  } else {
+    store.managerRegistrationRequests.unshift(newReq);
+  }
   persistStore();
   return newReq;
 }
@@ -610,3 +740,58 @@ export async function dbAssignHostelManager(hostelId: string, managerId: string,
   }
   return { id: hostelId, managerId };
 }
+
+export async function dbDeleteHostel(id: string): Promise<boolean> {
+  const store = getStore();
+  const initialLen = store.hostels.length;
+  store.hostels = store.hostels.filter((h: any) => h.id !== id);
+  persistStore();
+  return store.hostels.length < initialLen;
+}
+
+export async function dbGetBoardRequests(): Promise<any[]> {
+  const store = getStore();
+  if (!store.boardRequests) store.boardRequests = [];
+  return store.boardRequests;
+}
+
+export async function dbCreateBoardRequest(requestData: any): Promise<any> {
+  const store = getStore();
+  if (!store.boardRequests) store.boardRequests = [];
+  const newReq = {
+    id: requestData.id || `req-board-${Date.now()}`,
+    managerId: requestData.managerId || '',
+    managerName: requestData.managerName || 'Resident Manager',
+    managerEmail: requestData.managerEmail || '',
+    managerPhone: requestData.managerPhone || '+233 24 123 4567',
+    managerPhoto: requestData.managerPhoto || '',
+    hostelName: requestData.hostelName || 'Registered Property',
+    category: requestData.category || 'General Inquiry',
+    priority: requestData.priority || 'Normal',
+    subject: requestData.subject || 'Manager Operational Request',
+    message: requestData.message || '',
+    status: requestData.status || 'Pending',
+    adminNotes: requestData.adminNotes || '',
+    createdAt: new Date().toISOString()
+  };
+  store.boardRequests.unshift(newReq);
+  persistStore();
+  return newReq;
+}
+
+export async function dbUpdateBoardRequest(id: string, updates: any): Promise<any> {
+  const store = getStore();
+  if (!store.boardRequests) store.boardRequests = [];
+  const idx = store.boardRequests.findIndex((r: any) => r.id === id);
+  if (idx >= 0) {
+    store.boardRequests[idx] = {
+      ...store.boardRequests[idx],
+      ...updates,
+      updatedAt: new Date().toISOString()
+    };
+    persistStore();
+    return store.boardRequests[idx];
+  }
+  return null;
+}
+
