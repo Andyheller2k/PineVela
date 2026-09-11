@@ -24,7 +24,14 @@ import {
   Check,
   X,
   Eye,
-  ExternalLink
+  ExternalLink,
+  Lock,
+  Scale,
+  Shield,
+  BookOpen,
+  ChevronDown,
+  ChevronUp,
+  FileCheck
 } from 'lucide-react';
 import { HostelRegistrationDraft, HostelBlockConfig, Hostel } from '../types';
 import HostelMapPicker from './HostelMapPicker';
@@ -103,7 +110,7 @@ export default function HostelRegistration({
     imageUrl: 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=1200&q=80',
     imagePreviewUrl: '',
     imagePath: '',
-    imageStorageType: 'supabase',
+    imageStorageType: 'local',
 
     // Step 5: Capacity
     totalBlocks: 2,
@@ -165,6 +172,8 @@ export default function HostelRegistration({
   // Custom additions temporary states
   const [newFacilityInput, setNewFacilityInput] = useState('');
   const [newRuleInput, setNewRuleInput] = useState('');
+  const [isTermsExpanded, setIsTermsExpanded] = useState(true);
+  const [showTermsModal, setShowTermsModal] = useState(false);
 
   // Step names & icons definition
   const STEPS = [
@@ -395,9 +404,9 @@ export default function HostelRegistration({
     setSubmissionProgress('Initiating atomic hostel registration...');
 
     try {
-      const token = localStorage.getItem('pinevela_auth_token') || 'token_admin_001';
+      const token = localStorage.getItem('token') || localStorage.getItem('pinevela_auth_token') || 'token_admin_001';
 
-      // 1. Upload Image to Storage (Supabase Storage / local fallback)
+      // 1. Upload Image to Storage (Local storage)
       let finalImageUrl = formData.imageUrl;
       let finalImagePath = formData.imagePath;
 
@@ -429,8 +438,8 @@ export default function HostelRegistration({
         }
       }
 
-      // 2. Atomic Database Insertion into Supabase 'hostels'
-      setSubmissionProgress('Creating hostel record in Supabase PostgreSQL...');
+      // 2. Atomic Database Insertion into persistent store
+      setSubmissionProgress('Creating hostel record in persistent database...');
 
       const payload = {
         name: formData.name.trim(),
@@ -555,7 +564,7 @@ export default function HostelRegistration({
             {registeredResult.name} is Live!
           </h2>
           <p className="text-sm text-slate-600 max-w-lg mx-auto">
-            The hostel record has been created in Supabase PostgreSQL with all {formData.blocksList.length} blocks,
+            The hostel record has been created in the database with all {formData.blocksList.length} blocks,
             amenities, manager assignments, and uploaded photography.
           </p>
         </div>
@@ -667,7 +676,7 @@ export default function HostelRegistration({
               Multi-Step Hostel Onboarding
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Complete all 10 registration steps. Submission commits atomically to Supabase PostgreSQL on final step.
+              Complete all 10 registration steps. Submission commits atomically to the persistent database on final step.
             </p>
           </div>
 
@@ -1068,7 +1077,7 @@ export default function HostelRegistration({
                 <div>
                   <h3 className="text-lg font-black text-slate-900 tracking-tight">Step 4: Hostel Exterior Photograph</h3>
                   <p className="text-xs text-slate-500">
-                    Attach a clear, welcoming exterior image. It is held locally in draft and uploaded atomically to Supabase Storage on final submission.
+                    Attach a clear, welcoming exterior image. It is held locally in draft and uploaded on final submission.
                   </p>
                 </div>
 
@@ -1541,7 +1550,7 @@ export default function HostelRegistration({
                 <div>
                   <h3 className="text-lg font-black text-slate-900 tracking-tight">Step 10: Final Review & Atomic Submission</h3>
                   <p className="text-xs text-slate-500">
-                    Verify all property data before executing atomic database insertion and Supabase Storage asset creation.
+                    Verify all property data before executing atomic database insertion and image upload.
                   </p>
                 </div>
 
@@ -1621,44 +1630,203 @@ export default function HostelRegistration({
                   </div>
                 </div>
 
-                {/* Legal & Accuracy Checkboxes */}
-                <div className="space-y-3 pt-2">
-                  <label className="flex items-start gap-3 p-3.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100/60 cursor-pointer transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={formData.accuracyCertified}
-                      onChange={(e) => updateFormData({ accuracyCertified: e.target.checked })}
-                      className="mt-0.5 rounded text-blue-900 focus:ring-blue-900 w-4 h-4"
-                    />
-                    <div className="text-xs text-left">
-                      <p className="font-bold text-slate-900">Certify Information Accuracy</p>
-                      <p className="text-slate-500 text-[11px]">
-                        I confirm that the location coordinates, block structure, and manager contact details provided are genuine.
+                {/* COMPREHENSIVE TERMS, PROPERTY OWNERSHIP & OPERATOR CODE OF CONDUCT */}
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 overflow-hidden text-left">
+                  <div className="p-4 bg-slate-100/90 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-blue-900 text-white flex items-center justify-center shrink-0 shadow-sm">
+                        <Scale size={16} />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                          <span>Operator Agreement & Legal Terms</span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-900 normal-case">
+                            Mandatory Review
+                          </span>
+                        </h4>
+                        <p className="text-[11px] text-slate-500">
+                          Ghana Student Housing Standards, Ownership Certification & PineVela Service Rules
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowTermsModal(true)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 hover:text-blue-900 hover:border-blue-300 text-[11px] font-bold transition-all shadow-sm"
+                      >
+                        <BookOpen size={13} className="text-blue-900" />
+                        <span>Read Full Agreement</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsTermsExpanded(!isTermsExpanded)}
+                        className="p-1.5 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-slate-900 text-xs transition-colors"
+                        title={isTermsExpanded ? "Collapse terms overview" : "Expand terms overview"}
+                      >
+                        {isTermsExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {isTermsExpanded && (
+                    <div className="p-4.5 space-y-4 max-h-72 overflow-y-auto divide-y divide-slate-200 text-xs text-slate-700 bg-white">
+                      {/* Section 1: Property Ownership */}
+                      <div className="pt-2 first:pt-0 space-y-1.5">
+                        <div className="flex items-center gap-2 text-slate-900 font-extrabold text-xs">
+                          <Building2 size={14} className="text-blue-900 shrink-0" />
+                          <span>1. Lawful Property Ownership & Authorized Operation</span>
+                        </div>
+                        <p className="text-[11px] text-slate-600 leading-relaxed pl-5">
+                          The registrant explicitly warrants and declares that they are the lawful freehold/leasehold titleholder or officially authorized administrator/managing agent with full legal power of attorney to list, administer, and lease student accommodation at this facility. The property holds all mandatory municipal assembly building permits, Ghana National Fire Service safety certificates, and statutory sanitation compliance certifications.
+                        </p>
+                      </div>
+
+                      {/* Section 2: Responsibility for Submitted Data */}
+                      <div className="pt-3 space-y-1.5">
+                        <div className="flex items-center gap-2 text-slate-900 font-extrabold text-xs">
+                          <ShieldCheck size={14} className="text-emerald-700 shrink-0" />
+                          <span>2. Responsibility, Truthfulness & Accuracy of Information</span>
+                        </div>
+                        <p className="text-[11px] text-slate-600 leading-relaxed pl-5">
+                          The operator assumes sole and absolute legal and operational responsibility for the complete veracity and timeliness of all submitted data—including total capacity, available beds, room matrices, exterior/interior photographs, GPS coordinates, management contacts, and fee structures. Deliberate misrepresentation, phantom room inventories, deceptive amenities, or unauthorized price markups will result in immediate de-listing, forfeiture of onboarding credentials, and civil liability.
+                        </p>
+                      </div>
+
+                      {/* Section 3: Adhering to Rules of Service */}
+                      <div className="pt-3 space-y-1.5">
+                        <div className="flex items-center gap-2 text-slate-900 font-extrabold text-xs">
+                          <FileCheck size={14} className="text-indigo-700 shrink-0" />
+                          <span>3. Adherence to PineVela Service Rules & Tenant Welfare</span>
+                        </div>
+                        <div className="text-[11px] text-slate-600 leading-relaxed pl-5 space-y-1">
+                          <p>
+                            <strong>A. Resident Safety & Utilities:</strong> Maintain 24/7 on-site security, continuous potable water supply, functional lighting in corridors/stairwells, and operational standby backup electricity.
+                          </p>
+                          <p>
+                            <strong>B. 24-Hour Maintenance SLA:</strong> Promptly log and remediate urgent physical repairs (plumbing leaks, electrical hazards, lock malfunctions) within 24 hours of notification.
+                          </p>
+                          <p>
+                            <strong>C. Non-Discrimination & Welfare:</strong> Strict zero-tolerance for harassment, illegal eviction without due process, ethnic/religious discrimination, or arbitrary off-platform fee extortion.
+                          </p>
+                          <p>
+                            <strong>D. Booking Fulfillment:</strong> Honor all verified student reservations confirmed through PineVela with guaranteed room allocation as specified.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Section 4: Platform Legal Terms & Compliance */}
+                      <div className="pt-3 space-y-1.5">
+                        <div className="flex items-center gap-2 text-slate-900 font-extrabold text-xs">
+                          <Scale size={14} className="text-amber-700 shrink-0" />
+                          <span>4. Platform Legal Terms, Verification Audits & Indemnification</span>
+                        </div>
+                        <p className="text-[11px] text-slate-600 leading-relaxed pl-5">
+                          PineVela verification officers and university residential boards retain the right to perform scheduled and unannounced physical compliance audits. The operator agrees to indemnify, defend, and hold harmless PineVela, its officers, and partners against any claims, damages, or fines arising from operational negligence or policy breaches. Resident data must be handled in strict accordance with the Ghana Data Protection Act (Act 843) and platform privacy policies.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="px-4 py-2 bg-slate-100/70 border-t border-slate-200 text-[10px] text-slate-500 flex items-center justify-between">
+                    <span>Ghana Residential Premises Act & PineVela Operator Standards (v2026.1)</span>
+                    <span className="font-semibold text-slate-700">Digital Execution Binding</span>
+                  </div>
+                </div>
+
+                {/* Two Mandatory Certification Checkboxes */}
+                <div className="space-y-3 pt-1">
+                  {/* Checkbox 1: Ownership & Information Responsibility */}
+                  <label
+                    className={`flex items-start gap-3.5 p-4 rounded-2xl border transition-all cursor-pointer text-left ${
+                      formData.accuracyCertified
+                        ? 'border-emerald-300 bg-emerald-50/60 shadow-sm'
+                        : 'border-slate-200 bg-white hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="pt-0.5 shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={formData.accuracyCertified}
+                        onChange={(e) => updateFormData({ accuracyCertified: e.target.checked })}
+                        className="w-5 h-5 rounded border-slate-300 text-blue-900 focus:ring-blue-900 focus:ring-offset-0 cursor-pointer"
+                      />
+                    </div>
+                    <div className="text-xs space-y-1">
+                      <p className="font-black text-slate-900 text-xs flex items-center gap-1.5">
+                        <span>1. Certification of Legal Property Ownership & Information Responsibility</span>
+                        {formData.accuracyCertified && (
+                          <span className="text-[10px] font-extrabold bg-emerald-600 text-white px-2 py-0.5 rounded-full">
+                            Accepted
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-slate-600 text-[11px] leading-relaxed">
+                        I solemnly declare under penalty of immediate platform de-listing and legal recourse that I hold lawful title, ownership, or authorized property management power of attorney for this hostel. I accept full and sole legal responsibility for the accuracy, authenticity, and completeness of all capacity figures, pricing schedules, photographs, GPS coordinates, and management contact details submitted.
                       </p>
                     </div>
                   </label>
                   {validationErrors.accuracyCertified && (
-                    <p className="text-[11px] text-rose-600 font-semibold pl-1">{validationErrors.accuracyCertified}</p>
+                    <p className="text-[11px] text-rose-600 font-semibold pl-2 flex items-center gap-1">
+                      <AlertCircle size={13} />
+                      <span>{validationErrors.accuracyCertified}</span>
+                    </p>
                   )}
 
-                  <label className="flex items-start gap-3 p-3.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100/60 cursor-pointer transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={formData.agreeTerms}
-                      onChange={(e) => updateFormData({ agreeTerms: e.target.checked })}
-                      className="mt-0.5 rounded text-blue-900 focus:ring-blue-900 w-4 h-4"
-                    />
-                    <div className="text-xs text-left">
-                      <p className="font-bold text-slate-900">Authorize Atomic System Provisioning</p>
-                      <p className="text-slate-500 text-[11px]">
-                        Commit this hostel to the live Supabase PostgreSQL database and upload attached assets to Supabase Storage.
+                  {/* Checkbox 2: Adhering to Service Rules & Terms and Conditions */}
+                  <label
+                    className={`flex items-start gap-3.5 p-4 rounded-2xl border transition-all cursor-pointer text-left ${
+                      formData.agreeTerms
+                        ? 'border-emerald-300 bg-emerald-50/60 shadow-sm'
+                        : 'border-slate-200 bg-white hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="pt-0.5 shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={formData.agreeTerms}
+                        onChange={(e) => updateFormData({ agreeTerms: e.target.checked })}
+                        className="w-5 h-5 rounded border-slate-300 text-blue-900 focus:ring-blue-900 focus:ring-offset-0 cursor-pointer"
+                      />
+                    </div>
+                    <div className="text-xs space-y-1">
+                      <p className="font-black text-slate-900 text-xs flex items-center gap-1.5">
+                        <span>2. Acceptance of PineVela Terms & Conditions & Operator Code of Conduct</span>
+                        {formData.agreeTerms && (
+                          <span className="text-[10px] font-extrabold bg-emerald-600 text-white px-2 py-0.5 rounded-full">
+                            Accepted
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-slate-600 text-[11px] leading-relaxed">
+                        I have read, understood, and agreed to all 4 sections of the PineVela Platform Terms & Conditions. I commit to strictly adhering to all service rules, including tenant safety protocols, reliable utility delivery, 24-hour maintenance SLAs, non-discrimination policies, physical audit rights, and authorize atomic registration into the live database.
                       </p>
                     </div>
                   </label>
                   {validationErrors.agreeTerms && (
-                    <p className="text-[11px] text-rose-600 font-semibold pl-1">{validationErrors.agreeTerms}</p>
+                    <p className="text-[11px] text-rose-600 font-semibold pl-2 flex items-center gap-1">
+                      <AlertCircle size={13} />
+                      <span>{validationErrors.agreeTerms}</span>
+                    </p>
                   )}
                 </div>
+
+                {/* Submission State Banner */}
+                {(!formData.accuracyCertified || !formData.agreeTerms) && (
+                  <div className="p-3.5 bg-amber-50/90 border border-amber-200 rounded-2xl flex items-center gap-3 text-amber-900 text-xs font-semibold">
+                    <Lock size={16} className="shrink-0 text-amber-700" />
+                    <span>
+                      Please check both certification boxes above to unlock the <strong>Submit & Register Hostel</strong> button.
+                    </span>
+                  </div>
+                )}
+
+                {formData.accuracyCertified && formData.agreeTerms && !isSubmitting && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center gap-2.5 text-emerald-900 text-xs font-bold">
+                    <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
+                    <span>All legal certifications and platform terms accepted. You may now submit your property.</span>
+                  </div>
+                )}
 
                 {isSubmitting && (
                   <div className="p-4 bg-blue-50 border border-blue-200 rounded-2xl flex items-center gap-3 text-blue-900 text-xs font-bold">
@@ -1669,6 +1837,115 @@ export default function HostelRegistration({
               </div>
             )}
           </motion.div>
+        </AnimatePresence>
+
+        {/* Full Terms & Conditions Modal */}
+        <AnimatePresence>
+          {showTermsModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-3xl w-full max-h-[85vh] flex flex-col overflow-hidden text-left"
+              >
+                {/* Modal Header */}
+                <div className="p-6 bg-slate-900 text-white flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-blue-600/30 border border-blue-400/30 flex items-center justify-center text-blue-300">
+                      <Scale size={20} />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-black tracking-tight">Hostel Operator Agreement & Terms of Service</h3>
+                      <p className="text-xs text-slate-300">Ghana Student Accommodation Regulatory Framework & Platform Policies</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowTermsModal(false)}
+                    className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-colors"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                {/* Modal Scrollable Content */}
+                <div className="p-6 overflow-y-auto space-y-6 text-xs text-slate-700 leading-relaxed divide-y divide-slate-100">
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-lg bg-blue-100 text-blue-900 flex items-center justify-center text-xs font-black">1</span>
+                      Representation of Legal Property Ownership & Authorized Operation
+                    </h4>
+                    <p className="text-slate-600 pl-8">
+                      By registering a property on PineVela, the Registrant warrants that they hold lawful freehold or leasehold title, or possess an executed, unrevoked Power of Attorney / Management Mandate from the lawful titleholder. The Registrant guarantees that the property possesses valid municipal habitation permits, Ghana National Fire Service safety approvals, and conforms to all relevant zoning regulations.
+                    </p>
+                  </div>
+
+                  <div className="pt-4 space-y-2">
+                    <h4 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-lg bg-emerald-100 text-emerald-900 flex items-center justify-center text-xs font-black">2</span>
+                      Absolute Responsibility for Truthfulness & Submitted Data
+                    </h4>
+                    <p className="text-slate-600 pl-8">
+                      The Registrant assumes full legal, regulatory, and financial responsibility for the accuracy, completeness, and veracity of all submitted details—including total bed capacity, room configurations, pricing structures, amenity checklists, GPS coordinates, and photographic media. The operator agrees to update room occupancy figures immediately upon offline changes to prevent double-booking. Any deliberate misstatement constitutes a breach of contract and grounds for immediate de-listing.
+                    </p>
+                  </div>
+
+                  <div className="pt-4 space-y-2">
+                    <h4 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-900 flex items-center justify-center text-xs font-black">3</span>
+                      Adherence to PineVela Service Rules & Resident Welfare Standards
+                    </h4>
+                    <div className="pl-8 space-y-2 text-slate-600">
+                      <p>
+                        <strong>3.1 Resident Safety & Security:</strong> The operator must maintain standard physical security, including certified security personnel, well-lit perimeter pathways, emergency contact mechanisms, and secure entryways.
+                      </p>
+                      <p>
+                        <strong>3.2 Critical Utilities & SLAs:</strong> Uninterrupted supply of water and power (via main grid and standby power generation) must be maintained. Critical maintenance faults (water outage, electrical fault, security compromise) must be addressed within a 24-hour service level agreement.
+                      </p>
+                      <p>
+                        <strong>3.3 Student Rights & Fair Dealing:</strong> Operators agree to respect resident rights, adhere to statutory notice periods for room inspections, and strictly prohibit harassment, discriminatory allocation, or uncontracted mid-tenancy surcharge demands.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="pt-4 space-y-2">
+                    <h4 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-lg bg-amber-100 text-amber-900 flex items-center justify-center text-xs font-black">4</span>
+                      Platform Legal Terms, Audits, Indemnification & Limitation of Liability
+                    </h4>
+                    <div className="pl-8 space-y-2 text-slate-600">
+                      <p>
+                        <strong>4.1 Physical Verification Audits:</strong> PineVela verification officers and university residential liaisons reserve the right to perform physical inspections prior to or during the listing period.
+                      </p>
+                      <p>
+                        <strong>4.2 Indemnity:</strong> The operator indemnifies and holds harmless PineVela, its officers, employees, and technological partners from any third-party claims, tenant disputes, bodily injury, property loss, or penalties arising from the operation of the accommodation.
+                      </p>
+                      <p>
+                        <strong>4.3 Data Protection:</strong> All resident information collected via PineVela must be stored securely and utilized strictly for residency administration in compliance with the Data Protection Act (Act 843).
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Modal Footer */}
+                <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+                  <span className="text-[11px] text-slate-500">Official Document v2026.1 • Legal Counsel Approved</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      updateFormData({ accuracyCertified: true, agreeTerms: true });
+                      setShowTermsModal(false);
+                    }}
+                    className="px-5 py-2.5 rounded-xl bg-blue-900 hover:bg-blue-800 text-white text-xs font-bold shadow-md transition-all flex items-center gap-2"
+                  >
+                    <CheckCircle2 size={15} />
+                    <span>Accept All & Close</span>
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
         </AnimatePresence>
 
         {/* Bottom Navigation Buttons */}
@@ -1687,7 +1964,7 @@ export default function HostelRegistration({
             <span>Previous Step</span>
           </button>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
             {currentStep < 10 ? (
               <button
                 type="button"
@@ -1701,13 +1978,27 @@ export default function HostelRegistration({
               <button
                 type="button"
                 onClick={handleFinalSubmit}
-                disabled={isSubmitting}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-extrabold shadow-lg shadow-emerald-600/30 transition-all hover:scale-102 disabled:opacity-50"
+                disabled={isSubmitting || !formData.accuracyCertified || !formData.agreeTerms}
+                className={`w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-3 rounded-xl text-xs font-extrabold transition-all ${
+                  isSubmitting || !formData.accuracyCertified || !formData.agreeTerms
+                    ? 'bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed shadow-none'
+                    : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/30 hover:scale-102 cursor-pointer'
+                }`}
+                title={
+                  !formData.accuracyCertified || !formData.agreeTerms
+                    ? 'Please accept both required certifications above to enable registration'
+                    : 'Submit and register hostel'
+                }
               >
                 {isSubmitting ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     <span>Processing Atomic Submission...</span>
+                  </>
+                ) : !formData.accuracyCertified || !formData.agreeTerms ? (
+                  <>
+                    <Lock size={15} className="text-slate-400" />
+                    <span>Submit & Register Hostel (Locked)</span>
                   </>
                 ) : (
                   <>

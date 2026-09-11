@@ -45,7 +45,7 @@ export interface HostelRegistrationDraft {
   imageUrl: string;
   imagePreviewUrl?: string;
   imagePath?: string;
-  imageStorageType?: 'supabase' | 'local' | 'external';
+  imageStorageType?: 'local' | 'external';
 
   // Step 5: Capacity & Structure
   totalBlocks: number;
@@ -152,6 +152,40 @@ export interface Hostel {
   capacity?: number;
   rules?: any;
   pricing?: any;
+}
+
+export interface HostelManager {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  avatar?: string;
+  nationalId?: string;
+  maskedIdNumber?: string;
+  idDocumentType?: string;
+  organization?: string;
+  roleTitle?: string;
+  experienceYears?: number;
+  verificationStatus: 'approved' | 'pending' | 'rejected' | 'suspended' | 'verified';
+  authorityStatus?: string;
+  isVerified?: boolean;
+  isApproved?: boolean;
+  hostelId?: string;
+  assignedHostelId?: string;
+  assignedHostelName?: string;
+  assignedHostelLocation?: string;
+  totalBeds?: number;
+  assignedHostels?: Array<{
+    id: string;
+    name: string;
+    location?: string;
+    status?: string;
+    bedsLeft?: number;
+    totalCapacity?: number;
+  }>;
+  approvedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface ManagerRegistrationRequest {

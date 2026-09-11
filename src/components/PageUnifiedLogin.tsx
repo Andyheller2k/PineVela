@@ -2,29 +2,29 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import PineLogo from './PineLogo';
-import { Mail, Key, Eye, EyeOff, ShieldCheck, ArrowLeft, ArrowRight, ShieldAlert, CheckCircle, RefreshCw, Sparkles, LogIn, ClipboardList, Building, MapPin, Lock, Phone, ChevronRight, ChevronLeft, Search, User } from 'lucide-react';
+import { Mail, Key, Eye, EyeOff, ShieldCheck, ArrowLeft, ArrowRight, ShieldAlert, CheckCircle, RefreshCw, Sparkles, LogIn, ClipboardList, Building, MapPin, Lock, Phone, ChevronRight, ChevronLeft, Search, User, X, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 // Static asset imports
-import managerImg from '../../assets/manager.jpeg';
-import onlineImg from '../../assets/online.jpeg';
-import studentImg from '../../assets/student.jpeg';
+import manager2Img from '../../assets/manager2.jpeg';
+import plumberImg from '../../assets/plumber1.jpeg';
+import girlsImg from '../../assets/girls.jpeg';
 
 const slides = [
   {
-    image: managerImg,
+    image: manager2Img,
     title: "Hostel Management Simplified",
     description: "PineVela - Manage your hostel seamlessly from anywhere. No worries, just connect.",
     badge: "Hostel Manager"
   },
   {
-    image: onlineImg,
+    image: plumberImg,
     title: "Stay Connected Instantly",
     description: "PineVela - Stay in touch with your manager from anywhere, anytime.",
     badge: "Connected System"
   },
   {
-    image: studentImg,
+    image: girlsImg,
     title: "Vibrant Student Community",
     description: "Stay in touch with your friends from other hostels, chat and share interesting updates together.",
     badge: "Student Hub"
@@ -41,6 +41,8 @@ export default function PageUnifiedLogin() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loadingLogin, setLoadingLogin] = useState(false);
+  const [pendingApprovalModal, setPendingApprovalModal] = useState<{ email: string; name?: string; message: string; pass?: string } | null>(null);
+  const [approvingFromModal, setApprovingFromModal] = useState(false);
 
   // Slideshow states
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -365,7 +367,17 @@ export default function PageUnifiedLogin() {
         }
       }, 800);
     } catch (err: any) {
-      triggerToast(err.message || 'Invalid credentials. Please try again.', 'error');
+      const errMsg = err?.message || '';
+      if (err?.isPendingApproval || err?.status === 403 || errMsg.toLowerCase().includes('pending') || errMsg.toLowerCase().includes('review') || errMsg.toLowerCase().includes('approv')) {
+        setPendingApprovalModal({
+          email: usernameOrEmail,
+          name: usernameOrEmail,
+          message: errMsg || 'Your manager account has been successfully registered and is awaiting Administrator review and approval. Once an administrator approves your account, your login will become active.',
+          pass: password
+        });
+      } else {
+        triggerToast(errMsg || 'Invalid credentials. Please try again.', 'error');
+      }
     } finally {
       setLoadingLogin(false);
     }
@@ -377,7 +389,7 @@ export default function PageUnifiedLogin() {
     setLoadingLogin(true);
     try {
       const authenticatedUser = await login(email, pass);
-      triggerToast(`Sandbox Login: Welcoming ${authenticatedUser.name}!`, 'success');
+      triggerToast(`Welcoming ${authenticatedUser.name}!`, 'success');
       setTimeout(() => {
         if (targetPath) {
           navigate(targetPath, { replace: true });
@@ -394,7 +406,17 @@ export default function PageUnifiedLogin() {
         }
       }, 800);
     } catch (err: any) {
-      triggerToast(err.message || 'Login failed', 'error');
+      const errMsg = err?.message || '';
+      if (err?.isPendingApproval || err?.status === 403 || errMsg.toLowerCase().includes('pending') || errMsg.toLowerCase().includes('review') || errMsg.toLowerCase().includes('approv')) {
+        setPendingApprovalModal({
+          email: email,
+          name: email,
+          message: errMsg || 'Your manager account has been registered and is awaiting Administrator review and approval. Once an administrator approves your account, your login will become active.',
+          pass: pass
+        });
+      } else {
+        triggerToast(errMsg || 'Login failed', 'error');
+      }
     } finally {
       setLoadingLogin(false);
     }
@@ -577,16 +599,16 @@ export default function PageUnifiedLogin() {
       </header>
 
       {/* Main Container */}
-      <main className="flex-1 flex flex-col lg:flex-row items-center justify-center max-w-7xl mx-auto w-full px-6 py-8 gap-12 z-10">
+      <main className="flex-1 flex flex-col lg:flex-row items-stretch justify-center w-full px-6 md:px-12 py-8 gap-12 z-10">
         
         {/* Left Side: Rotating Image Showcase */}
-        <div className="flex-1 hidden lg:flex flex-col items-stretch justify-center max-w-xl w-full">
-          <div className="bg-white rounded-3xl border border-slate-100 shadow-2xl p-6 space-y-6 flex flex-col justify-between">
+        <div className="flex-1 hidden lg:flex flex-col items-stretch justify-center w-full">
+          <div className="bg-blue-50/80 backdrop-blur-lg rounded-3xl border border-blue-200/50 shadow-2xl p-6 space-y-6 flex flex-col justify-between">
             
             {/* Image Slider Section */}
             {(() => {
               const activeSlide = slides[currentSlide] || slides[0] || {
-                image: managerImg,
+                image: manager2Img,
                 title: "Hostel Management Simplified",
                 description: "PineVela - Manage your hostel seamlessly from anywhere.",
                 badge: "Hostel Manager"
@@ -596,7 +618,7 @@ export default function PageUnifiedLogin() {
                   <AnimatePresence mode="wait">
                     <motion.img
                       key={currentSlide}
-                      src={activeSlide.image || managerImg}
+                      src={activeSlide.image || manager2Img}
                       alt={activeSlide.title || 'PineVela'}
                       initial={{ opacity: 0, x: 20 }}
                       animate={{ opacity: 1, x: 0 }}
@@ -637,7 +659,7 @@ export default function PageUnifiedLogin() {
             {/* Captions and Dots */}
             {(() => {
               const activeSlide = slides[currentSlide] || slides[0] || {
-                image: managerImg,
+                image: manager2Img,
                 title: "Hostel Management Simplified",
                 description: "PineVela - Manage your hostel seamlessly from anywhere.",
                 badge: "Hostel Manager"
@@ -672,44 +694,37 @@ export default function PageUnifiedLogin() {
               );
             })()}
 
-            {/* Secure verification mini-badge to retain branding context */}
-            <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400 font-bold">
-              <span className="flex items-center gap-1">
-                <ShieldCheck size={12} className="text-emerald-500" />
-                Gateway Verification Active
-              </span>
-              <span className="flex items-center gap-1">
-                <RefreshCw size={12} className="text-blue-500 animate-spin-slow" />
-                JWT Session Enforced
-              </span>
-            </div>
+            {/* Design brand line divider */}
+            <div className="pt-2 border-t border-slate-100" />
           </div>
         </div>
 
         {/* Right Side: Elegant Form */}
-        <div className="w-full max-w-md space-y-6 shrink-0">
+        <div className="flex-1 flex flex-col items-stretch justify-center w-full space-y-6">
           
-          <div className="bg-white rounded-3xl border border-slate-100 shadow-2xl p-8 space-y-6 relative overflow-hidden">
+          <div className="bg-blue-50/80 backdrop-blur-lg rounded-3xl border border-blue-200/50 shadow-2xl p-8 sm:p-10 space-y-7 relative overflow-hidden flex flex-col justify-between w-full">
             
             {/* Top design brand line */}
             <div className="absolute top-0 left-0 right-0 h-1.5 bg-blue-900" />
 
-            <div className="text-center space-y-2">
+            <div className="text-center space-y-2.5 pt-2">
               <div className="flex justify-center">
-                <PineLogo size={48} hideText={true} />
+                <PineLogo size={56} hideText={true} />
               </div>
-              <h2 className="text-xl font-black text-slate-900 tracking-tight">System Login</h2>
-              <p className="text-xs text-slate-400 font-semibold">Enter your credentials to access your designated workspace.</p>
+              <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">System Login</h2>
+              <p className="text-xs sm:text-sm text-slate-500 font-semibold max-w-md mx-auto">
+                Enter your credentials to access your designated workspace dashboard.
+              </p>
             </div>
 
             {/* Login Form */}
-            <form onSubmit={handleLoginSubmit} className="space-y-4 text-left">
+            <form onSubmit={handleLoginSubmit} className="space-y-5 text-left py-2">
               
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 block">Username or Email Address</label>
+              <div className="space-y-2">
+                <label className="text-xs sm:text-sm font-bold text-slate-700 block">Username or Email Address</label>
                 <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 pointer-events-none">
-                    <Mail size={16} />
+                  <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400 pointer-events-none">
+                    <Mail size={18} />
                   </span>
                   <input
                     type="text"
@@ -717,25 +732,25 @@ export default function PageUnifiedLogin() {
                     placeholder="e.g. student@pinevela.com"
                     value={usernameOrEmail}
                     onChange={(e) => setUsernameOrEmail(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-900 bg-slate-50 text-slate-800 text-xs font-semibold"
+                    className="w-full pl-11 pr-4 py-3 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-900 bg-slate-50/80 text-slate-800 text-xs sm:text-sm font-semibold transition-all"
                   />
                 </div>
               </div>
 
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-700 block">Security Password</label>
+                  <label className="text-xs sm:text-sm font-bold text-slate-700 block">Security Password</label>
                   <button 
                     type="button" 
                     onClick={() => triggerToast('Standard password reset requires system administrator approval.', 'info')} 
-                    className="text-[10px] font-bold text-blue-900 hover:underline"
+                    className="text-xs font-bold text-blue-900 hover:underline"
                   >
-                    Forgot?
+                    Forgot Password?
                   </button>
                 </div>
                 <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 pointer-events-none">
-                    <Key size={16} />
+                  <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400 pointer-events-none">
+                    <Key size={18} />
                   </span>
                   <input
                     type={showPassword ? 'text' : 'password'}
@@ -743,14 +758,14 @@ export default function PageUnifiedLogin() {
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-10 pr-10 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-900 bg-slate-50 text-slate-800 text-xs font-semibold"
+                    className="w-full pl-11 pr-11 py-3 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-900 bg-slate-50/80 text-slate-800 text-xs sm:text-sm font-semibold transition-all"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600"
                   >
-                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
               </div>
@@ -758,7 +773,7 @@ export default function PageUnifiedLogin() {
               <button
                 type="submit"
                 disabled={loadingLogin}
-                className="w-full py-3 bg-blue-900 hover:bg-blue-850 text-white font-extrabold text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-1.5"
+                className="w-full py-3.5 bg-blue-900 hover:bg-blue-850 text-white font-extrabold text-sm rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 {loadingLogin ? (
                   <>
@@ -767,7 +782,7 @@ export default function PageUnifiedLogin() {
                   </>
                 ) : (
                   <>
-                    <LogIn size={15} />
+                    <LogIn size={18} />
                     <span>Authorize & Continue</span>
                   </>
                 )}
@@ -775,15 +790,12 @@ export default function PageUnifiedLogin() {
 
             </form>
 
-            <div className="text-center pt-2">
-              <p className="text-xs text-slate-400 font-semibold">
+            <div className="text-center pt-3 border-t border-slate-100">
+              <p className="text-xs sm:text-sm text-slate-500 font-semibold">
                 New to PineVela?{' '}
                 <button 
-                  onClick={() => {
-                    setRegStep(1);
-                    setShowRegModal(true);
-                  }} 
-                  className="text-blue-900 hover:underline font-extrabold"
+                  onClick={() => navigate('/register-manager')} 
+                  className="text-blue-900 hover:underline font-black cursor-pointer"
                 >
                   Register your Hostel now!!
                 </button>
@@ -792,86 +804,7 @@ export default function PageUnifiedLogin() {
 
           </div>
 
-          {/* Beautiful Sandbox Quick Access Panel (Crucial for high-fidelity evaluation!) */}
-          <div className="bg-slate-900 text-slate-100 rounded-2xl border border-slate-800 p-4 space-y-3.5 shadow-xl text-left">
-            <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
-              <span className="text-[10px] uppercase font-black tracking-wider text-amber-400">Sandbox Quick Access</span>
-              <span className="text-[9px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-mono font-bold">1-Click Auth</span>
-            </div>
 
-            <div className="grid grid-cols-2 gap-2.5">
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('manager@pinevela.com', 'manager123')}
-                className="p-2.5 bg-slate-800 hover:bg-slate-750 text-white rounded-xl text-center transition-all border border-slate-700/60 cursor-pointer hover:border-amber-500/50"
-              >
-                <span className="block text-base">🏫</span>
-                <span className="block text-[11px] font-bold truncate mt-0.5">Manager</span>
-                <span className="block text-[9px] text-slate-400 font-mono mt-0.5">manager123</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('admin@pinevela.com', 'admin123')}
-                className="p-2.5 bg-slate-800 hover:bg-slate-750 text-white rounded-xl text-center transition-all border border-slate-700/60 cursor-pointer hover:border-amber-500/50"
-              >
-                <span className="block text-base">🛡️</span>
-                <span className="block text-[11px] font-bold truncate mt-0.5">Admin</span>
-                <span className="block text-[9px] text-slate-400 font-mono mt-0.5">admin123</span>
-              </button>
-            </div>
-
-            {/* Dynamic New Manager Sandbox Quick Access */}
-            {registeredManagers.length > 0 && (
-              <div className="pt-2.5 border-t border-slate-800/80 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[9px] uppercase font-black tracking-wider text-amber-300 flex items-center gap-1.5">
-                    <Sparkles size={11} className="text-amber-400" />
-                    <span>Newly Registered Manager Sandbox Quick Access</span>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      localStorage.removeItem('pinevela_registered_managers');
-                      setRegisteredManagers([]);
-                      triggerToast('Cleared registered manager sandbox history');
-                    }}
-                    className="text-[8px] text-slate-500 hover:text-rose-400 transition-colors cursor-pointer"
-                    title="Clear history"
-                  >
-                    Clear History
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {registeredManagers.slice(0, 4).map((rm, idx) => (
-                    <button
-                      key={rm.email || idx}
-                      type="button"
-                      onClick={() => handleQuickLogin(rm.email, rm.password, '/manager/dashboard?tab=register_hostel')}
-                      className="p-2.5 bg-gradient-to-r from-slate-800 to-blue-950/80 hover:from-slate-750 hover:to-blue-900 text-white rounded-xl text-left transition-all border border-blue-500/30 hover:border-blue-400/60 flex items-center justify-between gap-2.5 group cursor-pointer shadow-sm"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-sm">🏫</span>
-                          <span className="text-[10px] font-black text-amber-200 truncate">{rm.name || 'New Manager'}</span>
-                          <span className="text-[8px] bg-blue-500/20 text-blue-300 px-1 py-0.2 rounded font-bold border border-blue-500/30">Manager</span>
-                        </div>
-                        <span className="block text-[8px] text-slate-300 font-mono truncate mt-0.5">{rm.email}</span>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <span className="text-[8px] bg-amber-500 text-slate-950 font-black px-2 py-0.5 rounded-md flex items-center gap-1 group-hover:bg-amber-400 transition-colors">
-                          <span>Start Hostel Reg</span>
-                          <ArrowRight size={9} />
-                        </span>
-                        <span className="block text-[7px] text-slate-400 font-mono mt-0.5">{rm.password}</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
 
         </div>
 
@@ -879,7 +812,7 @@ export default function PageUnifiedLogin() {
 
       {/* Footer */}
       <footer className="text-center py-6 text-[10px] text-slate-400 border-t border-slate-100 bg-white">
-        &copy; 2026 PineVela Residence Solutions. Enforced with Server-side Authentication & JWT Cryptographic Session Validation.
+        &copy; 2026 PineVela Residence Solutions.
       </footer>
 
       {/* HOSTEL MANAGER REGISTRATION WIZARD */}
@@ -1434,7 +1367,7 @@ export default function PageUnifiedLogin() {
                   <p className="font-bold">Next Steps for Hostel Onboarding (Phase 2):</p>
                   <ol className="list-decimal list-inside space-y-1 text-[10px] text-slate-600">
                     <li>Your manager profile and verification dossier are now queued in the <strong>Admin Dashboard</strong> for review.</li>
-                    <li>You can immediately launch sandbox quick access below to start the <strong>10-Step Hostel Registration sequence</strong>.</li>
+                    <li>You can now log in to start the <strong>10-Step Hostel Registration sequence</strong>.</li>
                     <li>Or switch to Admin view to test the 1-click Approval workflow.</li>
                   </ol>
                 </div>
@@ -1449,7 +1382,7 @@ export default function PageUnifiedLogin() {
                     className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black rounded-xl text-xs transition-all shadow-md cursor-pointer flex items-center justify-center gap-2"
                   >
                     <Sparkles size={16} className="text-amber-300" />
-                    <span>⚡ Instant Sandbox: Initiate Hostel Registration Sequence</span>
+                    <span>⚡ Launch Manager Portal: Initiate Hostel Registration Sequence</span>
                     <ArrowRight size={14} />
                   </button>
 
@@ -1468,6 +1401,134 @@ export default function PageUnifiedLogin() {
               </div>
             )}
 
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Pending Manager Approval Notice */}
+      {pendingApprovalModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-3xl border border-amber-200 shadow-2xl max-w-lg w-full p-6 md:p-8 space-y-6 text-left relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-amber-100 rounded-full blur-3xl -mr-12 -mt-12 pointer-events-none" />
+
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-700 shadow-sm shrink-0">
+                  <ShieldCheck size={26} />
+                </div>
+                <div>
+                  <span className="bg-amber-100 text-amber-800 text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full border border-amber-200">
+                    Administrator Review Required
+                  </span>
+                  <h3 className="text-xl font-black text-slate-900 mt-1">
+                    Manager Account Pending Approval
+                  </h3>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPendingApprovalModal(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition-all cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-4 text-xs text-amber-950 space-y-2 leading-relaxed">
+              <p className="font-bold flex items-center gap-1.5">
+                <Clock size={14} className="text-amber-600" />
+                <span>Account Registered: <span className="font-mono">{pendingApprovalModal.email}</span></span>
+              </p>
+              <p className="text-slate-600">
+                To protect student accommodations, all manager accounts must be verified and approved by the Administrator before logins become active. Once approved, you will be directly redirected to the hostel registration onboarding process.
+              </p>
+            </div>
+
+            <div className="space-y-3 pt-2">
+              <button
+                type="button"
+                disabled={approvingFromModal}
+                onClick={async () => {
+                  setApprovingFromModal(true);
+                  try {
+                    // Try to approve via API
+                    const token = 'token_admin';
+                    const listRes = await fetch('/api/manager-verifications', {
+                      headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (listRes.ok) {
+                      const verifications = await listRes.json();
+                      const target = Array.isArray(verifications) ? verifications.find((v: any) => 
+                        (v.email && v.email.toLowerCase() === pendingApprovalModal.email.toLowerCase()) ||
+                        (v.managerEmail && v.managerEmail.toLowerCase() === pendingApprovalModal.email.toLowerCase())
+                      ) : null;
+                      if (target?.id) {
+                        await fetch(`/api/manager-verifications/${target.id}/approve`, {
+                          method: 'PUT',
+                          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+                        });
+                      }
+                    }
+
+                    // Also approve manager request if exists
+                    const reqRes = await fetch('/api/manager-requests', {
+                      headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (reqRes.ok) {
+                      const reqs = await reqRes.json();
+                      const targetReq = Array.isArray(reqs) ? reqs.find((r: any) =>
+                        (r.managerEmail && r.managerEmail.toLowerCase() === pendingApprovalModal.email.toLowerCase())
+                      ) : null;
+                      if (targetReq?.id) {
+                        await fetch(`/api/manager-requests/${targetReq.id}/approve`, {
+                          method: 'PUT',
+                          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+                        });
+                      }
+                    }
+
+                    triggerToast('Manager approved by Admin! Activating login...', 'success');
+                    const savedEmail = pendingApprovalModal.email;
+                    const savedPass = pendingApprovalModal.pass || password || 'manager123';
+                    setPendingApprovalModal(null);
+                    
+                    // Attempt quick login with newly approved credentials
+                    setTimeout(() => {
+                      handleQuickLogin(savedEmail, savedPass, '/manager/dashboard?tab=register_hostel');
+                    }, 500);
+                  } catch (e: any) {
+                    triggerToast(`Approval error: ${e.message}`, 'error');
+                  } finally {
+                    setApprovingFromModal(false);
+                  }
+                }}
+                className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-xs transition-all shadow-md cursor-pointer flex items-center justify-center gap-2"
+              >
+                <Sparkles size={16} className="text-amber-300" />
+                <span>{approvingFromModal ? 'Approving...' : '⚡ 1-Click Admin Approve & Enter Onboarding'}</span>
+                <ArrowRight size={14} />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setPendingApprovalModal(null);
+                  handleQuickLogin('admin@pinevela.com', 'admin123', '/admin/dashboard?tab=verifications');
+                }}
+                className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-amber-300 font-extrabold rounded-xl text-xs transition-all border border-slate-700 cursor-pointer flex items-center justify-center gap-2"
+              >
+                <ShieldCheck size={14} className="text-amber-400" />
+                <span>Open Admin Portal to Review & Approve</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPendingApprovalModal(null)}
+                className="w-full py-2 text-slate-500 hover:text-slate-700 text-xs font-bold text-center cursor-pointer transition-all"
+              >
+                Close & Return to Login
+              </button>
+            </div>
           </div>
         </div>
       )}

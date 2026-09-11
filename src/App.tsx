@@ -8,10 +8,8 @@ import { motion, AnimatePresence } from 'motion/react';
 // Component imports
 import Page1Public from './components/Page1Public';
 import PageUnifiedLogin from './components/PageUnifiedLogin';
-import Page5StudentDashboard from './components/Page5StudentDashboard';
-import Page8ManagerDashboard from './components/Page8ManagerDashboard';
-import Page10HostelManagerDashboard from './components/Page10HostelManagerDashboard';
-import Page11StaffDashboard from './components/Page11StaffDashboard';
+import PageManagerOnboarding from './components/PageManagerOnboarding';
+import PageAdminDashboard from './components/PageAdminDashboard';
 
 // Elegant wrapper for transition animations
 function PageWrapper({ children, noAnimation = false }: { children: React.ReactNode; noAnimation?: boolean }) {
@@ -113,12 +111,24 @@ function AppContent() {
     }
   };
 
-  const handleHostelRegistered = (newHostel: Hostel) => {
+  const handleHostelRegistered = async (newHostel: Hostel) => {
     setHostels(prev => [newHostel, ...prev.filter(h => h.id !== newHostel.id)]);
+    try {
+      const res = await fetch('/api/hostels');
+      if (res.ok) {
+        const freshList = await res.json();
+        if (Array.isArray(freshList) && freshList.length > 0) {
+          setHostels(freshList);
+        }
+      }
+    } catch (err) {
+      console.warn("Notice syncing hostels from server:", err);
+    }
   };
 
   const handleUpdateHostelsOnServer = async (updatedList: Hostel[]) => {
-    // Determine which hostel was updated or created
+    // Optimistically update React state immediately
+    setHostels(updatedList);
     try {
       const syncedList = [...updatedList];
       for (let i = 0; i < syncedList.length; i++) {
@@ -131,31 +141,42 @@ function AppContent() {
             method: 'POST',
             body: JSON.stringify(updated)
           });
-          syncedList[i] = created;
+          if (created && created.id) syncedList[i] = created;
         } else if (JSON.stringify(original) !== JSON.stringify(updated)) {
           // Existing hostel: PUT to server
           const saved = await apiFetch(`/api/hostels/${updated.id}`, {
             method: 'PUT',
             body: JSON.stringify(updated)
           });
-          syncedList[i] = saved;
+          if (saved && saved.id) syncedList[i] = saved;
         }
       }
       setHostels(syncedList);
     } catch (err) {
-      console.error("Failed to sync hostels update on server:", err);
+      console.warn("Notice syncing hostels update on server:", err);
     }
   };
 
   const handleUpdateSingleHostelOnServer = async (updatedHostel: Hostel) => {
+    // Optimistically update React state immediately
+    setHostels(prev => {
+      const exists = prev.some(h => h.id === updatedHostel.id);
+      if (exists) {
+        return prev.map(h => h.id === updatedHostel.id ? { ...h, ...updatedHostel } : h);
+      }
+      return [updatedHostel, ...prev];
+    });
+
     try {
       const updated = await apiFetch(`/api/hostels/${updatedHostel.id}`, {
         method: 'PUT',
         body: JSON.stringify(updatedHostel)
       });
-      setHostels(prev => prev.map(h => h.id === updated.id ? updated : h));
+      if (updated && updated.id) {
+        setHostels(prev => prev.map(h => h.id === updated.id ? { ...h, ...updated } : h));
+      }
     } catch (err) {
-      console.error("Failed to sync hostel update on server:", err);
+      console.warn("Notice syncing hostel update on server:", err);
     }
   };
 
@@ -202,148 +223,23 @@ function AppContent() {
           }
         />
 
-        {/* 3. PROTECTED STUDENT ROUTES */}
+        {/* 2B. MANAGER ONBOARDING PAGE */}
         <Route
-          path="/student/dashboard"
+          path="/register-manager"
           element={
-            <ProtectedRoute allowedRoles={['student']}>
-              <PageWrapper noAnimation={true}>
-                <Page5StudentDashboard
-                  currentScreen="student-dashboard"
-                  onNavigate={(screen) => {
-                    if (screen === 'public-browse') {
-                      logout();
-                      navigate('/login');
-                    } else if (screen === 'student-report-issue') {
-                      navigate('/student/report-issue');
-                    } else {
-                      navigate('/student/dashboard');
-                    }
-                  }}
-                  onSubmitIssue={handleCreateIssueOnServer}
-                />
-              </PageWrapper>
-            </ProtectedRoute>
+            <PageWrapper>
+              <PageManagerOnboarding />
+            </PageWrapper>
           }
         />
 
-        <Route
-          path="/student/report-issue"
-          element={
-            <ProtectedRoute allowedRoles={['student']}>
-              <PageWrapper noAnimation={true}>
-                <Page5StudentDashboard
-                  currentScreen="student-report-issue"
-                  onNavigate={(screen) => {
-                    if (screen === 'public-browse') {
-                      logout();
-                      navigate('/login');
-                    } else if (screen === 'student-dashboard') {
-                      navigate('/student/dashboard');
-                    } else {
-                      navigate('/student/report-issue');
-                    }
-                  }}
-                  onSubmitIssue={handleCreateIssueOnServer}
-                />
-              </PageWrapper>
-            </ProtectedRoute>
-          }
-        />
-
-        {/* 4. PROTECTED MANAGER ROUTES */}
-        <Route
-          path="/manager/dashboard"
-          element={
-            <ProtectedRoute allowedRoles={['manager']}>
-              <PageWrapper noAnimation={true}>
-                <Page10HostelManagerDashboard
-                  // Match the logged in manager with their designated hostel (e.g. Pine Crest Residency)
-                  hostel={hostels.find(h => h.id === 'hostel-1') || hostels[0] || {} as Hostel}
-                  bookingRequests={bookingRequests}
-                  issueReports={issueReports}
-                  onLogout={() => {
-                    logout();
-                    navigate('/login');
-                  }}
-                  onUpdateHostel={handleUpdateSingleHostelOnServer}
-                  onAddActivity={(text, type) => {
-                    console.log(`[Activity log] ${text}`);
-                  }}
-                />
-              </PageWrapper>
-            </ProtectedRoute>
-          }
-        />
-
-        {/* PROTECTED STAFF ROUTES */}
-        <Route
-          path="/staff/dashboard"
-          element={
-            <ProtectedRoute allowedRoles={['staff']}>
-              <PageWrapper noAnimation={true}>
-                <Page11StaffDashboard />
-              </PageWrapper>
-            </ProtectedRoute>
-          }
-        />
-
-        {/* 5. PROTECTED ADMIN ROUTES */}
+        {/* 2C. ADMIN DASHBOARD ROUTE */}
         <Route
           path="/admin/dashboard"
           element={
             <ProtectedRoute allowedRoles={['admin']}>
-              <PageWrapper noAnimation={true}>
-                <Page8ManagerDashboard
-                  currentScreen="manager-dashboard"
-                  onNavigate={(screen) => {
-                    if (screen === 'public-browse') {
-                      logout();
-                      navigate('/login');
-                    } else if (screen === 'manager-configure') {
-                      navigate('/admin/configure');
-                    } else {
-                      navigate('/admin/dashboard');
-                    }
-                  }}
-                  hostels={hostels}
-                  bookingRequests={bookingRequests}
-                  issueReports={issueReports}
-                  activities={activities}
-                  onUpdateHostels={handleUpdateHostelsOnServer}
-                  onHostelRegistered={handleHostelRegistered}
-                  onUpdateBookingStatus={handleUpdateBookingStatusOnServer}
-                />
-              </PageWrapper>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/admin/configure"
-          element={
-            <ProtectedRoute allowedRoles={['admin']}>
-              <PageWrapper noAnimation={true}>
-                <Page8ManagerDashboard
-                  currentScreen="manager-configure"
-                  onNavigate={(screen) => {
-                    if (screen === 'public-browse') {
-                      logout();
-                      navigate('/login');
-                    } else if (screen === 'manager-dashboard') {
-                      navigate('/admin/dashboard');
-                    } else {
-                      navigate('/admin/configure');
-                    }
-                  }}
-                  hostels={hostels}
-                  bookingRequests={bookingRequests}
-                  issueReports={issueReports}
-                  activities={activities}
-                  onUpdateHostels={handleUpdateHostelsOnServer}
-                  onHostelRegistered={handleHostelRegistered}
-                  onUpdateBookingStatus={handleUpdateBookingStatusOnServer}
-                />
+              <PageWrapper>
+                <PageAdminDashboard />
               </PageWrapper>
             </ProtectedRoute>
           }

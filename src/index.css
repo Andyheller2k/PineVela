@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 
 @theme {
@@ -12,7 +12,7 @@
   --color-text-muted: #64748b;
 
   /* Font overrides */
-  --font-sans: 'Inter', 'SF Pro Text', -apple-system, sans-serif;
+  --font-sans: 'Outfit', 'Plus Jakarta Sans', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
   /* Override default brand blue to the vivid royal blue of Clean Minimalism */
@@ -55,7 +55,7 @@
 html, body {
   background-color: #f8fafc;
   color: #0f172a;
-  font-family: 'Inter', 'SF Pro Text', -apple-system, sans-serif;
+  font-family: 'Outfit', 'Plus Jakarta Sans', sans-serif;
 }
 
 /* Scrollbar styling */
@@ -90,14 +90,27 @@ html, body {
   animation: sos-pulse 1.5s infinite ease-in-out;
 }
 
-@keyframes text-pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.6;
-  }
+/* 3D text styling and text outline utilities */
+.text-3d {
+  color: #0f172a;
+  text-shadow: 0 1px 0 #cbd5e1, 0 2px 0 #94a3b8, 0 3px 0 #64748b, 0 4px 6px rgba(0, 0, 0, 0.3);
 }
+
+.text-3d-blue {
+  color: #2563eb;
+  text-shadow: 0 1px 0 #93c5fd, 0 2px 0 #60a5fa, 0 3px 2px rgba(37, 99, 235, 0.4);
+}
+
+.text-outline-sm {
+  -webkit-text-stroke: 0.5px #1e293b;
+  color: #334155;
+}
+
+.text-outline-white {
+  -webkit-text-stroke: 0.6px #ffffff;
+  color: #1e293b;
+}
+
 
 .sos-text-pulse {
   animation: text-pulse 1.5s infinite ease-in-out;
