@@ -440,8 +440,59 @@ export default function PageAdminDashboard() {
         )}
       </AnimatePresence>
 
+      
+      {/* MOBILE HEADER (lg:hidden) */}
+      <header className="lg:hidden flex items-center justify-between px-5 py-3 bg-white/90 backdrop-blur-xl border-b border-sky-200/50 sticky top-0 z-40 shadow-sm">
+        <div className="flex items-center gap-2">
+          <PineLogo size={24} />
+          <div>
+            <h1 className="text-xs font-black tracking-tight text-blue-950 leading-tight">PineVela Admin</h1>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <button onClick={() => setShowLogoutConfirm(true)} className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg">
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
+      </header>
+
+      {/* MOBILE BOTTOM NAV (lg:hidden) */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-xl border-t border-slate-200 shadow-[0_-10px_40px_rgba(0,0,0,0.08)]">
+        <div className="flex items-center gap-1 overflow-x-auto px-2 py-2 pb-safe snap-x hide-scrollbar">
+          {[
+            { id: 'overview', label: 'Overview', icon: ShieldCheck },
+            { id: 'residences', label: 'Residences', icon: Building2, badge: pendingHostelsCount },
+            { id: 'managers', label: 'Managers', icon: Users, badge: pendingManagersCount },
+            { id: 'staff_verification', label: 'Staffs', icon: FileCheck, badge: pendingStaffCount },
+            { id: 'notifications', label: 'Alerts', icon: Bell, badge: (pendingBoardRequestsCount + pendingHostelsCount) },
+            { id: 'settings', label: 'Settings', icon: Edit3 }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`snap-center shrink-0 flex flex-col items-center justify-center w-[72px] h-12 rounded-xl transition-all relative ${
+                activeTab === tab.id ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'
+              }`}
+            >
+              <div className={`p-1.5 rounded-lg ${activeTab === tab.id ? 'bg-blue-100/50' : ''}`}>
+                <tab.icon className={`w-5 h-5 ${activeTab === tab.id ? 'scale-110 transition-transform' : ''}`} />
+                {tab.badge ? (
+                  <span className="absolute top-1 right-3 w-4 h-4 bg-amber-400 text-slate-900 rounded-full text-[9px] font-black flex items-center justify-center ring-2 ring-white">
+                    {tab.badge}
+                  </span>
+                ) : null}
+              </div>
+              <span className={`text-[9px] font-bold mt-0.5 ${activeTab === tab.id ? 'text-blue-700' : 'text-slate-500'}`}>
+                {tab.label}
+              </span>
+            </button>
+          ))}
+        </div>
+      </nav>
+
       {/* SIDEBAR: PURELY STATIC / FIXED ICE-BLUE FROSTY BLUE WITH CURVED EDGES & BLUE GLOW */}
-      <aside className="w-full lg:w-72 m-4 lg:my-6 lg:ml-6 h-auto lg:h-[calc(100vh-3rem)] bg-gradient-to-br from-sky-100/90 via-blue-100/85 to-amber-50/40 backdrop-blur-3xl border border-sky-200/80 shadow-2xl rounded-3xl p-6 flex flex-col justify-between shrink-0 overflow-y-auto">
+
+      <aside className="hidden lg:flex w-72 my-6 ml-6 h-[calc(100vh-3rem)] bg-gradient-to-br from-sky-100/90 via-blue-100/85 to-amber-50/40 backdrop-blur-3xl border border-sky-200/80 shadow-2xl rounded-3xl p-6 flex flex-col justify-between shrink-0 overflow-y-auto">
         <div className="space-y-8">
           {/* Logo & Header */}
           <div className="flex items-center space-x-3 px-2">

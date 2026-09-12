@@ -517,8 +517,61 @@ export default function PageStaffDashboard() {
         </div>
       )}
 
+      
+      {/* MOBILE HEADER (lg:hidden) */}
+      <header className="lg:hidden flex items-center justify-between px-5 py-3 bg-white/90 backdrop-blur-xl border-b border-sky-200/50 sticky top-0 z-40 shadow-sm">
+        <div className="flex items-center gap-2">
+          <PineLogo size={24} />
+          <div>
+            <h1 className="text-xs font-black tracking-tight text-blue-950 leading-tight">PineVela Staff</h1>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <button onClick={() => setShowLogoutConfirm(true)} className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg">
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
+      </header>
+
+      {/* MOBILE BOTTOM NAV (lg:hidden) */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-xl border-t border-slate-200 shadow-[0_-10px_40px_rgba(0,0,0,0.08)]">
+        <div className="flex items-center justify-around px-2 py-2 pb-safe">
+          {[
+            { id: 'apply', icon: Briefcase, label: 'Board' },
+            { id: 'offers', icon: Briefcase, label: 'Offers', badge: jobOffers.filter(o => o.status === 'Pending').length },
+            { id: 'notifications', icon: Bell, label: 'Alerts', badge: notifications.length },
+            { id: 'settings', icon: Settings, label: 'Settings' },
+            ...(approvedApp ? [{ id: 'chat', icon: MessageSquare, label: 'Chat', dot: true }] : [])
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`flex flex-col items-center justify-center w-16 h-12 rounded-xl transition-all relative ${
+                activeTab === tab.id ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'
+              }`}
+            >
+              <div className={`p-1.5 rounded-lg ${activeTab === tab.id ? 'bg-blue-100/50' : ''}`}>
+                <tab.icon className={`w-5 h-5 ${activeTab === tab.id ? 'scale-110 transition-transform' : ''}`} />
+                {tab.badge ? (
+                  <span className="absolute top-1 right-3 w-4 h-4 bg-amber-400 text-slate-900 rounded-full text-[9px] font-black flex items-center justify-center ring-2 ring-white">
+                    {tab.badge}
+                  </span>
+                ) : null}
+                {tab.dot ? (
+                  <span className="absolute top-1 right-4 w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
+                ) : null}
+              </div>
+              <span className={`text-[9px] font-bold mt-0.5 ${activeTab === tab.id ? 'text-blue-700' : 'text-slate-500'}`}>
+                {tab.label}
+              </span>
+            </button>
+          ))}
+        </div>
+      </nav>
+
       {/* LEFT SIDEBAR NAVIGATION */}
-      <aside className="w-full lg:w-72 m-4 lg:my-6 lg:ml-6 h-auto lg:h-[calc(100vh-3rem)] bg-gradient-to-br from-sky-100/90 via-blue-100/85 to-amber-50/40 backdrop-blur-3xl border border-sky-200/80 shadow-2xl rounded-3xl p-6 flex flex-col justify-between shrink-0 overflow-y-auto z-20">
+
+      <aside className="hidden lg:flex w-72 my-6 ml-6 h-[calc(100vh-3rem)] bg-gradient-to-br from-sky-100/90 via-blue-100/85 to-amber-50/40 backdrop-blur-3xl border border-sky-200/80 shadow-2xl rounded-3xl p-6 flex flex-col justify-between shrink-0 overflow-y-auto z-20">
         <div className="space-y-6">
           {/* Logo & Header */}
           <div className="flex items-center space-x-3 px-2">
@@ -735,7 +788,7 @@ export default function PageStaffDashboard() {
       </aside>
 
       {/* MAIN WORKSPACE CONTENT */}
-      <main className="flex-1 m-4 lg:my-6 lg:mr-6 h-auto lg:h-[calc(100vh-3rem)] overflow-y-auto bg-gradient-to-br from-white/95 via-sky-50/50 to-blue-50/30 backdrop-blur-2xl border border-sky-200/70 shadow-2xl rounded-3xl p-6 md:p-8 space-y-8">
+      <main className="flex-1 m-4 mb-24 lg:mb-6 lg:my-6 lg:mr-6 h-auto lg:h-[calc(100vh-3rem)] overflow-y-auto pb-24 lg:pb-8 bg-gradient-to-br from-white/95 via-sky-50/50 to-blue-50/30 backdrop-blur-2xl border border-sky-200/70 shadow-2xl rounded-3xl p-6 md:p-8 space-y-8">
         {/* TOP STATUS BAR */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-200/60">
           <div>

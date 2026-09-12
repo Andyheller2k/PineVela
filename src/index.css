@@ -135,3 +135,4 @@ html, body {
   animation: blue-glow-pulse 2s infinite ease-in-out;
   transform: translateY(-3px);
 }
+.hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; } .hide-scrollbar::-webkit-scrollbar { display: none; }
