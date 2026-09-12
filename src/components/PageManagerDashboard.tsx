@@ -7,12 +7,13 @@ import ManagerProfileModal from './ManagerProfileModal';
 import { ManagerMeetingsTab } from './ManagerMeetingsTab';
 import { ManagerAccountSettingsModal } from './ManagerAccountSettingsModal';
 import LogoutConfirmationModal from './LogoutConfirmationModal';
+import { getPdfBlobUrl, downloadPdfDocument } from '../utils/pdfHelper';
 import { 
   Building2, Users, MapPin, DollarSign, CheckCircle2, XCircle, Clock, Plus, 
   ShieldCheck, LogOut, Search, Home, Hotel, Coffee, UserPlus, 
   AlertCircle, Check, Sparkles, ArrowRight, Layers, Wrench, Settings, Bell,
   Send, MessageSquare, Phone, Mail, Shield, Trash2, Edit3, Eye, FileText, CheckCircle, Lock, Calendar, CalendarCheck,
-  Briefcase, Sliders, ExternalLink, Download
+  Briefcase, Sliders, ExternalLink, Download, RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -46,7 +47,7 @@ export default function PageManagerDashboard() {
   // Prioritize onboarding flow/tabs immediately if manager is pending approval
   const isPendingOnboarding = user && user.role === 'manager' && user.hasApprovedHostel === false;
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'properties' | 'blocks' | 'staff' | 'maintenance' | 'meetings' | 'notifications'>(
+  const [activeTab, setActiveTab] = useState<'overview' | 'properties' | 'blocks' | 'staff' | 'maintenance' | 'meetings' | 'notifications' | 'chat'>(
     isPendingOnboarding ? 'notifications' : 'overview'
   );
   const [loading, setLoading] = useState(true);
@@ -69,9 +70,24 @@ export default function PageManagerDashboard() {
   const [staffApplications, setStaffApplications] = useState<any[]>([]);
   const [staffSubTab, setStaffSubTab] = useState<'roster' | 'applications' | 'recruitment'>('roster');
   const [selectedCvApp, setSelectedCvApp] = useState<any | null>(null);
+  const [docPreviewModal, setDocPreviewModal] = useState<{ title: string; type: 'cv' | 'id'; data: string; fileName?: string; name?: string } | null>(null);
+  const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (docPreviewModal && docPreviewModal.type === 'cv' && docPreviewModal.data) {
+      const url = getPdfBlobUrl(docPreviewModal.data, docPreviewModal.name || 'Applicant');
+      setPreviewBlobUrl(url);
+      return () => {
+        URL.revokeObjectURL(url);
+      };
+    } else {
+      setPreviewBlobUrl(null);
+    }
+  }, [docPreviewModal?.data, docPreviewModal?.type, docPreviewModal?.name]);
   const [approveModalApp, setApproveModalApp] = useState<any | null>(null);
   const [approveShift, setApproveShift] = useState('Day Shift (8 AM - 5 PM)');
   const [approveBlock, setApproveBlock] = useState('All Blocks');
+  const [approveStartDate, setApproveStartDate] = useState(new Date(Date.now() + 86400000).toISOString().split('T')[0]);
   const [hiringOpen, setHiringOpen] = useState(true);
   const [recruitmentRoles, setRecruitmentRoles] = useState<any[]>([
     { role: 'Facilities & Maintenance Technician', vacancies: 2, shift: 'Day Shift' },
@@ -81,6 +97,7 @@ export default function PageManagerDashboard() {
   const [newRecruitRole, setNewRecruitRole] = useState('Facilities & Maintenance Technician');
   const [newRecruitVacancies, setNewRecruitVacancies] = useState(1);
   const [newRecruitShift, setNewRecruitShift] = useState('Day Shift (8 AM - 5 PM)');
+  const [newRecruitWage, setNewRecruitWage] = useState('GH₵ 2,500 / month');
   const [savingRecruitment, setSavingRecruitment] = useState(false);
 
   const [showAddStaffModal, setShowAddStaffModal] = useState(false);
@@ -90,6 +107,14 @@ export default function PageManagerDashboard() {
   const [newStaffEmail, setNewStaffEmail] = useState('');
   const [newStaffShift, setNewStaffShift] = useState('Day Shift (8 AM - 5 PM)');
   const [newStaffBlock, setNewStaffBlock] = useState('All Blocks');
+
+  // Chat States
+  const [chatRooms, setChatRooms] = useState<any[]>([]);
+  const [selectedRoomId, setSelectedRoomId] = useState<string>('');
+  const [chatMessagesList, setChatMessagesList] = useState<any[]>([]);
+  const [newMessage, setNewMessage] = useState<string>('');
+  const [sendingMsg, setSendingMsg] = useState(false);
+  const [loadingChat, setLoadingChat] = useState(false);
 
   // Maintenance state
   const [showAddIssueModal, setShowAddIssueModal] = useState(false);
@@ -456,7 +481,7 @@ export default function PageManagerDashboard() {
     }
   };
 
-  const handleStaffAppDecision = async (appId: string, status: 'Approved' | 'Rejected', shift?: string, block?: string) => {
+  const handleStaffAppDecision = async (appId: string, status: 'Approved' | 'Rejected', shift?: string, block?: string, startDate?: string) => {
     try {
       await apiFetch(`/api/staff-applications/${appId}/decision`, {
         method: 'PUT',
@@ -464,7 +489,8 @@ export default function PageManagerDashboard() {
           status,
           shift: shift || 'Day Shift (8 AM - 5 PM)',
           assignedBlock: block || 'All Blocks',
-          reviewNotes: status === 'Approved' ? 'Application reviewed and approved.' : 'Application reviewed. Position filled or criteria not met.'
+          startDate: startDate || 'Immediate',
+          reviewNotes: status === 'Approved' ? `Application reviewed and approved. Starting date: ${startDate || 'Immediate'}` : 'Application reviewed. Position filled or criteria not met.'
         })
       });
       setStaffApplications(prev => prev.map(a => a.id === appId ? { ...a, status } : a));
@@ -506,7 +532,7 @@ export default function PageManagerDashboard() {
     if (!newRecruitRole) return;
     setRecruitmentRoles(prev => [
       ...prev,
-      { role: newRecruitRole, vacancies: Number(newRecruitVacancies) || 1, shift: newRecruitShift }
+      { role: newRecruitRole, vacancies: Number(newRecruitVacancies) || 1, shift: newRecruitShift, wage: newRecruitWage }
     ]);
   };
 
@@ -582,6 +608,71 @@ export default function PageManagerDashboard() {
       fetchManagerData();
     }
   }, [user]);
+
+  const fetchChatRooms = async () => {
+    try {
+      const rooms = await apiFetch('/api/staff-chat/rooms').catch(() => []);
+      if (Array.isArray(rooms)) {
+        setChatRooms(rooms);
+        if (rooms.length > 0 && !selectedRoomId) {
+          setSelectedRoomId(rooms[0].id);
+        }
+      }
+    } catch (err) {
+      console.error("Error loading chat rooms:", err);
+    }
+  };
+
+  const fetchChatMessages = async (roomId: string) => {
+    if (!roomId) return;
+    try {
+      const msgs = await apiFetch(`/api/staff-chat/rooms/${roomId}/messages`).catch(() => []);
+      if (Array.isArray(msgs)) {
+        setChatMessagesList(msgs);
+      }
+    } catch (err) {
+      console.error("Error fetching chat messages:", err);
+    }
+  };
+
+  const handleSendChatMessage = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!selectedRoomId || !newMessage.trim()) return;
+    setSendingMsg(true);
+    try {
+      const response = await apiFetch(`/api/staff-chat/rooms/${selectedRoomId}/messages`, {
+        method: 'POST',
+        body: JSON.stringify({ content: newMessage })
+      });
+      if (response && response.id) {
+        setNewMessage('');
+        fetchChatMessages(selectedRoomId);
+      } else if (response && response.error) {
+        triggerToast(response.error);
+      }
+    } catch (err: any) {
+      triggerToast(err.message || 'Failed to send message.');
+    } finally {
+      setSendingMsg(false);
+    }
+  };
+
+  // Poll for messages when chat active
+  useEffect(() => {
+    if (activeTab === 'chat') {
+      fetchChatRooms();
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'chat' && selectedRoomId) {
+      fetchChatMessages(selectedRoomId);
+      const interval = setInterval(() => {
+        fetchChatMessages(selectedRoomId);
+      }, 3500);
+      return () => clearInterval(interval);
+    }
+  }, [activeTab, selectedRoomId]);
 
   useEffect(() => {
     if (!loading && user) {
@@ -738,6 +829,7 @@ export default function PageManagerDashboard() {
               { id: 'staff', label: 'Staff Management', icon: Users, badge: staffList.length > 0 ? staffList.length : null, sub: 'Security, desk & team', locked: !hasApprovedProperty },
               { id: 'maintenance', label: 'Maintenance Hub', icon: Wrench, badge: activeIssues > 0 ? activeIssues : null, sub: 'Dispatch & tickets', locked: !hasApprovedProperty },
               { id: 'meetings', label: 'Meeting Requests', icon: CalendarCheck, sub: 'Student & staff appointments', locked: !hasApprovedProperty },
+              { id: 'chat', label: 'Secure Staff Chat', icon: MessageSquare, sub: 'Encrypted communication', locked: !hasApprovedProperty },
               { id: 'notifications', label: 'Notifications & Board', icon: Bell, badge: boardRequests.length > 0 ? boardRequests.length : null, sub: 'Alerts & Admin direct line', locked: false }
             ].map(tab => {
               const Icon = tab.icon;
@@ -1525,7 +1617,13 @@ export default function PageManagerDashboard() {
                                   {/* Read CV Button */}
                                   <button
                                     type="button"
-                                    onClick={() => setSelectedCvApp(app)}
+                                    onClick={() => setDocPreviewModal({
+                                      title: `Curriculum Vitae (CV) — ${app.applicantName}`,
+                                      type: 'cv',
+                                      data: app.cvData || '',
+                                      fileName: app.cvFileName || 'Curriculum_Vitae.pdf',
+                                      name: app.applicantName
+                                    })}
                                     className="px-3.5 py-1.5 bg-blue-900 hover:bg-blue-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
                                   >
                                     <FileText className="w-3.5 h-3.5" />
@@ -1534,15 +1632,20 @@ export default function PageManagerDashboard() {
 
                                   {/* ID Attachment preview if present */}
                                   {app.idDocumentUrl && (
-                                    <a
-                                      href={app.idDocumentUrl}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"
+                                    <button
+                                      type="button"
+                                      onClick={() => setDocPreviewModal({
+                                        title: `National ID / Ghana Card — ${app.applicantName}`,
+                                        type: 'id',
+                                        data: app.idDocumentUrl,
+                                        fileName: `Ghana_Card_${app.applicantName}.json`,
+                                        name: app.applicantName
+                                      })}
+                                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-200/50"
                                     >
                                       <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
                                       <span>Inspect National ID</span>
-                                    </a>
+                                    </button>
                                   )}
                                 </div>
 
@@ -1631,7 +1734,10 @@ export default function PageManagerDashboard() {
                               <div className="flex items-center gap-2">
                                 <Briefcase className="w-4 h-4 text-blue-600" />
                                 <div>
-                                  <span className="font-bold text-slate-900">{r.role}</span>
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="font-bold text-slate-900">{r.role}</span>
+                                    <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-black rounded-md">{r.wage || 'Negotiable'}</span>
+                                  </div>
                                   <span className="text-[11px] text-slate-500 block">
                                     Vacancies: {r.vacancies || 1} &bull; Shift: {r.shift || 'Day Shift'}
                                   </span>
@@ -1651,7 +1757,7 @@ export default function PageManagerDashboard() {
                         {/* Add Role Form */}
                         <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
                           <span className="text-xs font-bold text-slate-900 block">Add Needed Role</span>
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
                             <div>
                               <label className="text-[10px] font-bold text-slate-500 block mb-1">Role Title</label>
                               <select
@@ -1694,6 +1800,17 @@ export default function PageManagerDashboard() {
                                 <option value="Morning Shift (6 AM - 2 PM)">Morning Shift (6 AM - 2 PM)</option>
                                 <option value="Flexible / Rotating">Flexible / Rotating</option>
                               </select>
+                            </div>
+
+                            <div>
+                              <label className="text-[10px] font-bold text-slate-500 block mb-1">Wage / Salary Offered</label>
+                              <input
+                                type="text"
+                                placeholder="e.g. GH₵ 2,500 / month"
+                                value={newRecruitWage}
+                                onChange={(e) => setNewRecruitWage(e.target.value)}
+                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
+                              />
                             </div>
                           </div>
 
@@ -1845,83 +1962,143 @@ export default function PageManagerDashboard() {
                   </div>
                 )}
 
-                {/* CV VIEWER MODAL */}
-                {selectedCvApp && (
+                {/* UNIFIED DOCUMENT PREVIEW MODAL */}
+                {docPreviewModal && (
                   <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-60">
                     <div className="bg-white rounded-3xl p-6 md:p-8 max-w-2xl w-full shadow-2xl border border-blue-200/80 space-y-4 max-h-[90vh] flex flex-col">
                       <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-                        <div>
-                          <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                            <FileText className="w-5 h-5 text-blue-600" />
-                            <span>Curriculum Vitae (CV) — {selectedCvApp.applicantName}</span>
-                          </h3>
-                          <p className="text-xs text-slate-500 mt-0.5">Role: <strong>{selectedCvApp.role}</strong> &bull; File: {selectedCvApp.cvFileName || 'CV Document'}</p>
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-blue-50 rounded-xl">
+                            {docPreviewModal.type === 'cv' ? (
+                              <FileText className="w-5 h-5 text-blue-600" />
+                            ) : (
+                              <ShieldCheck className="w-5 h-5 text-emerald-600" />
+                            )}
+                          </div>
+                          <div>
+                            <h3 className="text-base font-black text-slate-900 leading-tight">
+                              {docPreviewModal.title}
+                            </h3>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                              {docPreviewModal.fileName || 'Official Submitted Credential Document'}
+                            </p>
+                          </div>
                         </div>
-                        <button onClick={() => setSelectedCvApp(null)} className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center cursor-pointer">
+                        <button 
+                          onClick={() => setDocPreviewModal(null)} 
+                          className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center cursor-pointer transition-colors"
+                        >
                           <XCircle className="w-5 h-5 text-slate-500" />
                         </button>
                       </div>
 
-                      {/* CV Display Content */}
-                      <div className="flex-1 overflow-y-auto p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
-                        {selectedCvApp.cvData && selectedCvApp.cvData.startsWith('data:image/') ? (
-                          <img 
-                            src={selectedCvApp.cvData} 
-                            alt="CV Document" 
-                            className="max-w-full rounded-xl shadow-sm border border-slate-200 mx-auto"
-                          />
-                        ) : selectedCvApp.cvData && selectedCvApp.cvData.startsWith('data:application/pdf') ? (
-                          <iframe
-                            src={selectedCvApp.cvData}
-                            title="CV PDF"
-                            className="w-full h-96 rounded-xl border border-slate-200"
-                          />
+                      {/* Display Content */}
+                      <div className="flex-1 overflow-y-auto p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                        {docPreviewModal.type === 'id' ? (
+                          <div>
+                            {(() => {
+                              let parsed: any = null;
+                              try {
+                                if (docPreviewModal.data.startsWith('{')) {
+                                  parsed = JSON.parse(docPreviewModal.data);
+                                }
+                              } catch (e) {}
+
+                              if (parsed && (parsed.front || parsed.back)) {
+                                return (
+                                  <div className="space-y-4">
+                                    <div className="text-xs font-extrabold text-slate-700 flex items-center gap-2">
+                                      <ShieldCheck className="w-4 h-4 text-blue-600" />
+                                      <span>Ghana National ID Card (Front & Back Sides Submitted)</span>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                      <div className="space-y-2 p-3 bg-white rounded-2xl border border-slate-200 shadow-xs">
+                                        <span className="text-[11px] font-black text-slate-700 block uppercase tracking-wider">1. Front Side (Ghana Card)</span>
+                                        {parsed.front && (parsed.front.startsWith('data:') || parsed.front.startsWith('http')) ? (
+                                          <img src={parsed.front} alt="ID Front" className="w-full h-48 object-contain rounded-xl border bg-slate-100" referrerPolicy="no-referrer" />
+                                        ) : (
+                                          <div className="p-6 text-center text-xs font-mono text-slate-600 bg-slate-100 rounded-xl">{parsed.front || 'Front Document Attached'}</div>
+                                        )}
+                                        <span className="text-[10px] text-slate-500 font-mono block text-center truncate">{parsed.frontName || 'Front Side Photo'}</span>
+                                      </div>
+
+                                      <div className="space-y-2 p-3 bg-white rounded-2xl border border-slate-200 shadow-xs">
+                                        <span className="text-[11px] font-black text-slate-700 block uppercase tracking-wider">2. Back Side (Ghana Card)</span>
+                                        {parsed.back && (parsed.back.startsWith('data:') || parsed.back.startsWith('http')) ? (
+                                          <img src={parsed.back} alt="ID Back" className="w-full h-48 object-contain rounded-xl border bg-slate-100" referrerPolicy="no-referrer" />
+                                        ) : (
+                                          <div className="p-6 text-center text-xs font-mono text-slate-600 bg-slate-100 rounded-xl">{parsed.back || 'Back Document Attached'}</div>
+                                        )}
+                                        <span className="text-[10px] text-slate-500 font-mono block text-center truncate">{parsed.backName || 'Back Side Photo'}</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              } else if (docPreviewModal.data.startsWith('data:') || docPreviewModal.data.startsWith('http')) {
+                                return (
+                                  <div className="text-center space-y-3">
+                                    <img
+                                      src={docPreviewModal.data}
+                                      alt="National ID Document"
+                                      className="max-w-full h-auto mx-auto rounded-xl border border-slate-300 shadow-md max-h-[420px] object-contain bg-white"
+                                      referrerPolicy="no-referrer"
+                                    />
+                                  </div>
+                                );
+                              } else {
+                                return (
+                                  <div className="p-8 bg-white rounded-2xl border border-slate-200 text-center space-y-2">
+                                    <ShieldCheck className="w-12 h-12 text-blue-900 mx-auto" />
+                                    <p className="text-xs font-bold text-slate-800">Ghana National ID Document Reference</p>
+                                    <p className="font-mono text-sm text-blue-900 font-bold">{docPreviewModal.data}</p>
+                                  </div>
+                                );
+                              }
+                            })()}
+                          </div>
                         ) : (
-                          <div className="p-6 bg-white rounded-xl border border-slate-200 space-y-3">
-                            <div className="border-b pb-2">
-                              <h4 className="text-lg font-black text-slate-900">{selectedCvApp.applicantName}</h4>
-                              <p className="text-xs text-blue-700 font-bold">{selectedCvApp.role}</p>
-                              <p className="text-xs text-slate-500">Phone: {selectedCvApp.phone} | Email: {selectedCvApp.email}</p>
-                            </div>
-                            <div className="text-xs text-slate-700 space-y-2 leading-relaxed">
-                              <p className="font-bold text-slate-900">National ID: <span className="font-normal">{selectedCvApp.nationalId || 'Verified on application'}</span></p>
-                              <p className="font-bold text-slate-900">Professional Summary:</p>
-                              <p className="bg-slate-50 p-3 rounded-lg border border-slate-100 italic">
-                                {selectedCvApp.coverLetter || 'Experienced technician/supervisor seeking full-time assignment at an accredited university hostel.'}
-                              </p>
-                              <p className="font-bold text-slate-900">Attached File:</p>
-                              <p className="text-[11px] text-slate-500 font-mono">{selectedCvApp.cvFileName || 'Document delivered to manager'}</p>
+                          <div className="space-y-3">
+                            <iframe
+                              src={previewBlobUrl || undefined}
+                              className="w-full h-96 rounded-xl border border-slate-300 shadow-inner bg-white"
+                              title="CV PDF Viewer"
+                            />
+                            <div className="flex items-center justify-between pt-1">
+                              <span className="text-xs text-slate-500 font-mono flex items-center gap-1">
+                                MIME: <strong className="text-blue-900">application/pdf</strong> (Sanitized Blob)
+                              </span>
+                              <div className="flex items-center gap-2">
+                                {previewBlobUrl && (
+                                  <a
+                                    href={previewBlobUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                                  >
+                                    <ExternalLink className="w-3.5 h-3.5 text-slate-600" /> New Tab
+                                  </a>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => downloadPdfDocument(docPreviewModal.data, docPreviewModal.fileName, docPreviewModal.name || 'Applicant')}
+                                  className="px-3.5 py-1.5 bg-blue-900 hover:bg-blue-950 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm transition-all hover:scale-[1.02]"
+                                >
+                                  <Download className="w-3.5 h-3.5 text-emerald-400" /> Download PDF
+                                </button>
+                              </div>
                             </div>
                           </div>
                         )}
                       </div>
 
-                      <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-                        <div className="text-xs text-slate-500">
-                          Applicant Phone: <strong className="text-slate-900">{selectedCvApp.phone}</strong>
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedCvApp(null)}
-                            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold cursor-pointer"
-                          >
-                            Close
-                          </button>
-                          {selectedCvApp.status === 'pending' && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setApproveModalApp(selectedCvApp);
-                                setSelectedCvApp(null);
-                              }}
-                              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black cursor-pointer flex items-center gap-1.5 shadow-sm"
-                            >
-                              <CheckCircle className="w-4 h-4" />
-                              <span>Approve & Enrol</span>
-                            </button>
-                          )}
-                        </div>
+                      <div className="flex items-center justify-end pt-3 border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={() => setDocPreviewModal(null)}
+                          className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold cursor-pointer transition-colors"
+                        >
+                          Close
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -1971,10 +2148,21 @@ export default function PageManagerDashboard() {
                             <option value="Block B (Beta)">Block B (Beta)</option>
                           </select>
                         </div>
+
+                        <div>
+                          <label className="text-xs font-bold text-slate-700 block mb-1">Starting Work Date *</label>
+                          <input
+                            type="date"
+                            required
+                            value={approveStartDate}
+                            onChange={(e) => setApproveStartDate(e.target.value)}
+                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
                       </div>
 
                       <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-[11px] text-emerald-950">
-                        Approving this candidate will automatically notify them and add their active profile to your staff directory.
+                        Approving this candidate will automatically notify them of their starting date and enrol them into the roster.
                       </div>
 
                       <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
@@ -1987,7 +2175,7 @@ export default function PageManagerDashboard() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleStaffAppDecision(approveModalApp.id, 'Approved', approveShift, approveBlock)}
+                          onClick={() => handleStaffAppDecision(approveModalApp.id, 'Approved', approveShift, approveBlock, approveStartDate)}
                           className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-md cursor-pointer flex items-center gap-1.5"
                         >
                           <CheckCircle className="w-4 h-4" />
@@ -2420,6 +2608,180 @@ export default function PageManagerDashboard() {
                 </div>
                 </>
                 )}
+              </div>
+            )}
+
+            {/* ========================================================================= */}
+            {/* SECURE ENCRYPTED CHAT TAB VIEW                                            */}
+            {/* ========================================================================= */}
+            {activeTab === 'chat' && (
+              <div className="flex flex-col h-[calc(100vh-14rem)] min-h-[480px] bg-white border border-emerald-200 rounded-3xl shadow-md overflow-hidden relative z-10" id="manager-secure-chat-container">
+                {/* Security Header Banner */}
+                <div className="bg-slate-900/90 backdrop-blur-md text-sky-100 px-6 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10" id="chat-security-banner">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-1.5 bg-blue-800/80 backdrop-blur-sm rounded-lg text-amber-300">
+                      <Lock className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-xs font-black tracking-wide uppercase flex items-center gap-1.5">
+                        <span>Secured Manager Staff Channel</span>
+                        <span className="px-1.5 py-0.5 bg-sky-500 text-slate-950 text-[8px] font-black rounded font-mono">AES-256</span>
+                      </h3>
+                      <p className="text-[10px] text-blue-300 font-medium">Encrypted communications invisible to administrative board observers.</p>
+                    </div>
+                  </div>
+                  <div className="text-[10px] bg-slate-950/50 backdrop-blur-sm text-blue-300 font-mono px-2.5 py-1 rounded-lg border border-white/10 self-start sm:self-auto">
+                    Security Layer Active
+                  </div>
+                </div>
+
+                {/* Main Content Split Area */}
+                <div className="flex-1 flex overflow-hidden bg-slate-50/50" id="chat-split-view">
+                  {/* Left Sidebar: Staff Contacts list */}
+                  <div className="w-72 border-r border-slate-200 bg-white flex flex-col overflow-y-auto p-4 space-y-2 shrink-0" id="chat-rooms-contacts-list">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2.5 py-1 mb-1">Appointed Team Chat</p>
+                    {chatRooms.length === 0 ? (
+                      <div className="text-center py-10 px-4" id="chat-no-staff-contacts">
+                        <Users className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                        <p className="text-xs font-bold text-slate-500">No Appointed Staff Chats</p>
+                        <p className="text-[10px] text-slate-400 leading-relaxed mt-1">Approve a vocational staff application to auto-generate a private channel.</p>
+                      </div>
+                    ) : (
+                      chatRooms.map((r) => {
+                        const isSelected = selectedRoomId === r.id;
+                        return (
+                          <button
+                            key={r.id}
+                            onClick={() => setSelectedRoomId(r.id)}
+                            className={`w-full text-left p-3.5 rounded-2xl transition-all flex items-center gap-3 border ${
+                              isSelected
+                                ? 'bg-blue-50/80 border-blue-200 text-blue-950 font-bold shadow-xs'
+                                : 'bg-white border-slate-100 hover:bg-slate-50 text-slate-700'
+                            }`}
+                          >
+                            <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-800 flex items-center justify-center font-black text-xs uppercase shrink-0">
+                              {(r.staffName || 'ST').substring(0, 2)}
+                            </div>
+                            <div className="truncate flex-1">
+                              <div className="text-xs font-bold truncate text-slate-900">{r.staffName || 'Staff Member'}</div>
+                              <div className="text-[10px] text-slate-500 font-medium truncate flex items-center gap-1">
+                                <span className="inline-block w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse" />
+                                <span className="truncate">{r.staffRole || 'Vocational Specialist'}</span>
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Right Panel: Conversation Log */}
+                  <div className="flex-1 flex flex-col h-full bg-white relative" id="chat-messages-container">
+                    {selectedRoomId ? (
+                      <>
+                        {/* Conversation Info Header */}
+                        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-white" id="active-chat-channel-header">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-800 flex items-center justify-center font-black text-sm uppercase">
+                              {(chatRooms.find(r => r.id === selectedRoomId)?.staffName || 'S').substring(0, 2)}
+                            </div>
+                            <div>
+                              <h4 className="text-sm font-black text-slate-900">
+                                {chatRooms.find(r => r.id === selectedRoomId)?.staffName || 'Staff Member'}
+                              </h4>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                                <span>Designation:</span>
+                                <span className="text-blue-700 font-black">{chatRooms.find(r => r.id === selectedRoomId)?.staffRole || 'Facilities Lead'}</span>
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 bg-blue-50 border border-blue-200/50 text-blue-800 text-[10px] font-bold px-2.5 py-1 rounded-full">
+                            <span className="w-1.5 h-1.5 bg-sky-500 rounded-full animate-pulse" />
+                            <span>Room Sync: On</span>
+                          </div>
+                        </div>
+
+                        {/* Conversational Scroll Log */}
+                        <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/40" id="chat-messages-feed">
+                          {chatMessagesList.length === 0 ? (
+                            <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-3" id="chat-no-messages-state">
+                              <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
+                                <MessageSquare className="w-6 h-6 animate-pulse" />
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold text-slate-700">Encrypted Chat Room Ready</p>
+                                <p className="text-[10px] text-slate-400 max-w-xs mx-auto mt-0.5">Send a message to sync with your staff member. Complete audit trails are strictly private.</p>
+                              </div>
+                            </div>
+                          ) : (
+                            chatMessagesList.map((m) => {
+                              const isMe = m.senderId === user?.id;
+                              return (
+                                <div
+                                  key={m.id}
+                                  className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} max-w-full`}
+                                  id={`msg-${m.id}`}
+                                >
+                                  {/* Author label */}
+                                  <span className="text-[9px] text-slate-400 font-bold mb-1 px-1">
+                                    {isMe ? 'You (Manager)' : `${m.senderName} (Staff)`} • {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+
+                                  {/* Chat bubble */}
+                                  <div
+                                    className={`px-4 py-2.5 text-xs font-medium leading-relaxed shadow-xs max-w-md ${
+                                      isMe
+                                        ? 'bg-blue-600 text-white rounded-2xl rounded-tr-none'
+                                        : 'bg-white border border-slate-200 text-slate-800 rounded-2xl rounded-tl-none'
+                                    }`}
+                                  >
+                                    {m.content}
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+
+                        {/* Text Message Submission Box */}
+                        <form onSubmit={handleSendChatMessage} className="p-4 border-t border-slate-100 bg-white flex gap-3 items-center" id="chat-submission-form">
+                          <input
+                            type="text"
+                            value={newMessage}
+                            onChange={(e) => setNewMessage(e.target.value)}
+                            placeholder="Type a secure message to this staff member..."
+                            className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-600 focus:bg-white transition-all"
+                            disabled={sendingMsg}
+                            required
+                          />
+                          <button
+                            type="submit"
+                            disabled={sendingMsg || !newMessage.trim()}
+                            className="p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center disabled:opacity-50 shrink-0"
+                            title="Send secure message"
+                          >
+                            {sendingMsg ? (
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Send className="w-4 h-4" />
+                            )}
+                          </button>
+                        </form>
+                      </>
+                    ) : (
+                      <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-3" id="chat-unselected-state">
+                        <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center">
+                          <Lock className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-700">No Channel Selected</p>
+                          <p className="text-[10px] text-slate-400 max-w-xs mx-auto mt-0.5">Please select an active staff member from the left channel list to inspect message threads.</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
           </>

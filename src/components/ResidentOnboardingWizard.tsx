@@ -62,6 +62,7 @@ export default function ResidentOnboardingWizard({
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('Accra');
   const [region, setRegion] = useState('Greater Accra');
+  const [customRegion, setCustomRegion] = useState('');
   const [digitalAddress, setDigitalAddress] = useState('');
   const [landmark, setLandmark] = useState('');
 
@@ -193,6 +194,7 @@ export default function ResidentOnboardingWizard({
       const cleanEmail = email.trim().toLowerCase();
       const residentId = `res-${Date.now()}`;
 
+      const finalRegion = region === 'Other / International' ? customRegion.trim() : region;
       const newResident = {
         id: residentId,
         name: formattedName,
@@ -204,7 +206,7 @@ export default function ResidentOnboardingWizard({
         institution,
         idType,
         idNumber: idNumber.trim(),
-        homeAddress: `${address.trim()}, ${city.trim()}, ${region}`,
+        homeAddress: `${address.trim()}, ${city.trim()}, ${finalRegion}`,
         digitalAddress: digitalAddress.trim() || undefined,
         landmark: landmark.trim() || undefined,
         
@@ -515,7 +517,21 @@ export default function ResidentOnboardingWizard({
                         <option value="Western">Western</option>
                         <option value="Volta">Volta</option>
                         <option value="Northern">Northern</option>
+                        <option value="Other / International">Other / International</option>
                       </select>
+                      {region === 'Other / International' && (
+                        <div className="mt-2 space-y-1 animate-fadeIn">
+                          <label className="text-[10px] font-bold text-slate-500 block">Specify Region / State *</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="e.g. London / California"
+                            value={customRegion}
+                            onChange={(e) => setCustomRegion(e.target.value)}
+                            className="w-full px-4 py-2 border border-slate-200 rounded-xl bg-white text-slate-800 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-900"
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
 

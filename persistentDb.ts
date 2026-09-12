@@ -20,6 +20,10 @@ export interface PersistentStore {
   staff?: any[];
   staffApplications?: any[];
   staffAuditLogs?: any[];
+  staffChatRooms?: any[];
+  staffChatMessages?: any[];
+  staffReviews?: any[];
+  jobOffers?: any[];
   platformSettings: {
     registrationFee: number;
     commission: number;
@@ -77,6 +81,10 @@ export function loadPersistentStore(defaultStore: PersistentStore): PersistentSt
       staff: Array.isArray(parsed.staff) ? parsed.staff : (defaultStore.staff || []),
       staffApplications: Array.isArray(parsed.staffApplications) ? parsed.staffApplications : (defaultStore.staffApplications || []),
       staffAuditLogs: Array.isArray(parsed.staffAuditLogs) ? parsed.staffAuditLogs : (defaultStore.staffAuditLogs || []),
+      staffChatRooms: Array.isArray(parsed.staffChatRooms) ? parsed.staffChatRooms : (defaultStore.staffChatRooms || []),
+      staffChatMessages: Array.isArray(parsed.staffChatMessages) ? parsed.staffChatMessages : (defaultStore.staffChatMessages || []),
+      staffReviews: Array.isArray(parsed.staffReviews) ? parsed.staffReviews : (defaultStore.staffReviews || []),
+      jobOffers: Array.isArray(parsed.jobOffers) ? parsed.jobOffers : (defaultStore.jobOffers || []),
       platformSettings: parsed.platformSettings || defaultStore.platformSettings,
     };
 

@@ -5,6 +5,7 @@ import PineLogo from './PineLogo';
 import ResidentOnboardingWizard from './ResidentOnboardingWizard';
 import EditResidenceModal from './EditResidenceModal';
 import LogoutConfirmationModal from './LogoutConfirmationModal';
+import { getPdfBlobUrl, downloadPdfDocument } from '../utils/pdfHelper';
 import { 
   Building2, Users, DollarSign, CheckCircle2, XCircle, Clock, Plus, 
   ShieldCheck, LogOut, Search, Filter, Home, Hotel, Coffee, UserPlus, 
@@ -63,6 +64,19 @@ export default function PageAdminDashboard() {
   const [staffVerifications, setStaffVerifications] = useState<any[]>([]);
   const [notifSubTab, setNotifSubTab] = useState<'verified_staffs' | 'manager_requests'>('verified_staffs');
   const [docPreviewModal, setDocPreviewModal] = useState<{ title: string; type: 'cv' | 'id'; data: string; fileName?: string; name?: string } | null>(null);
+  const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (docPreviewModal && docPreviewModal.type === 'cv' && docPreviewModal.data) {
+      const url = getPdfBlobUrl(docPreviewModal.data, docPreviewModal.name || 'Applicant');
+      setPreviewBlobUrl(url);
+      return () => {
+        URL.revokeObjectURL(url);
+      };
+    } else {
+      setPreviewBlobUrl(null);
+    }
+  }, [docPreviewModal?.data, docPreviewModal?.type, docPreviewModal?.name]);
 
   // Filter & Search states
   const [residenceFilter, setResidenceFilter] = useState<'all' | 'Hostel' | 'Hotel' | 'Lounge'>('all');
@@ -2362,32 +2376,38 @@ export default function PageAdminDashboard() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {docPreviewModal.data.startsWith('data:application/pdf') || docPreviewModal.data.startsWith('data:image') || docPreviewModal.data.includes('pdf') || docPreviewModal.data.startsWith('http') ? (
-                    <div className="space-y-3">
-                      <iframe
-                        src={docPreviewModal.data}
-                        className="w-full h-[500px] rounded-xl border border-slate-300 shadow-inner bg-white"
-                        title="CV PDF Viewer"
-                      />
-                      <div className="flex justify-end">
-                        <a
-                          href={docPreviewModal.data}
-                          download={docPreviewModal.fileName || `${docPreviewModal.name}_CV.pdf`}
-                          className="px-4 py-2 bg-blue-900 hover:bg-blue-950 text-white rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer shadow-md"
+                  <div className="space-y-3">
+                    <iframe
+                      src={previewBlobUrl || undefined}
+                      className="w-full h-[520px] rounded-xl border border-slate-300 shadow-inner bg-white"
+                      title="CV PDF Viewer"
+                    />
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="text-xs text-slate-500 font-mono flex items-center gap-1.5">
+                        <FileCheck className="w-4 h-4 text-emerald-600" />
+                        MIME: <strong className="text-blue-900">application/pdf</strong> (Sanitized Blob)
+                      </span>
+                      <div className="flex items-center gap-2">
+                        {previewBlobUrl && (
+                          <a
+                            href={previewBlobUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5 text-slate-600" /> Open in New Tab
+                          </a>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => downloadPdfDocument(docPreviewModal.data, docPreviewModal.fileName, docPreviewModal.name || 'Applicant')}
+                          className="px-4 py-2 bg-blue-900 hover:bg-blue-950 text-white rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer shadow-md transition-all hover:scale-[1.02] active:scale-[0.98]"
                         >
-                          <FileText className="w-4 h-4" /> Download PDF File
-                        </a>
+                          <Download className="w-4 h-4 text-emerald-400" /> Download PDF File
+                        </button>
                       </div>
                     </div>
-                  ) : (
-                    <div className="whitespace-pre-wrap font-mono text-xs text-slate-800 bg-white p-6 rounded-xl border border-slate-200 leading-relaxed space-y-2">
-                      <div className="flex items-center justify-between border-b pb-2 mb-3 font-sans">
-                        <span className="font-bold text-slate-900 text-sm">{docPreviewModal.name}'s Curriculum Vitae</span>
-                        <span className="text-[10px] bg-blue-100 text-blue-900 font-bold px-2 py-0.5 rounded-full">PDF Submission</span>
-                      </div>
-                      {docPreviewModal.data}
-                    </div>
-                  )}
+                  </div>
                 </div>
               )}
             </div>

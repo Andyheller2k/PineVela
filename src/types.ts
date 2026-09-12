@@ -30,6 +30,7 @@ export interface HostelRegistrationDraft {
   addressLine2: string;
   city: string;
   region: string;
+  customRegion?: string;
   district: string;
   country: string;
   postalCode: string;

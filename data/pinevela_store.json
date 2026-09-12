@@ -184,6 +184,48 @@
   "issueReports": [],
   "activities": [
     {
+      "id": "act-1789230246620",
+      "text": "Staff verification for Mr. Andy Heller (@andy_heller_601) marked as Verified",
+      "time": "Just now",
+      "type": "success"
+    },
+    {
+      "id": "act-1789229417663",
+      "text": "Staff verification for Mr. Andrews Oppong Manu (@andrews_oppong_manu_194) marked as Verified",
+      "time": "Just now",
+      "type": "success"
+    },
+    {
+      "id": "act-1789229409645",
+      "text": "Staff verification for Mr. Andrews Oppong Manu (@andrews_oppong_manu_194) marked as Verified",
+      "time": "Just now",
+      "type": "success"
+    },
+    {
+      "id": "act-1789229408769",
+      "text": "Staff verification for Mr. Andrews Oppong Manu (@andrews_oppong_manu_194) marked as Verified",
+      "time": "Just now",
+      "type": "success"
+    },
+    {
+      "id": "act-1789228905406",
+      "text": "New staff account registered for \"Mr. Andrews Oppong Manu\" (@andrews_oppong_manu_194) - Pending Verification",
+      "time": "Just now",
+      "type": "warning"
+    },
+    {
+      "id": "act-1789227777449",
+      "text": "Staff application submitted by Mr. Andy Heller for Facilities &amp; Maintenance Technician at Andy Maze Court",
+      "time": "Just now",
+      "type": "info"
+    },
+    {
+      "id": "act-1789227481853",
+      "text": "New staff account registered for \"Mr. Andy Heller\" (andy_heller_601)",
+      "time": "Just now",
+      "type": "success"
+    },
+    {
       "id": "act-new-1789224385384",
       "text": "Admin VERIFIED & APPROVED hostel \"Andy Maze Court\". Property is now officially active and listed!",
       "time": "Just now",
@@ -796,6 +838,60 @@
   ],
   "notifications": [
     {
+      "id": "notif-vrf-dec-1789230246620",
+      "studentId": "staff-user-1789227481853",
+      "title": "Staff Verification Approved!",
+      "message": "Congratulations! Your staff profile, CV, and National ID credentials have been verified by PineVela Administration. You are now unlocked to apply for positions at accredited hostels.",
+      "type": "success",
+      "date": "2026-09-12",
+      "read": false
+    },
+    {
+      "id": "notif-vrf-dec-1789229417663",
+      "studentId": "staff-user-1789228905405",
+      "title": "Staff Verification Approved!",
+      "message": "Congratulations! Your staff profile, CV, and National ID credentials have been verified by PineVela Administration. You are now unlocked to apply for positions at accredited hostels.",
+      "type": "success",
+      "date": "2026-09-12",
+      "read": false
+    },
+    {
+      "id": "notif-vrf-dec-1789229409645",
+      "studentId": "staff-user-1789228905405",
+      "title": "Staff Verification Approved!",
+      "message": "Congratulations! Your staff profile, CV, and National ID credentials have been verified by PineVela Administration. You are now unlocked to apply for positions at accredited hostels.",
+      "type": "success",
+      "date": "2026-09-12",
+      "read": false
+    },
+    {
+      "id": "notif-vrf-dec-1789229408769",
+      "studentId": "staff-user-1789228905405",
+      "title": "Staff Verification Approved!",
+      "message": "Congratulations! Your staff profile, CV, and National ID credentials have been verified by PineVela Administration. You are now unlocked to apply for positions at accredited hostels.",
+      "type": "success",
+      "date": "2026-09-12",
+      "read": false
+    },
+    {
+      "id": "notif-vrf-1789228905406",
+      "studentId": "admin_001",
+      "title": "Staff Registration Verification Required: Mr. Andrews Oppong Manu",
+      "message": "Staff applicant \"Mr. Andrews Oppong Manu\" (@andrews_oppong_manu_194) has registered and submitted CV & National ID for verification review.",
+      "type": "verification",
+      "date": "2026-09-12",
+      "read": false
+    },
+    {
+      "id": "notif-1789227777449",
+      "studentId": "manager_1789223048261",
+      "title": "New Staff Application: Facilities &amp; Maintenance Technician",
+      "message": "Mr. Andy Heller submitted a job application with CV for the position of \"Facilities &amp; Maintenance Technician\" at Andy Maze Court.",
+      "type": "info",
+      "date": "2026-09-12",
+      "read": false
+    },
+    {
       "id": "notif-welcome-1789224385358",
       "studentId": "manager_1789223048261",
       "title": "Hostel Approved & Welcomed",
@@ -958,13 +1054,13 @@
       }
     }
   },
+  "staff": [],
+  "staffApplications": [],
+  "staffAuditLogs": [],
   "platformSettings": {
     "registrationFee": 3500,
     "commission": 5,
     "announcement": "Welcome to PineVela Academic Year 2026/2027.",
     "maintenanceMode": false
-  },
-  "staff": [],
-  "staffApplications": [],
-  "staffAuditLogs": []
+  }
 }

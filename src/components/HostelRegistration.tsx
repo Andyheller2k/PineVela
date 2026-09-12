@@ -97,6 +97,7 @@ export default function HostelRegistration({
     addressLine2: '',
     city: 'Accra',
     region: 'Greater Accra',
+    customRegion: '',
     district: 'Ayawaso West',
     country: 'Ghana',
     postalCode: '',
@@ -463,7 +464,7 @@ export default function HostelRegistration({
         addressLine1: formData.addressLine1,
         addressLine2: formData.addressLine2,
         city: formData.city,
-        region: formData.region,
+        region: formData.region === 'Other' ? (formData.customRegion || 'Other') : formData.region,
         district: formData.district,
         country: formData.country,
         postalCode: formData.postalCode,
@@ -1020,8 +1021,21 @@ export default function HostelRegistration({
                       <option value="Western">Western</option>
                       <option value="Volta">Volta</option>
                       <option value="Northern">Northern</option>
-                      <option value="Other">Other Region</option>
+                      <option value="Other">Other Region / International</option>
                     </select>
+                    {formData.region === 'Other' && (
+                      <div className="mt-2 space-y-1 animate-fadeIn">
+                        <label className="text-[10px] font-bold text-slate-500 block">Specify Region / State *</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. London / California"
+                          value={formData.customRegion || ''}
+                          onChange={(e) => updateFormData({ customRegion: e.target.value })}
+                          className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-900 text-slate-800"
+                        />
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-1.5">

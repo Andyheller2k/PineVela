@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Hostel } from '../types';
 import PineLogo from './PineLogo';
-import { Search, MapPin, Phone, ArrowRight, X, Sparkles, Shield, User, MessageSquare, Landmark, Layers, ChevronDown, HelpCircle, Navigation, LogOut, ShieldCheck, Wifi, Zap, BedDouble, Building2, CheckCircle2, ChevronLeft, ChevronRight, Maximize2, ImageIcon, Briefcase, FileText, UploadCloud, CheckCircle, AlertCircle, RefreshCw, Home, Wrench } from 'lucide-react';
+import { Search, MapPin, Phone, Mail, Star, ArrowRight, X, Sparkles, Shield, User, MessageSquare, Landmark, Layers, ChevronDown, HelpCircle, Navigation, LogOut, ShieldCheck, Wifi, Zap, BedDouble, Building2, CheckCircle2, ChevronLeft, ChevronRight, Maximize2, ImageIcon, Briefcase, FileText, UploadCloud, CheckCircle, AlertCircle, RefreshCw, Home, Wrench } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import FAQAccordion from './FAQAccordion';
 import TestimonialsCarousel from './TestimonialsCarousel';
@@ -57,6 +57,180 @@ export default function Page1Public({
   const [appCover, setAppCover] = useState('');
   const [submittingStaffApp, setSubmittingStaffApp] = useState(false);
   const [staffAppToast, setStaffAppToast] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  // Accredited Staff Directory & Job Offers / Reviews Modal States
+  const [accreditedStaff, setAccreditedStaff] = useState<any[]>([]);
+  const [selectedStaffForOffer, setSelectedStaffForOffer] = useState<any | null>(null);
+  const [selectedStaffForReviews, setSelectedStaffForReviews] = useState<any | null>(null);
+
+  useEffect(() => {
+    fetch('/api/accredited-staff')
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) setAccreditedStaff(data);
+      })
+      .catch(err => console.error("Error loading accredited staff:", err));
+  }, []);
+
+  // Job Offer Form
+  const [jobWorkOffered, setJobWorkOffered] = useState('');
+  const [jobSchedule, setJobSchedule] = useState('');
+  const [jobLocation, setJobLocation] = useState('');
+  const [jobWage, setJobWage] = useState('');
+  const [jobContact, setJobContact] = useState('');
+  const [jobRequesterName, setJobRequesterName] = useState(user?.name || '');
+  const [jobLat, setJobLat] = useState(5.6037);
+  const [jobLng, setJobLng] = useState(-0.1870);
+  const offerMapInstanceRef = React.useRef<any>(null);
+  const offerMarkerInstanceRef = React.useRef<any>(null);
+  const [submittingOffer, setSubmittingOffer] = useState(false);
+  const [offerToast, setOfferToast] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  useEffect(() => {
+    if (selectedStaffForOffer) {
+      const timer = setTimeout(() => {
+        const container = document.getElementById('job-offer-map-picker');
+        if (!container) return;
+        const L = (window as any).L;
+        if (!L) return;
+
+        if (!offerMapInstanceRef.current) {
+          const map = L.map(container).setView([5.6037, -0.1870], 15);
+          offerMapInstanceRef.current = map;
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+          }).addTo(map);
+
+          const marker = L.marker([5.6037, -0.1870], { draggable: true }).addTo(map);
+          offerMarkerInstanceRef.current = marker;
+
+          marker.on('dragend', () => {
+            const pos = marker.getLatLng();
+            setJobLat(pos.lat);
+            setJobLng(pos.lng);
+            fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.lat}&lon=${pos.lng}&zoom=18&addressdetails=1`)
+              .then(r => r.json())
+              .then(data => {
+                if (data && data.display_name) {
+                  setJobLocation(data.display_name);
+                }
+              }).catch(() => {});
+          });
+
+          map.on('click', (e: any) => {
+            const { lat, lng } = e.latlng;
+            marker.setLatLng([lat, lng]);
+            setJobLat(lat);
+            setJobLng(lng);
+            fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`)
+              .then(r => r.json())
+              .then(data => {
+                if (data && data.display_name) {
+                  setJobLocation(data.display_name);
+                }
+              }).catch(() => {});
+          });
+        } else {
+          offerMapInstanceRef.current.invalidateSize();
+        }
+      }, 300);
+
+      return () => {
+        clearTimeout(timer);
+        if (offerMapInstanceRef.current) {
+          offerMapInstanceRef.current.remove();
+          offerMapInstanceRef.current = null;
+          offerMarkerInstanceRef.current = null;
+        }
+      };
+    }
+  }, [selectedStaffForOffer]);
+
+  const handleSendJobOffer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStaffForOffer) return;
+    setSubmittingOffer(true);
+    try {
+      const res = await fetch('/api/job-offers', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token') || localStorage.getItem('pinevela_auth_token') || 'token_admin_andyheller2k'}`
+        },
+        body: JSON.stringify({
+          staffId: selectedStaffForOffer.id,
+          workOffered: jobWorkOffered,
+          timeAndSchedule: jobSchedule,
+          location: jobLocation || 'Accra, Ghana',
+          wageSalary: jobWage,
+          contact: jobContact,
+          requesterName: jobRequesterName || user?.name || 'Global Client',
+          requesterContact: jobContact,
+          requesterEmail: user?.email || '',
+          lat: jobLat,
+          lng: jobLng
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setOfferToast({ text: 'Job offer sent successfully! Staff notified.', type: 'success' });
+        setTimeout(() => {
+          setOfferToast(null);
+          setSelectedStaffForOffer(null);
+          setJobWorkOffered('');
+          setJobSchedule('');
+          setJobLocation('');
+          setJobWage('');
+          setJobContact('');
+          setJobRequesterName('');
+        }, 2000);
+      } else {
+        setOfferToast({ text: data.error || 'Failed to send job offer', type: 'error' });
+      }
+    } catch (err: any) {
+      setOfferToast({ text: err.message || 'Failed to send job offer', type: 'error' });
+    } finally {
+      setSubmittingOffer(false);
+    }
+  };
+
+  const handleSubmitReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStaffForReviews) return;
+    setSubmittingReview(true);
+    try {
+      const res = await fetch('/api/staff-reviews', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token') || localStorage.getItem('pinevela_auth_token') || 'token_admin_andyheller2k'}`
+        },
+        body: JSON.stringify({
+          staffId: selectedStaffForReviews.id,
+          rating: reviewRating,
+          comment: reviewComment
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setReviewToast({ text: 'Review submitted successfully!', type: 'success' });
+        const updated = await fetch('/api/accredited-staff').then(r => r.json());
+        if (Array.isArray(updated)) {
+          setAccreditedStaff(updated);
+          const refreshed = updated.find((s: any) => s.id === selectedStaffForReviews.id);
+          if (refreshed) setSelectedStaffForReviews(refreshed);
+        }
+        setReviewComment('');
+        setTimeout(() => setReviewToast(null), 2000);
+      } else {
+        setReviewToast({ text: data.error || 'Failed to submit review', type: 'error' });
+      }
+    } catch (err: any) {
+      setReviewToast({ text: err.message || 'Failed to submit review', type: 'error' });
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
 
   const handleStaffAppCvUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -492,6 +666,114 @@ export default function Page1Public({
 
       {/* Main Container */}
       <main className="w-full pt-0 space-y-16">
+
+        {/* PineVela Accredited Staff & Professionals Section */}
+        <motion.section 
+          id="accredited-staff-section" 
+          className="relative max-w-7xl mx-auto px-6 md:px-12 w-full mt-16 bg-transparent"
+          initial={{ opacity: 0.3, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: false, amount: 0.08 }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+        >
+          <div className="relative z-10 space-y-8 w-full bg-white/80 backdrop-blur-2xl p-8 md:p-12 rounded-3xl border border-blue-100 shadow-xl shadow-blue-900/5">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-slate-200/60">
+              <div>
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-800 text-xs font-bold mb-3 border border-emerald-200">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Verified & Vetted Ecosystem</span>
+                </div>
+                <h2 className="text-3xl font-black text-slate-950 tracking-tight">PineVela Accredited Staff & Professionals</h2>
+                <p className="text-slate-600 font-medium text-sm mt-1">
+                  Hire or suggest job offers to fully verified property managers, maintenance experts, and facility operators.
+                </p>
+              </div>
+              <div className="text-xs font-bold text-blue-900 bg-blue-50 px-4 py-2.5 rounded-xl border border-blue-200/50">
+                {accreditedStaff.length} Accredited Professional{accreditedStaff.length === 1 ? '' : 's'} Available
+              </div>
+            </div>
+
+            {accreditedStaff.length === 0 ? (
+              <div className="text-center py-12 bg-slate-50/50 rounded-2xl border border-slate-200/60">
+                <ShieldCheck className="w-12 h-12 text-slate-400 mx-auto mb-3" />
+                <h3 className="text-base font-bold text-slate-800">No Accredited Staff Listed Yet</h3>
+                <p className="text-xs text-slate-500 mt-1">Staff members who complete verification will appear here for hiring & job offers.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {accreditedStaff.map((staff: any, index: number) => (
+                  <div key={`${staff.id}-${index}`} className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4">
+                    <div className="space-y-4">
+                      <div className="flex items-start gap-4">
+                        <img 
+                          src={staff.avatar} 
+                          alt={staff.name} 
+                          className="w-14 h-14 rounded-2xl object-cover border-2 border-blue-900/10 shadow-sm" 
+                          referrerPolicy="no-referrer" 
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <h3 className="text-base font-extrabold text-slate-900 truncate">{staff.name}</h3>
+                            <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0" />
+                          </div>
+                          <p className="text-xs font-bold text-blue-900 mt-0.5">{staff.specialization}</p>
+                          <p className="text-[11px] text-slate-500 mt-0.5">{staff.yearsExperience} Experience</p>
+                        </div>
+                      </div>
+
+                      {/* Ratings & Reviews */}
+                      <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-200/60 text-xs">
+                        <div className="flex items-center gap-1 font-extrabold text-amber-600">
+                          <span>★</span>
+                          <span className="text-slate-900">{staff.rating}</span>
+                          <span className="text-slate-400 font-normal">({staff.reviewCount} reviews)</span>
+                        </div>
+                        <button
+                          onClick={() => setSelectedStaffForReviews(staff)}
+                          className="text-blue-700 font-bold hover:underline cursor-pointer"
+                        >
+                          View Reviews
+                        </button>
+                      </div>
+
+                      {/* Contact Info */}
+                      <div className="space-y-1.5 text-xs text-slate-600 font-medium">
+                        <div className="flex items-center gap-2">
+                          <Phone className="w-3.5 h-3.5 text-slate-400" />
+                          <span>{staff.phone || 'No Phone'}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Mail className="w-3.5 h-3.5 text-slate-400" />
+                          <span className="truncate">{staff.email || 'No Email'}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 flex items-center gap-2">
+                      <button
+                        onClick={() => setSelectedStaffForReviews(staff)}
+                        className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        <span>Rate & Review</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSelectedStaffForOffer(staff);
+                          setJobContact(staff.whatsapp || staff.phone || '');
+                        }}
+                        className="flex-1 py-2.5 bg-blue-900 hover:bg-blue-950 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer"
+                      >
+                        <Briefcase className="w-3.5 h-3.5" />
+                        <span>Hire / Offer Job</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </motion.section>
 
         {/* Available Hostels Section */}
         <motion.section 
@@ -1355,7 +1637,7 @@ export default function Page1Public({
                     </div>
 
                     <p className="text-xs text-slate-700 font-medium">
-                      Interested in working at <strong>{selectedHostel.name}</strong>? Submit your details, CV, and ID directly to the manager.
+                      Interested in working at <strong>{selectedHostel.name}</strong>? Create a staff account and apply now to initiate the staff registration process!
                     </p>
 
                     {/* Needed Staff Roles */}
@@ -1371,20 +1653,30 @@ export default function Page1Public({
                               { role: 'Housekeeping Supervisor' }
                             ]
                         ).map((r: any, idx: number) => (
-                          <span key={idx} className="px-2.5 py-1 bg-white border border-amber-200 text-amber-950 rounded-lg text-[10px] font-bold shadow-2xs">
-                            {r.role || r}
-                          </span>
+                          <div key={idx} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-amber-200 text-amber-950 rounded-lg text-[10px] font-bold shadow-2xs flex-wrap">
+                            <span>{r.role || r}</span>
+                            {r.wage && (
+                              <span className="px-1 py-0.2 bg-emerald-50 text-emerald-800 rounded text-[9px] font-black border border-emerald-200">
+                                {r.wage}
+                              </span>
+                            )}
+                          </div>
                         ))}
                       </div>
                     </div>
 
                     <button
                       type="button"
-                      onClick={() => setShowStaffAppModal(true)}
+                      onClick={() => {
+                        sessionStorage.setItem('preferred_hostel_id', selectedHostel.id || '');
+                        sessionStorage.setItem('preferred_hostel_name', selectedHostel.name || '');
+                        sessionStorage.setItem('navigated_to_staff_register', 'true');
+                        navigate('/staff/register');
+                      }}
                       className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl text-xs flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer transform hover:-translate-y-0.5"
                     >
                       <Briefcase size={14} className="text-slate-950" />
-                      <span>Submit Details & CV to Manager</span>
+                      <span>Create Staff Account & Apply Now</span>
                     </button>
                   </div>
                 </div>
@@ -1709,6 +2001,231 @@ export default function Page1Public({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Job Offer Proposal Modal */}
+      {selectedStaffForOffer && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <motion.div 
+            className="bg-white rounded-3xl max-w-lg w-full p-8 shadow-2xl border border-slate-200 space-y-6 max-h-[90vh] overflow-y-auto"
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+          >
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <img src={selectedStaffForOffer.avatar} alt={selectedStaffForOffer.name} className="w-12 h-12 rounded-xl object-cover" referrerPolicy="no-referrer" />
+                <div>
+                  <h3 className="text-lg font-black text-slate-900">Suggest Job Offer</h3>
+                  <p className="text-xs text-slate-500">To {selectedStaffForOffer.name} ({selectedStaffForOffer.specialization})</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setSelectedStaffForOffer(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSendJobOffer} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Your Full Name (Global Client) *</label>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="e.g. John Doe"
+                  value={jobRequesterName}
+                  onChange={e => setJobRequesterName(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-900 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Work Offered (One-time Job) *</label>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="e.g. Emergency plumbing repair for hostel apartment"
+                  value={jobWorkOffered}
+                  onChange={e => setJobWorkOffered(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-900 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Time & Schedule *</label>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="e.g. Today at 2:00 PM (2 hours job)"
+                  value={jobSchedule}
+                  onChange={e => setJobSchedule(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-900 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Location & Inbuilt Map Pin *</label>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="e.g. Osu Oxford Street, Accra"
+                  value={jobLocation}
+                  onChange={e => setJobLocation(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-900 focus:outline-none mb-2"
+                />
+                <p className="text-[10px] text-slate-500 mb-2 font-medium">Click on the map or drag the pin to set your exact location for the staff member:</p>
+                <div id="job-offer-map-picker" className="w-full h-48 rounded-xl border border-slate-300 shadow-inner z-0"></div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Wage & Salary *</label>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="e.g. GHS 300 / one-time"
+                  value={jobWage}
+                  onChange={e => setJobWage(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-900 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Your Contact (WhatsApp / Phone / Gmail) *</label>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="e.g. +233 24 000 0000 / client@gmail.com"
+                  value={jobContact}
+                  onChange={e => setJobContact(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-900 focus:outline-none"
+                />
+              </div>
+
+              {offerToast && (
+                <div className={`p-3 rounded-xl font-bold flex items-center gap-2 ${offerToast.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-800 border border-rose-200'}`}>
+                  {offerToast.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+                  <span>{offerToast.text}</span>
+                </div>
+              )}
+
+              <div className="pt-2 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSelectedStaffForOffer(null)}
+                  className="px-5 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 font-bold text-slate-700 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingOffer}
+                  className="px-6 py-3 rounded-xl bg-blue-900 hover:bg-blue-950 text-white font-black shadow-md flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {submittingOffer ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Briefcase className="w-4 h-4" />}
+                  <span>Send Job Offer Proposal</span>
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Staff Reviews & Rating Modal */}
+      {selectedStaffForReviews && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <motion.div 
+            className="bg-white rounded-3xl max-w-xl w-full p-8 shadow-2xl border border-slate-200 space-y-6 max-h-[90vh] overflow-y-auto"
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+          >
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <img src={selectedStaffForReviews.avatar} alt={selectedStaffForReviews.name} className="w-12 h-12 rounded-xl object-cover" referrerPolicy="no-referrer" />
+                <div>
+                  <h3 className="text-lg font-black text-slate-900">{selectedStaffForReviews.name} - Reviews & Ratings</h3>
+                  <p className="text-xs text-slate-500">Rating: ★ {selectedStaffForReviews.rating} ({selectedStaffForReviews.reviewCount} total)</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setSelectedStaffForReviews(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Reviews List */}
+            <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
+              {(!selectedStaffForReviews.reviews || selectedStaffForReviews.reviews.length === 0) ? (
+                <p className="text-xs text-slate-500 text-center py-6">No reviews or ratings yet. Be the first manager to review this professional!</p>
+              ) : (
+                selectedStaffForReviews.reviews.map((rev: any) => (
+                  <div key={rev.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-200/60 space-y-1 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-extrabold text-slate-900">{rev.reviewerName}</span>
+                      <div className="flex items-center gap-1 text-amber-600 font-bold">
+                        <span>★</span>
+                        <span>{rev.rating}.0</span>
+                      </div>
+                    </div>
+                    <p className="text-slate-600">{rev.comment || 'No written comment.'}</p>
+                    <span className="text-[10px] text-slate-400 block pt-1">{new Date(rev.createdAt).toLocaleDateString()}</span>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Leave a Review Form */}
+            <form onSubmit={handleSubmitReview} className="space-y-4 pt-4 border-t border-slate-100 text-xs">
+              <h4 className="font-extrabold text-slate-950">Leave a Manager Review & Rating</h4>
+              
+              <div className="flex items-center gap-4">
+                <label className="font-bold text-slate-700">Rating (1 - 5 stars):</label>
+                <select 
+                  value={reviewRating}
+                  onChange={e => setReviewRating(Number(e.target.value))}
+                  className="px-3 py-2 rounded-xl border border-slate-300 font-bold text-slate-900 focus:outline-none"
+                >
+                  <option value={5}>★★★★★ (5 Stars - Exceptional)</option>
+                  <option value={4}>★★★★☆ (4 Stars - Very Good)</option>
+                  <option value={3}>★★★☆☆ (3 Stars - Good)</option>
+                  <option value={2}>★★☆☆☆ (2 Stars - Fair)</option>
+                  <option value={1}>★☆☆☆☆ (1 Star - Poor)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Review Comment</label>
+                <textarea 
+                  rows={3}
+                  placeholder="Share your experience working with this staff member..."
+                  value={reviewComment}
+                  onChange={e => setReviewComment(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-900 focus:outline-none"
+                />
+              </div>
+
+              {reviewToast && (
+                <div className={`p-3 rounded-xl font-bold flex items-center gap-2 ${reviewToast.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-800 border border-rose-200'}`}>
+                  {reviewToast.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+                  <span>{reviewToast.text}</span>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="submit"
+                  disabled={submittingReview}
+                  className="px-6 py-3 rounded-xl bg-blue-900 hover:bg-blue-950 text-white font-black shadow-md flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {submittingReview ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Star className="w-4 h-4 text-amber-400" />}
+                  <span>Submit Review</span>
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
 
       {/* Logout Confirmation Modal */}
       <LogoutConfirmationModal

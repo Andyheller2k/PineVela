@@ -4,11 +4,12 @@ import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../lib/api';
 import PineLogo from './PineLogo';
 import LogoutConfirmationModal from './LogoutConfirmationModal';
+import { sanitizePdfDataUrl } from '../utils/pdfHelper';
 import {
   Bell, Settings, Briefcase, CheckCircle2, Clock, XCircle, AlertCircle,
   Phone, Mail, User, Building2, FileText, UploadCloud, ChevronRight,
   ShieldCheck, ArrowRight, RefreshCw, Sparkles, MapPin, Eye, ExternalLink,
-  Camera, Check, Lock, Send, X
+  Camera, Check, Lock, Send, X, MessageSquare
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -56,8 +57,8 @@ export default function PageStaffDashboard() {
     user?.verificationStatus === 'approved'
   );
 
-  // Active Tab: only 3 tabs as requested: notifications, apply, settings
-  const [activeTab, setActiveTab] = useState<'notifications' | 'apply' | 'settings'>('apply');
+  // Active Tab: notifications, apply, settings, chat, or offers
+  const [activeTab, setActiveTab] = useState<'notifications' | 'apply' | 'settings' | 'chat' | 'offers'>('apply');
   const [loading, setLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -66,7 +67,32 @@ export default function PageStaffDashboard() {
   const [hostels, setHostels] = useState<any[]>([]);
   const [applications, setApplications] = useState<StaffApplication[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [jobOffers, setJobOffers] = useState<any[]>([]);
   const [staffRecord, setStaffRecord] = useState<any | null>(null);
+  const [viewingOfferMap, setViewingOfferMap] = useState<any | null>(null);
+
+  useEffect(() => {
+    if (viewingOfferMap) {
+      const timer = setTimeout(() => {
+        const container = document.getElementById('staff-offer-map-view');
+        if (!container) return;
+        const L = (window as any).L;
+        if (!L) return;
+
+        const lat = viewingOfferMap.lat || 5.6037;
+        const lng = viewingOfferMap.lng || -0.1870;
+
+        const map = L.map(container).setView([lat, lng], 16);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        L.marker([lat, lng]).addTo(map)
+          .bindPopup(`<b>${viewingOfferMap.requesterName}</b><br/>${viewingOfferMap.location}`).openPopup();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [viewingOfferMap]);
 
   // Application Form States
   const [selectedHostelId, setSelectedHostelId] = useState<string>('');
@@ -87,6 +113,14 @@ export default function PageStaffDashboard() {
   const [settingsPhone, setSettingsPhone] = useState<string>('');
   const [settingsPhoto, setSettingsPhoto] = useState<string>('');
   const [savingSettings, setSavingSettings] = useState(false);
+
+  // Chat States
+  const [chatRooms, setChatRooms] = useState<any[]>([]);
+  const [selectedRoomId, setSelectedRoomId] = useState<string>('');
+  const [chatMessagesList, setChatMessagesList] = useState<any[]>([]);
+  const [newMessage, setNewMessage] = useState<string>('');
+  const [sendingMsg, setSendingMsg] = useState(false);
+  const [loadingChat, setLoadingChat] = useState(false);
 
   // CV Preview Modal
   const [previewCv, setPreviewCv] = useState<{ name: string; data: string } | null>(null);
@@ -117,6 +151,10 @@ export default function PageStaffDashboard() {
       const notifsData = await apiFetch('/api/notifications').catch(() => []);
       setNotifications(Array.isArray(notifsData) ? notifsData : []);
 
+      // 3b. Fetch job offers
+      const offersData = await apiFetch('/api/staff-job-offers').catch(() => []);
+      setJobOffers(Array.isArray(offersData) ? offersData : []);
+
       // 4. Fetch staff record to see if user has already been approved
       const allStaff = await apiFetch('/api/staff').catch(() => []);
       const myStaff = Array.isArray(allStaff)
@@ -134,6 +172,87 @@ export default function PageStaffDashboard() {
       setLoading(false);
     }
   };
+
+  const handleAcceptOffer = async (offerId: string) => {
+    try {
+      const res = await apiFetch(`/api/job-offers/${offerId}/accept`, {
+        method: 'PUT'
+      });
+      if (res.success || res.offer) {
+        triggerToast('Job offer accepted successfully! Logged in system and requester notified.', 'success');
+        loadData();
+      } else {
+        triggerToast(res.error || 'Failed to accept offer', 'error');
+      }
+    } catch (err: any) {
+      triggerToast(err.message || 'Failed to accept offer', 'error');
+    }
+  };
+
+  const fetchChatRooms = async () => {
+    try {
+      const rooms = await apiFetch('/api/staff-chat/rooms').catch(() => []);
+      if (Array.isArray(rooms)) {
+        setChatRooms(rooms);
+        if (rooms.length > 0 && !selectedRoomId) {
+          setSelectedRoomId(rooms[0].id);
+        }
+      }
+    } catch (err) {
+      console.error("Error loading chat rooms:", err);
+    }
+  };
+
+  const fetchChatMessages = async (roomId: string) => {
+    if (!roomId) return;
+    try {
+      const msgs = await apiFetch(`/api/staff-chat/rooms/${roomId}/messages`).catch(() => []);
+      if (Array.isArray(msgs)) {
+        setChatMessagesList(msgs);
+      }
+    } catch (err) {
+      console.error("Error fetching chat messages:", err);
+    }
+  };
+
+  const handleSendChatMessage = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!selectedRoomId || !newMessage.trim()) return;
+    setSendingMsg(true);
+    try {
+      const response = await apiFetch(`/api/staff-chat/rooms/${selectedRoomId}/messages`, {
+        method: 'POST',
+        body: JSON.stringify({ content: newMessage })
+      });
+      if (response && response.id) {
+        setNewMessage('');
+        fetchChatMessages(selectedRoomId);
+      } else if (response && response.error) {
+        triggerToast(response.error, 'error');
+      }
+    } catch (err: any) {
+      triggerToast(err.message || 'Failed to send message.', 'error');
+    } finally {
+      setSendingMsg(false);
+    }
+  };
+
+  // Poll for messages when chat active
+  useEffect(() => {
+    if (activeTab === 'chat') {
+      fetchChatRooms();
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'chat' && selectedRoomId) {
+      fetchChatMessages(selectedRoomId);
+      const interval = setInterval(() => {
+        fetchChatMessages(selectedRoomId);
+      }, 3500);
+      return () => clearInterval(interval);
+    }
+  }, [activeTab, selectedRoomId]);
 
   useEffect(() => {
     loadData();
@@ -188,8 +307,9 @@ export default function PageStaffDashboard() {
     reader.onload = () => {
       const result = reader.result as string;
       if (type === 'cv') {
+        const sanitized = sanitizePdfDataUrl(result, user?.name || 'Staff Applicant');
         setCvFileName(file.name);
-        setCvData(result);
+        setCvData(sanitized);
         triggerToast(`CV PDF "${file.name}" attached successfully!`, 'success');
       } else {
         setIdDocFileName(file.name);
@@ -481,7 +601,30 @@ export default function PageStaffDashboard() {
               )}
             </button>
 
-            {/* Tab 2: Notifications */}
+            {/* Tab: Job Offers */}
+            <button
+              onClick={() => setActiveTab('offers')}
+              className={`w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === 'offers'
+                  ? 'bg-blue-900 text-white shadow-lg shadow-blue-900/25'
+                  : 'bg-white/40 hover:bg-white/80 text-slate-700 border border-slate-200/40'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Briefcase className={`w-4 h-4 ${activeTab === 'offers' ? 'text-amber-300' : 'text-blue-700'}`} />
+                <div className="text-left">
+                  <div>Job Offers</div>
+                  <div className={`text-[10px] font-normal ${activeTab === 'offers' ? 'text-blue-200' : 'text-slate-500'}`}>
+                    Hiring proposals received
+                  </div>
+                </div>
+              </div>
+              {jobOffers.filter(o => o.status === 'Pending').length > 0 && (
+                <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-400 text-slate-950">
+                  {jobOffers.filter(o => o.status === 'Pending').length}
+                </span>
+              )}
+            </button>
             <button
               onClick={() => setActiveTab('notifications')}
               className={`w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
@@ -528,6 +671,32 @@ export default function PageStaffDashboard() {
               </div>
               <ChevronRight className={`w-3.5 h-3.5 ${activeTab === 'settings' ? 'text-blue-300' : 'text-slate-400'}`} />
             </button>
+
+            {/* Tab 4: Secure Chat with Manager (Unlocked once Approved) */}
+            {approvedApp && (
+              <button
+                onClick={() => setActiveTab('chat')}
+                className={`w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === 'chat'
+                    ? 'bg-gradient-to-r from-blue-700 to-sky-800 text-white shadow-lg shadow-blue-900/25 border-blue-500'
+                    : 'bg-blue-50/50 hover:bg-blue-100/80 text-blue-950 border border-blue-200/60'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <MessageSquare className={`w-4 h-4 ${activeTab === 'chat' ? 'text-sky-300' : 'text-blue-700'}`} />
+                  <div className="text-left">
+                    <div className="flex items-center gap-1.5">
+                      <span>Secure Chat</span>
+                      <span className="px-1.5 py-0.2 bg-blue-400 text-white rounded text-[8px] font-black uppercase">MGR</span>
+                    </div>
+                    <div className={`text-[10px] font-normal ${activeTab === 'chat' ? 'text-blue-200' : 'text-slate-500'}`}>
+                      Encrypted live connection
+                    </div>
+                  </div>
+                </div>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping shrink-0" />
+              </button>
+            )}
           </nav>
         </div>
 
@@ -564,7 +733,9 @@ export default function PageStaffDashboard() {
             <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight mt-1">
               {activeTab === 'apply' && 'Staff Applications & Job Board'}
               {activeTab === 'notifications' && 'Operational Notifications'}
+              {activeTab === 'offers' && 'Job Offers & Hiring Proposals'}
               {activeTab === 'settings' && 'Staff Account & Profile Settings'}
+              {activeTab === 'chat' && 'Secure Encrypted Communication'}
             </h2>
           </div>
 
@@ -804,9 +975,14 @@ export default function PageStaffDashboard() {
                             {openRoles.map((r: any, idx: number) => (
                               <span 
                                 key={idx}
-                                className="px-2 py-0.5 bg-blue-50 border border-blue-200 text-blue-900 rounded-md text-[10px] font-bold"
+                                className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 border border-blue-200 text-blue-900 rounded-md text-[10px] font-bold flex-wrap"
                               >
-                                {r.role || r}
+                                <span>{r.role || r}</span>
+                                {r.wage && (
+                                  <span className="bg-emerald-50 text-emerald-800 rounded px-1 text-[8px] font-black border border-emerald-200">
+                                    {r.wage}
+                                  </span>
+                                )}
                               </span>
                             ))}
                           </div>
@@ -915,14 +1091,31 @@ export default function PageStaffDashboard() {
                         className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600 focus:bg-white"
                         required
                       >
-                        <option value="Facilities & Maintenance Technician">Facilities & Maintenance Technician</option>
-                        <option value="Plumber & Water Systems Lead">Plumber & Water Systems Lead</option>
-                        <option value="Electrician & Backup Power Specialist">Electrician & Backup Power Specialist</option>
-                        <option value="Head of Security & Gate Operations">Head of Security & Gate Operations</option>
-                        <option value="Security Officer (Night Shift)">Security Officer (Night Shift)</option>
-                        <option value="Front Desk & Operations Assistant">Front Desk & Operations Assistant</option>
-                        <option value="Housekeeping & Sanitation Staff">Housekeeping & Sanitation Staff</option>
-                        <option value="Hostel Warden / Residential Assistant">Hostel Warden / Residential Assistant</option>
+                        <option value="">-- Select Role / Position --</option>
+                        {(() => {
+                          const selectedHostel = hostels.find(h => h.id === selectedHostelId);
+                          const activeRoles = selectedHostel && Array.isArray(selectedHostel.openStaffRoles) && selectedHostel.openStaffRoles.length > 0
+                            ? selectedHostel.openStaffRoles
+                            : [
+                                { role: 'Facilities & Maintenance Technician', wage: 'Negotiable' },
+                                { role: 'Plumber & Water Systems Lead', wage: 'Negotiable' },
+                                { role: 'Electrician & Backup Power Specialist', wage: 'Negotiable' },
+                                { role: 'Head of Security & Gate Operations', wage: 'Negotiable' },
+                                { role: 'Security Officer (Night Shift)', wage: 'Negotiable' },
+                                { role: 'Front Desk & Operations Assistant', wage: 'Negotiable' },
+                                { role: 'Housekeeping & Sanitation Staff', wage: 'Negotiable' },
+                                { role: 'Hostel Warden / Residential Assistant', wage: 'Negotiable' }
+                              ];
+                          return activeRoles.map((r: any, idx: number) => {
+                            const title = r.role || r;
+                            const wageInfo = r.wage ? ` (Salary: ${r.wage})` : '';
+                            return (
+                              <option key={idx} value={title}>
+                                {title}{wageInfo}
+                              </option>
+                            );
+                          });
+                        })()}
                       </select>
                     </div>
 
@@ -1107,6 +1300,90 @@ export default function PageStaffDashboard() {
         )}
 
         {/* ========================================================================= */}
+        {/* TAB: JOB OFFERS & PROPOSALS */}
+        {/* ========================================================================= */}
+        {activeTab === 'offers' && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-black text-slate-900">Job Offers & Hiring Proposals</h3>
+                <p className="text-xs text-slate-500 font-medium">Review job offers sent to you by property managers and accept them to notify requesters.</p>
+              </div>
+              <span className="text-xs font-bold text-blue-900 bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
+                {jobOffers.length} Total Proposal{jobOffers.length === 1 ? '' : 's'}
+              </span>
+            </div>
+
+            {jobOffers.length === 0 ? (
+              <div className="p-12 text-center bg-white border border-slate-200 rounded-3xl space-y-3">
+                <Briefcase className="w-10 h-10 text-slate-300 mx-auto" />
+                <h4 className="text-base font-bold text-slate-800">No Job Offers Received Yet</h4>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  When property managers or users send you a job offer from the PineVela Accredited Staff section on the landing page, it will appear here.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {jobOffers.map((offer: any) => {
+                  const isAccepted = offer.status === 'Accepted';
+                  return (
+                    <div key={offer.id} className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-4 flex flex-col justify-between">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${isAccepted ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                            {offer.status || 'Pending'}
+                          </span>
+                          <span className="text-[11px] text-slate-400">{new Date(offer.createdAt).toLocaleDateString()}</span>
+                        </div>
+
+                        <div>
+                          <h4 className="text-base font-extrabold text-slate-900">{offer.workOffered}</h4>
+                          <p className="text-xs text-blue-900 font-bold mt-0.5">Offered by: {offer.requesterName}</p>
+                        </div>
+
+                        <div className="space-y-1.5 text-xs text-slate-600 font-medium bg-slate-50 p-3.5 rounded-xl border border-slate-200/60">
+                          <div><span className="font-bold text-slate-800">Time & Schedule:</span> {offer.timeAndSchedule}</div>
+                          <div>
+                            <span className="font-bold text-slate-800">Location:</span>{' '}
+                            <button
+                              type="button"
+                              onClick={() => setViewingOfferMap(offer)}
+                              className="text-blue-700 underline font-semibold hover:text-blue-900 inline-flex items-center gap-1 cursor-pointer"
+                            >
+                              <MapPin className="w-3.5 h-3.5 text-blue-600 inline" />
+                              <span>{offer.location} (Tap for Map)</span>
+                            </button>
+                          </div>
+                          <div><span className="font-bold text-slate-800">Wage & Salary:</span> {offer.wageSalary}</div>
+                          <div><span className="font-bold text-slate-800">Manager Contact:</span> {offer.contact || offer.requesterContact || offer.requesterEmail}</div>
+                        </div>
+                      </div>
+
+                      <div className="pt-2">
+                        {isAccepted ? (
+                          <div className="w-full py-3 bg-emerald-50 text-emerald-800 rounded-xl font-bold text-xs flex items-center justify-center gap-2 border border-emerald-200">
+                            <CheckCircle2 size={16} />
+                            <span>Offer Accepted & Logged!</span>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => handleAcceptOffer(offer.id)}
+                            className="w-full py-3 bg-blue-900 hover:bg-blue-950 text-white rounded-xl font-black text-xs shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer"
+                          >
+                            <Check size={16} />
+                            <span>Accept Offer & Notify Manager</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ========================================================================= */}
         {/* TAB 3: SETTINGS (PROFILE, USERNAME, EMAIL, PHONE, PICTURE -> MANAGER SYNC) */}
         {/* ========================================================================= */}
         {activeTab === 'settings' && (
@@ -1232,7 +1509,211 @@ export default function PageStaffDashboard() {
             </form>
           </div>
         )}
+
+        {/* ========================================================================= */}
+        {/* TAB 4: SECURE ENCRYPTED CHAT SYSTEM                                       */}
+        {/* ========================================================================= */}
+        {activeTab === 'chat' && (
+          <div className="flex flex-col h-[calc(100vh-14rem)] min-h-[480px] bg-white border border-blue-200 rounded-3xl shadow-md overflow-hidden" id="staff-secure-chat-container">
+            {/* Encryption Header Banner */}
+            <div className="bg-slate-900/90 backdrop-blur-md text-sky-100 px-6 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10" id="chat-security-banner">
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 bg-blue-800/80 backdrop-blur-sm rounded-lg text-amber-300">
+                  <Lock className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-black tracking-wide uppercase flex items-center gap-1.5">
+                    <span>Secured Live Connection</span>
+                    <span className="px-1.5 py-0.5 bg-sky-500 text-slate-950 text-[8px] font-black rounded">AES-256</span>
+                  </h3>
+                  <p className="text-[10px] text-blue-300 font-medium">End-to-end server encrypted. Invisible to Admins & third-parties.</p>
+                </div>
+              </div>
+              <div className="text-[10px] bg-slate-950/50 backdrop-blur-sm text-blue-300 font-mono px-2.5 py-1 rounded-lg border border-white/10 self-start sm:self-auto">
+                Room Handshake: Verified Active
+              </div>
+            </div>
+
+            {/* Main Chat Workspace */}
+            <div className="flex-1 flex overflow-hidden bg-slate-50/50" id="chat-main-workspace">
+              {/* Sidebar (Only shown if multiple rooms exist, but usually 1) */}
+              {chatRooms.length > 1 && (
+                <div className="w-64 border-r border-slate-200/80 bg-white hidden md:flex flex-col overflow-y-auto p-4 space-y-2" id="chat-rooms-list">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2">Active Channels</p>
+                  {chatRooms.map((r) => (
+                    <button
+                      key={r.id}
+                      onClick={() => setSelectedRoomId(r.id)}
+                      className={`w-full text-left p-3 rounded-xl transition-all flex items-center gap-2.5 border ${
+                        selectedRoomId === r.id
+                          ? 'bg-blue-50 border-blue-200 text-blue-950 font-bold'
+                          : 'bg-white border-transparent hover:bg-slate-50 text-slate-700'
+                      }`}
+                    >
+                      <MessageSquare className="w-4 h-4 text-blue-600 shrink-0" />
+                      <div className="truncate text-xs">
+                        <div className="font-bold truncate">{r.managerName || 'Property Manager'}</div>
+                        <div className="text-[10px] text-slate-400 truncate font-mono">{r.hostelName}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Chat Window */}
+              <div className="flex-1 flex flex-col h-full bg-white relative" id="chat-window-pane">
+                {selectedRoomId ? (
+                  <>
+                    {/* Active Conversation Header */}
+                    <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-white" id="chat-active-header">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-800 flex items-center justify-center font-black text-sm uppercase">
+                          {(chatRooms.find(r => r.id === selectedRoomId)?.managerName || 'M').substring(0, 2)}
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-black text-slate-900">
+                            {chatRooms.find(r => r.id === selectedRoomId)?.managerName || 'Property Manager'}
+                          </h4>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                            <span>Hostel Channel:</span>
+                            <span className="text-blue-700 font-black">{chatRooms.find(r => r.id === selectedRoomId)?.hostelName || 'Accredited Residence'}</span>
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Status indicator */}
+                      <div className="flex items-center gap-1.5 bg-blue-50 border border-blue-200/50 text-blue-800 text-[10px] font-bold px-2.5 py-1 rounded-full">
+                        <span className="w-1.5 h-1.5 bg-sky-500 rounded-full animate-pulse" />
+                        <span>Connected</span>
+                      </div>
+                    </div>
+
+                    {/* Chat Messages Log */}
+                    <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/40" id="chat-messages-log">
+                      {chatMessagesList.length === 0 ? (
+                        <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-3" id="chat-empty-state">
+                          <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
+                            <MessageSquare className="w-6 h-6 animate-pulse" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-slate-700">Encrypted Chat Channel Initiated</p>
+                            <p className="text-[10px] text-slate-400 max-w-xs mx-auto mt-0.5">Send a secure live message to begin communicating directly with your Property Manager.</p>
+                          </div>
+                        </div>
+                      ) : (
+                        chatMessagesList.map((m) => {
+                          const isMe = m.senderId === user?.id;
+                          return (
+                            <div
+                              key={m.id}
+                              className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} max-w-full`}
+                              id={`msg-${m.id}`}
+                            >
+                              {/* Message Header */}
+                              <span className="text-[9px] text-slate-400 font-bold mb-1 px-1">
+                                {isMe ? 'You (Staff)' : `${m.senderName} (Manager)`} • {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                              
+                              {/* Message Bubble */}
+                              <div
+                                className={`px-4 py-2.5 text-xs font-medium leading-relaxed shadow-xs max-w-md ${
+                                  isMe
+                                    ? 'bg-blue-600 text-white rounded-2xl rounded-tr-none'
+                                    : 'bg-white border border-slate-200 text-slate-800 rounded-2xl rounded-tl-none'
+                                }`}
+                              >
+                                {m.content}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    {/* Chat Message Input Bar */}
+                    <form onSubmit={handleSendChatMessage} className="p-4 border-t border-slate-100 bg-white flex gap-3 items-center" id="chat-input-form">
+                      <input
+                        type="text"
+                        value={newMessage}
+                        onChange={(e) => setNewMessage(e.target.value)}
+                        placeholder="Type a secure, encrypted message to your manager..."
+                        className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-600 focus:bg-white transition-all"
+                        disabled={sendingMsg}
+                        required
+                      />
+                      <button
+                        type="submit"
+                        disabled={sendingMsg || !newMessage.trim()}
+                        className="p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center disabled:opacity-50 shrink-0"
+                        title="Send secure message"
+                      >
+                        {sendingMsg ? (
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Send className="w-4 h-4" />
+                        )}
+                      </button>
+                    </form>
+                  </>
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-3" id="chat-no-room-state">
+                    <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center">
+                      <Lock className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-slate-700 font-sans">No Active Encrypted Channels</p>
+                      <p className="text-[10px] text-slate-400 max-w-xs mx-auto mt-0.5">Secure communication room is established automatically once a Property Manager reviews and approves an active employment application.</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </main>
+
+      {/* View Offer Precise Location Modal */}
+      {viewingOfferMap && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div>
+                <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                  <MapPin className="w-5 h-5 text-blue-900" />
+                  <span>Precise Job Offer Location</span>
+                </h3>
+                <p className="text-xs text-slate-500">{viewingOfferMap.location}</p>
+              </div>
+              <button 
+                onClick={() => setViewingOfferMap(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <div className="text-xs text-slate-700 font-medium">
+                <span className="font-bold">Client / Requesters:</span> {viewingOfferMap.requesterName} ({viewingOfferMap.contact || viewingOfferMap.requesterContact || viewingOfferMap.requesterEmail})
+              </div>
+              <div className="text-xs text-slate-700 font-medium">
+                <span className="font-bold">Work:</span> {viewingOfferMap.workOffered}
+              </div>
+              <div id="staff-offer-map-view" className="w-full h-72 rounded-2xl border border-slate-300 shadow-inner z-0"></div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setViewingOfferMap(null)}
+                className="px-5 py-2.5 rounded-xl bg-blue-900 hover:bg-blue-950 text-white font-bold text-xs shadow-md cursor-pointer"
+              >
+                Close Map
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -49,6 +49,7 @@ export default function PageManagerOnboarding() {
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('Accra');
   const [region, setRegion] = useState('Greater Accra');
+  const [customRegion, setCustomRegion] = useState('');
   const [digitalAddress, setDigitalAddress] = useState('');
   const [landmark, setLandmark] = useState('');
 
@@ -197,6 +198,7 @@ export default function PageManagerOnboarding() {
       const cleanEmail = email.trim().toLowerCase();
       const cleanPhone = phone.trim();
       const cleanHostelName = hostelName.trim();
+      const finalRegion = region === 'Other / International' ? customRegion.trim() : region;
 
       // 1. Unified payload for Manager Account & Verification Dossier
       const verifPayload = {
@@ -211,9 +213,9 @@ export default function PageManagerOnboarding() {
         hostelName: cleanHostelName,
         proposedHostelName: cleanHostelName,
         propertyName: cleanHostelName,
-        physicalAddress: `${address.trim()}, ${city.trim()}, ${region}`,
-        address: `${address.trim()}, ${city.trim()}, ${region}`,
-        operatingAddress: `${address.trim()}, ${city.trim()}, ${region}`,
+        physicalAddress: `${address.trim()}, ${city.trim()}, ${finalRegion}`,
+        address: `${address.trim()}, ${city.trim()}, ${finalRegion}`,
+        operatingAddress: `${address.trim()}, ${city.trim()}, ${finalRegion}`,
         digitalAddress: digitalAddress.trim() || undefined,
         landmark: landmark.trim() || undefined,
         idType,
@@ -599,7 +601,21 @@ export default function PageManagerOnboarding() {
                           <option value="Bono">Bono</option>
                           <option value="Upper East">Upper East</option>
                           <option value="Upper West">Upper West</option>
+                          <option value="Other / International">Other / International</option>
                         </select>
+                        {region === 'Other / International' && (
+                          <div className="mt-2 space-y-1 animate-fadeIn">
+                            <label className="text-[10px] font-bold text-slate-500 block">Specify Region / State *</label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="e.g. London / California"
+                              value={customRegion}
+                              onChange={(e) => setCustomRegion(e.target.value)}
+                              className="w-full px-4 py-2 border border-slate-200 rounded-xl bg-white text-slate-800 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-900"
+                            />
+                          </div>
+                        )}
                       </div>
 
                     </div>

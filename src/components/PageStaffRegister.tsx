@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
+import { sanitizePdfDataUrl } from '../utils/pdfHelper';
 import { 
   User, 
   Phone, 
@@ -58,6 +59,7 @@ export default function PageStaffRegister() {
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('Accra');
   const [region, setRegion] = useState('Greater Accra');
+  const [customRegion, setCustomRegion] = useState('');
   const [digitalAddress, setDigitalAddress] = useState('');
   const [commutePreference, setCommutePreference] = useState('Daily Commuter (Lives nearby)');
 
@@ -154,7 +156,8 @@ export default function PageStaffRegister() {
       const reader = new FileReader();
       reader.onload = (loadEvt) => {
         const result = loadEvt.target?.result as string;
-        setCvData(result);
+        const sanitized = sanitizePdfDataUrl(result, fullName || 'Staff Applicant');
+        setCvData(sanitized);
         triggerToast(`CV PDF attached: ${file.name}`, 'success');
       };
       reader.readAsDataURL(file);
@@ -289,7 +292,7 @@ export default function PageStaffRegister() {
         preferredShift,
         address: address.trim(),
         city: city.trim(),
-        region,
+        region: region === 'Other / International' ? customRegion.trim() : region,
         digitalAddress: digitalAddress.trim() || undefined,
         commutePreference,
         nationalId: idNumber.trim(),
@@ -690,7 +693,21 @@ export default function PageStaffRegister() {
                           <option value="Bono">Bono</option>
                           <option value="Upper East">Upper East</option>
                           <option value="Upper West">Upper West</option>
+                          <option value="Other / International">Other / International</option>
                         </select>
+                        {region === 'Other / International' && (
+                          <div className="mt-2 space-y-1 animate-fadeIn">
+                            <label className="text-[10px] font-bold text-slate-500 block">Specify Region / State *</label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="e.g. London / California"
+                              value={customRegion}
+                              onChange={(e) => setCustomRegion(e.target.value)}
+                              className="w-full px-4 py-2 border border-slate-200 rounded-xl bg-white text-slate-800 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-900"
+                            />
+                          </div>
+                        )}
                       </div>
 
                     </div>

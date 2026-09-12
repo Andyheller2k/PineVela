@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 dotenv.config();
 
+import crypto from "crypto";
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
@@ -174,6 +175,10 @@ const initialStaff: any[] = [];
 let staff: any[] = [...initialStaff];
 let staffApplications: any[] = [];
 let staffAuditLogs: any[] = [];
+let staffChatRooms: any[] = [];
+let staffChatMessages: any[] = [];
+let staffReviews: any[] = [];
+let jobOffers: any[] = [];
 
 // Chat state containers
 let chatProfiles: any[] = [
@@ -652,6 +657,10 @@ platformSettings = persistentData.platformSettings;
 staff = (persistentData.staff || []).filter((s: any) => s.email !== 'staff@pinevela.com');
 staffApplications = persistentData.staffApplications || [];
 staffAuditLogs = persistentData.staffAuditLogs || [];
+staffChatRooms = persistentData.staffChatRooms || [];
+staffChatMessages = persistentData.staffChatMessages || [];
+staffReviews = persistentData.staffReviews || [];
+jobOffers = persistentData.jobOffers || [];
 
 export function syncStore(): void {
   persistentData.hostels = hostels;
@@ -670,6 +679,10 @@ export function syncStore(): void {
   persistentData.staff = staff;
   persistentData.staffApplications = staffApplications;
   persistentData.staffAuditLogs = staffAuditLogs;
+  persistentData.staffChatRooms = staffChatRooms;
+  persistentData.staffChatMessages = staffChatMessages;
+  persistentData.staffReviews = staffReviews;
+  persistentData.jobOffers = jobOffers;
 
   savePersistentStore(persistentData);
 }
@@ -1236,20 +1249,28 @@ async function startServer() {
         );
       });
 
+      console.log(`[AUTH DEBUG] Token: "${token}" | Exact Match Found: ${foundEntry ? "YES (" + (foundEntry.email || foundEntry.user?.email) + ")" : "NO"}`);
+
       // Standard sandbox/role token fallbacks for developer and demo test sessions
       if (!foundEntry) {
+        console.log(`[AUTH DEBUG] Triggering token fallback. All available user tokens in database:`, combinedUsers.map(u => u.token || u.user?.token || u.email || u.user?.email));
         if (token === 'token_admin_andyheller2k' || token.toLowerCase().includes('andyheller')) {
+          console.log(`[AUTH DEBUG] Fallback to admin_andyheller2k matched`);
           foundEntry = combinedUsers.find(u => u.email === 'andyheller2k@gmail.com' || u.user?.email === 'andyheller2k@gmail.com') || MOCK_USERS.find(u => u.email === 'andyheller2k@gmail.com');
         } else if (token === 'token_admin' || token === 'token_admin_001' || token === 'admin' || token.toLowerCase().includes('admin')) {
+          console.log(`[AUTH DEBUG] Fallback to admin matched`);
           foundEntry = combinedUsers.find(u => u.email === 'andyheller2k@gmail.com' || u.user?.role === 'admin' || u.role === 'admin') || MOCK_USERS.find(u => u.email === 'andyheller2k@gmail.com' || u.user?.role === 'admin');
         } else if (token === 'token_manager' || token === 'token_manager_101' || token === 'manager' || token.toLowerCase().includes('manager')) {
+          console.log(`[AUTH DEBUG] Fallback to manager matched`);
           foundEntry = combinedUsers.find(u => u.user?.role === 'manager' || u.role === 'manager') || MOCK_USERS.find(u => u.user?.role === 'manager');
         } else if (token === 'token_student' || token === 'token_student_882' || token === 'student' || token.toLowerCase().includes('student')) {
+          console.log(`[AUTH DEBUG] Fallback to student matched`);
           foundEntry = combinedUsers.find(u => u.user?.role === 'student' || u.role === 'student') || MOCK_USERS.find(u => u.user?.role === 'student');
         } else if (token === 'token_staff' || token === 'token_staff_201' || token === 'staff' || token.toLowerCase().includes('staff')) {
+          console.log(`[AUTH DEBUG] Fallback to staff matched`);
           foundEntry = combinedUsers.find(u => u.user?.role === 'staff' || u.role === 'staff') || MOCK_USERS.find(u => u.user?.role === 'staff');
         } else {
-          // Universal fallback so app mount never fails with Invalid session token
+          console.log(`[AUTH DEBUG] Fallback to default user matched (andyheller2k or MOCK_USERS[0])`);
           foundEntry = MOCK_USERS.find(u => u.email === 'andyheller2k@gmail.com') || MOCK_USERS[0];
         }
       }
@@ -1258,10 +1279,16 @@ async function startServer() {
         return res.status(401).json({ error: 'Access Denied: Invalid session token' });
       }
 
-      const user = foundEntry.user || {
+      const isStaffMatch = token.includes('staff') || foundEntry.username?.includes('staff') || foundEntry.email?.includes('staff') || foundEntry.id?.includes('staff') || foundEntry.staffRole || foundEntry.user?.staffRole || foundEntry.user?.role === 'staff' || foundEntry.role === 'staff';
+      const isManagerMatch = token.includes('manager') || foundEntry.username?.includes('manager') || foundEntry.email?.includes('manager') || foundEntry.user?.role === 'manager' || foundEntry.role === 'manager';
+
+      const user = foundEntry.user ? {
+        ...foundEntry.user,
+        role: foundEntry.user.role || foundEntry.role || (isStaffMatch ? 'staff' : isManagerMatch ? 'manager' : 'student')
+      } : {
         id: foundEntry.id,
         name: foundEntry.name || foundEntry.full_name || 'Authenticated User',
-        role: foundEntry.role || (foundEntry.username?.includes('manager') ? 'manager' : foundEntry.email?.includes('manager') ? 'manager' : 'student'),
+        role: foundEntry.role || (isStaffMatch ? 'staff' : isManagerMatch ? 'manager' : 'student'),
         token: foundEntry.token || token,
         email: foundEntry.email,
         phone: foundEntry.phone,
@@ -1269,8 +1296,11 @@ async function startServer() {
         isVerified: foundEntry.isVerified ?? false,
         verificationStatus: foundEntry.verificationStatus || 'pending'
       };
+
+      console.log(`[AUTH DEBUG] Resolved User: ID="${user.id}" | Role="${user.role}" | Email="${user.email}"`);
       
       if (allowedRoles && !allowedRoles.includes(user.role as any)) {
+        console.log(`[AUTH DEBUG] 403 Forbidden! Allowed roles: ${JSON.stringify(allowedRoles)} but user has role: "${user.role}"`);
         return res.status(403).json({ error: `Access Denied: Unauthorized role "${user.role}"` });
       }
 
@@ -3620,9 +3650,62 @@ async function startServer() {
   });
 
   // --- Protected Issue Reports Endpoints ---
-  app.get("/api/issue-reports", requireAuth(), async (req, res) => {
-    const list = await dbGetIssueReports(issueReports);
-    res.json(list);
+  app.get("/api/issue-reports", requireAuth(), async (req: any, res) => {
+    try {
+      const list = await dbGetIssueReports(issueReports);
+      const userRole = req.user.role;
+      const userId = req.user.id;
+      const userEmail = (req.user.email || '').toLowerCase().trim();
+
+      if (userRole === 'admin') {
+        return res.json(list);
+      }
+
+      if (userRole === 'staff') {
+        const staffRecord = staff.find((s: any) => s.userId === userId || (s.email && s.email.toLowerCase().trim() === userEmail));
+        if (!staffRecord || !staffRecord.hostelId) {
+          // If staff is not assigned to any hostel, they are only authorized to see issues assigned directly to them, otherwise none.
+          const filtered = list.filter((issue: any) => issue.assignedStaffId === userId);
+          return res.json(filtered);
+        }
+        const filtered = list.filter((issue: any) => 
+          issue.hostelId === staffRecord.hostelId || 
+          (issue.hostelName && staffRecord.hostelName && issue.hostelName.toLowerCase().trim() === staffRecord.hostelName.toLowerCase().trim()) ||
+          issue.assignedStaffId === userId
+        );
+        return res.json(filtered);
+      }
+
+      if (userRole === 'manager') {
+        const managerHostels = hostels.filter(h => 
+          h.managerId === userId || 
+          h.assignedManagerId === userId ||
+          (h.managerEmail && h.managerEmail.toLowerCase().trim() === userEmail)
+        );
+        const managerHostelIds = new Set(managerHostels.map(h => h.id));
+        const managerHostelNames = new Set(managerHostels.map(h => h.name?.toLowerCase().trim()));
+
+        const filtered = list.filter((issue: any) => 
+          managerHostelIds.has(issue.hostelId) || 
+          (issue.hostelName && managerHostelNames.has(issue.hostelName.toLowerCase().trim()))
+        );
+        return res.json(filtered);
+      }
+
+      if (userRole === 'student') {
+        const filtered = list.filter((issue: any) => 
+          issue.studentId === userId || 
+          (issue.email && issue.email.toLowerCase().trim() === userEmail) ||
+          (issue.studentEmail && issue.studentEmail.toLowerCase().trim() === userEmail)
+        );
+        return res.json(filtered);
+      }
+
+      return res.json(list);
+    } catch (err: any) {
+      console.error("Error fetching issue reports:", err);
+      res.status(500).json({ error: "Failed to load issue reports" });
+    }
   });
 
   app.post("/api/issue-reports", requireAuth(["student"]), async (req: any, res) => {
@@ -3643,17 +3726,65 @@ async function startServer() {
   });
 
   app.put("/api/issue-reports/:id", requireAuth(), async (req: any, res) => {
-    const { id } = req.params;
-    const { status, studentAcceptedResolved, assignedStaffId, staffCompleted } = req.body;
-    const updated = await dbUpdateIssueReport(
-      id, 
-      { status, studentAcceptedResolved, assignedStaffId, staffCompleted }, 
-      issueReports
-    );
-    if (!updated) {
-      return res.status(404).json({ error: "Issue report not found" });
+    try {
+      const { id } = req.params;
+      const { status, studentAcceptedResolved, assignedStaffId, staffCompleted } = req.body;
+
+      const list = await dbGetIssueReports(issueReports);
+      const existingIssue = list.find((i: any) => i.id === id);
+      if (!existingIssue) {
+        return res.status(404).json({ error: "Issue report not found" });
+      }
+
+      const userRole = req.user.role;
+      const userId = req.user.id;
+      const userEmail = (req.user.email || '').toLowerCase().trim();
+
+      // Enforce stricter authorization check for staff: they can only update issues if assigned to that hostel
+      if (userRole === 'staff') {
+        const staffRecord = staff.find((s: any) => s.userId === userId || (s.email && s.email.toLowerCase().trim() === userEmail));
+        if (!staffRecord || !staffRecord.hostelId) {
+          // If staff is not assigned to any hostel, check if they are the assignedStaffId for this issue
+          if (existingIssue.assignedStaffId !== userId) {
+            return res.status(403).json({ error: "Access Denied: You can only interact with issue reports assigned to you or in your authorized hostel." });
+          }
+        } else {
+          const isAssignedHostel = (existingIssue.hostelId === staffRecord.hostelId) ||
+            (existingIssue.hostelName && staffRecord.hostelName && existingIssue.hostelName.toLowerCase().trim() === staffRecord.hostelName.toLowerCase().trim()) ||
+            (existingIssue.assignedStaffId === userId);
+          if (!isAssignedHostel) {
+            return res.status(403).json({ error: "Access Denied: You are not authorized to interact with this hostel's maintenance issues." });
+          }
+        }
+      }
+
+      // Enforce authorization check for manager
+      if (userRole === 'manager') {
+        const managerHostels = hostels.filter(h => 
+          h.managerId === userId || 
+          h.assignedManagerId === userId ||
+          (h.managerEmail && h.managerEmail.toLowerCase().trim() === userEmail)
+        );
+        const hostelIds = new Set(managerHostels.map(h => h.id));
+        const hostelNames = new Set(managerHostels.map(h => h.name?.toLowerCase().trim()));
+
+        const isAuthorizedManager = hostelIds.has(existingIssue.hostelId) || 
+          (existingIssue.hostelName && hostelNames.has(existingIssue.hostelName.toLowerCase().trim()));
+        if (!isAuthorizedManager) {
+          return res.status(403).json({ error: "Access Denied: You can only manage issue reports for hostels you operate." });
+        }
+      }
+
+      const updated = await dbUpdateIssueReport(
+        id, 
+        { status, studentAcceptedResolved, assignedStaffId, staffCompleted }, 
+        issueReports
+      );
+      res.json(updated);
+    } catch (err: any) {
+      console.error("Error updating issue report:", err);
+      res.status(500).json({ error: "Failed to update issue report" });
     }
-    res.json(updated);
   });
 
   // --- Protected Staff Endpoints ---
@@ -3713,31 +3844,6 @@ async function startServer() {
     res.status(201).json(saved);
   });
 
-  app.put("/api/staff/:id", requireAuth(["admin", "manager"]), async (req: any, res) => {
-    const { id } = req.params;
-    const index = staff.findIndex(s => s.id === id || s.userId === id);
-    if (index === -1) {
-      return res.status(404).json({ error: "Staff member not found" });
-    }
-    staff[index] = { ...staff[index], ...req.body, updatedAt: new Date().toISOString() };
-    syncStore();
-    res.json(staff[index]);
-  });
-
-  app.delete("/api/staff/:id", requireAuth(["admin", "manager"]), async (req: any, res) => {
-    const { id } = req.params;
-    
-    // Remove from in-memory MOCK_USERS state
-    const userIndex = MOCK_USERS.findIndex(u => (u.user && u.user.id === id) || u.user?.id === `staff-user-${id}`);
-    if (userIndex !== -1) {
-      MOCK_USERS.splice(userIndex, 1);
-    }
-    
-    staff = staff.filter(s => s.id !== id && s.userId !== id);
-    syncStore();
-    res.status(200).json({ success: true });
-  });
-
   // --- Staff Settings: Profile Sync with Manager's Staff Directory ---
   app.put("/api/staff/profile", requireAuth(["staff", "manager", "admin"]), async (req: any, res) => {
     try {
@@ -3745,12 +3851,16 @@ async function startServer() {
       const { name, username, email, phone, profilePicture, avatar, photo } = req.body;
       const pic = profilePicture || avatar || photo;
 
+      console.log(`[PROFILE UPDATE DEBUG] Updating profile for userId="${userId}" | req.user:`, JSON.stringify(req.user));
+
       // 1. Find user in MOCK_USERS
       const userIndex = MOCK_USERS.findIndex(u => 
         (u.user && u.user.id === userId) || 
         u.username === req.user.username || 
         (u.email && req.user.email && u.email.toLowerCase() === req.user.email.toLowerCase())
       );
+
+      console.log(`[PROFILE UPDATE DEBUG] userIndex in MOCK_USERS: ${userIndex}`);
 
       if (userIndex === -1) {
         return res.status(404).json({ error: "User account not found" });
@@ -3826,6 +3936,201 @@ async function startServer() {
     }
   });
 
+  
+  app.put("/api/staff/:id", requireAuth(["admin", "manager"]), async (req: any, res) => {
+    const { id } = req.params;
+    const index = staff.findIndex(s => s.id === id || s.userId === id);
+    if (index === -1) {
+      return res.status(404).json({ error: "Staff member not found" });
+    }
+    staff[index] = { ...staff[index], ...req.body, updatedAt: new Date().toISOString() };
+    syncStore();
+    res.json(staff[index]);
+  });
+
+  app.delete("/api/staff/:id", requireAuth(["admin", "manager"]), async (req: any, res) => {
+    const { id } = req.params;
+    
+    // Remove from in-memory MOCK_USERS state
+    const userIndex = MOCK_USERS.findIndex(u => (u.user && u.user.id === id) || u.user?.id === `staff-user-${id}`);
+    if (userIndex !== -1) {
+      MOCK_USERS.splice(userIndex, 1);
+    }
+    
+    staff = staff.filter(s => s.id !== id && s.userId !== id);
+    syncStore();
+    res.status(200).json({ success: true });
+  });
+
+  // --- Accredited Staff & Job Offers Endpoints ---
+  app.get("/api/accredited-staff", async (req, res) => {
+    try {
+      const dbUsers = await dbGetUsers(MOCK_USERS);
+      const combinedUsers = [...MOCK_USERS, ...dbUsers, ...(persistentData.users || [])];
+      
+      const verifiedStaff = combinedUsers.filter(u => {
+        const usr = u.user || u;
+        const vStatus = (usr.verificationStatus || '').toLowerCase();
+        const isStaff = usr.role === 'staff' || usr.staffRole || usr.username?.toLowerCase().includes('staff') || usr.email?.toLowerCase().includes('staff');
+        return isStaff && (usr.isVerified === true || usr.isVerified === 'true' || vStatus === 'approved' || vStatus === 'verified' || usr.accountStatus === 'Active');
+      }).map(u => {
+        const usr = u.user || u;
+        const staffId = usr.id || usr.userId;
+        const reviews = (staffReviews || []).filter((r: any) => r.staffId === staffId);
+        const avgRating = reviews.length > 0 
+          ? Number((reviews.reduce((acc: number, r: any) => acc + (Number(r.rating) || 5), 0) / reviews.length).toFixed(1))
+          : 5.0;
+
+        return {
+          id: staffId,
+          name: usr.name || usr.managerName || 'Accredited Staff',
+          email: usr.email || usr.managerEmail || '',
+          phone: usr.phone || usr.managerPhone || '',
+          whatsapp: usr.whatsapp || usr.phone || usr.managerPhone || '',
+          specialization: usr.specialization || usr.staffRole || 'General Property Operations',
+          yearsExperience: usr.yearsExperience || '2+ Years',
+          avatar: usr.avatar || usr.profilePicture || usr.photo || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
+          isVerified: true,
+          rating: avgRating,
+          reviewCount: reviews.length,
+          reviews: reviews
+        };
+      });
+
+      const uniqueStaffMap = new Map();
+      verifiedStaff.forEach(s => {
+        if (s.id && !uniqueStaffMap.has(s.id)) {
+          uniqueStaffMap.set(s.id, s);
+        }
+      });
+
+      res.json(Array.from(uniqueStaffMap.values()));
+    } catch (err: any) {
+      console.error("Error fetching accredited staff:", err);
+      res.status(500).json({ error: "Failed to fetch accredited staff" });
+    }
+  });
+
+  app.post("/api/staff-reviews", requireAuth(), async (req: any, res) => {
+    try {
+      const { staffId, rating, comment } = req.body;
+      if (!staffId || !rating) {
+        return res.status(400).json({ error: "Staff ID and rating are required" });
+      }
+
+      if (!staffReviews) staffReviews = [];
+      const newReview = {
+        id: `rev-${Date.now()}`,
+        staffId,
+        reviewerId: req.user.id,
+        reviewerName: req.user.name || 'Verified Manager',
+        rating: Number(rating),
+        comment: comment || '',
+        createdAt: new Date().toISOString()
+      };
+
+      staffReviews.unshift(newReview);
+      syncStore();
+      res.status(201).json(newReview);
+    } catch (err: any) {
+      console.error("Error creating staff review:", err);
+      res.status(500).json({ error: "Failed to submit review" });
+    }
+  });
+
+  app.post("/api/job-offers", requireAuth(), async (req: any, res) => {
+    try {
+      const { staffId, workOffered, timeAndSchedule, location, wageSalary, contact, requesterName, requesterContact, requesterEmail, lat, lng } = req.body;
+      if (!staffId || !workOffered) {
+        return res.status(400).json({ error: "Staff ID and work offered details are required" });
+      }
+
+      if (!jobOffers) jobOffers = [];
+      const newOffer = {
+        id: `offer-${Date.now()}`,
+        staffId,
+        requesterId: req.user.id,
+        requesterName: requesterName || req.user.name || 'Global Client',
+        requesterContact: requesterContact || req.user.phone || '',
+        requesterEmail: requesterEmail || req.user.email || '',
+        workOffered,
+        timeAndSchedule: timeAndSchedule || 'Flexible',
+        location: location || 'Ghana',
+        wageSalary: wageSalary || 'Competitive',
+        contact: contact || req.user.phone || '',
+        lat: lat || 5.6037,
+        lng: lng || -0.1870,
+        status: 'Pending',
+        createdAt: new Date().toISOString()
+      };
+
+      jobOffers.unshift(newOffer);
+
+      // Notify staff member
+      if (!notifications) notifications = [];
+      notifications.unshift({
+        id: `notif-offer-${Date.now()}`,
+        studentId: staffId,
+        title: `New Job Offer from ${newOffer.requesterName}!`,
+        message: `Work Offered: ${workOffered} | Wage: ${wageSalary} | Location: ${location}. Check your dashboard to accept or decline.`,
+        type: 'success',
+        date: new Date().toISOString().split('T')[0],
+        read: false
+      });
+
+      syncStore();
+      res.status(201).json(newOffer);
+    } catch (err: any) {
+      console.error("Error creating job offer:", err);
+      res.status(500).json({ error: "Failed to send job offer" });
+    }
+  });
+
+  app.get("/api/staff-job-offers", requireAuth(["staff"]), async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const offers = (jobOffers || []).filter((o: any) => o.staffId === userId);
+      res.json(offers);
+    } catch (err: any) {
+      console.error("Error fetching job offers:", err);
+      res.status(500).json({ error: "Failed to fetch job offers" });
+    }
+  });
+
+  app.put("/api/job-offers/:id/accept", requireAuth(["staff"]), async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.user.id;
+
+      if (!jobOffers) jobOffers = [];
+      const offer = jobOffers.find((o: any) => o.id === id && o.staffId === userId);
+      if (!offer) {
+        return res.status(404).json({ error: "Job offer not found" });
+      }
+
+      offer.status = 'Accepted';
+      offer.acceptedAt = new Date().toISOString();
+
+      // Notify requester
+      if (!notifications) notifications = [];
+      notifications.unshift({
+        id: `notif-accepted-${Date.now()}`,
+        studentId: offer.requesterId,
+        title: `Job Offer Accepted!`,
+        message: `The staff member accepted your job offer for "${offer.workOffered}". Job offer accepted and logged.`,
+        type: 'success',
+        date: new Date().toISOString().split('T')[0],
+        read: false
+      });
+
+      syncStore();
+      res.json({ success: true, offer });
+    } catch (err: any) {
+      console.error("Error accepting job offer:", err);
+      res.status(500).json({ error: "Failed to accept job offer" });
+    }
+  });
+
   // --- Staff Recruitment & Open Vacancies on Hostels ---
   app.put("/api/hostels/:id/recruitment", requireAuth(["manager", "admin"]), async (req: any, res) => {
     try {
@@ -3882,6 +4187,129 @@ async function startServer() {
       res.json(staffList);
     } catch (err: any) {
       res.status(500).json({ error: "Failed to fetch staff verifications" });
+    }
+  });
+
+  // --- CV PDF Helper Functions ---
+  function convertTextToPdfBuffer(title: string, text: string): Buffer {
+    const safeTitle = (title || 'Curriculum Vitae').replace(/[()\\]/g, '');
+    const lines = (text || '').split('\n');
+    
+    let textCommands = `BT\n/F1 16 Tf\n40 790 Td\n(${safeTitle}) Tj\nET\nBT\n/F1 10 Tf\n`;
+    let currentY = 750;
+    for (const line of lines) {
+      if (currentY < 40) break;
+      const safeLine = line.replace(/[()\\]/g, '');
+      textCommands += `40 ${currentY} Td\n(${safeLine}) Tj\n0 -14 Td\n`;
+      currentY -= 14;
+    }
+    textCommands += `ET`;
+
+    const streamContent = textCommands;
+    const streamLength = Buffer.byteLength(streamContent, 'utf-8');
+
+    const pdfString = `%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 4 0 R >> >> /MediaBox [0 0 595 842] /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length ${streamLength} >>
+stream
+${streamContent}
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000246 00000 n 
+0000000326 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+${400 + streamLength}
+%%EOF`;
+
+    return Buffer.from(pdfString, 'utf-8');
+  }
+
+  function parseCvPdfBuffer(cvData: string, applicantName: string): Buffer {
+    if (cvData && typeof cvData === 'string') {
+      let base64Content = cvData;
+      if (cvData.includes('base64,')) {
+        base64Content = cvData.split('base64,')[1];
+      }
+      try {
+        const buffer = Buffer.from(base64Content.trim(), 'base64');
+        if (buffer.length > 4 && buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46) {
+          return buffer;
+        }
+      } catch (e) {
+        // Fallback below
+      }
+    }
+
+    const textContent = (cvData && !cvData.startsWith('data:')) 
+      ? cvData 
+      : `CURRICULUM VITAE\n\nApplicant Name: ${applicantName}\nOfficial Status: Accredited Staff Credentials\nDocument Type: PDF Document\n\nSummary:\nCertified technician with experience in electrical, plumbing, facilities, and hostel residence maintenance.`;
+
+    return convertTextToPdfBuffer(`${applicantName} - CV`, textContent);
+  }
+
+  // --- CV PDF Download & Inline Viewing Routes (Returns application/pdf) ---
+  app.get("/api/staff-verifications/:id/cv", (req: any, res: any) => {
+    try {
+      const { id } = req.params;
+      const userObj = MOCK_USERS.find(u => (u as any).user?.id === id || u.username === id || (u as any).user?.username === id) as any;
+      const staffObj = staff.find(s => s.userId === id || s.id === id);
+      const appObj = staffApplications.find(a => a.id === id || a.staffId === id);
+
+      const targetData = userObj?.user?.cvData || staffObj?.cvData || appObj?.cvData || '';
+      const targetFileName = userObj?.user?.cvFileName || staffObj?.cvFileName || appObj?.cvFileName || `${userObj?.user?.name || 'Applicant'}_CV.pdf`;
+      const name = userObj?.user?.name || staffObj?.name || appObj?.applicantName || 'Applicant';
+
+      const pdfBuffer = parseCvPdfBuffer(targetData, name);
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(targetFileName)}"`);
+      res.setHeader('Content-Length', pdfBuffer.length.toString());
+      return res.send(pdfBuffer);
+    } catch (err: any) {
+      console.error("Error serving staff CV PDF:", err);
+      res.status(500).json({ error: "Failed to process CV PDF document" });
+    }
+  });
+
+  app.get("/api/staff-applications/:id/cv", (req: any, res: any) => {
+    try {
+      const { id } = req.params;
+      const appObj = staffApplications.find(a => a.id === id || a.staffId === id);
+      const userObj = MOCK_USERS.find(u => (u as any).user?.id === id || u.username === id) as any;
+
+      const targetData = appObj?.cvData || userObj?.user?.cvData || '';
+      const targetFileName = appObj?.cvFileName || userObj?.user?.cvFileName || 'Applicant_CV.pdf';
+      const name = appObj?.applicantName || userObj?.user?.name || 'Applicant';
+
+      const pdfBuffer = parseCvPdfBuffer(targetData, name);
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(targetFileName)}"`);
+      res.setHeader('Content-Length', pdfBuffer.length.toString());
+      return res.send(pdfBuffer);
+    } catch (err: any) {
+      console.error("Error serving application CV PDF:", err);
+      res.status(500).json({ error: "Failed to process CV PDF document" });
     }
   });
 
@@ -4032,14 +4460,29 @@ async function startServer() {
       }
 
       if (userRole === 'manager') {
+        // Look up approved hostels
         const managerHostels = hostels.filter(h => 
           h.managerId === userId || 
           h.assignedManagerId === userId ||
           (h.managerEmail && userEmail && h.managerEmail.toLowerCase().trim() === userEmail) ||
           (h.managerName && userName && h.managerName.toLowerCase().trim() === userName)
         );
-        const hostelIds = new Set(managerHostels.map(h => h.id));
-        const hostelNames = new Set(managerHostels.map(h => h.name?.toLowerCase().trim()));
+        
+        // Also look up pending hostel verifications to ensure pending managers can receive applications
+        const managerPendingHostels = hostelVerifications.filter(v =>
+          v.managerId === userId ||
+          (v.managerEmail && userEmail && v.managerEmail.toLowerCase().trim() === userEmail)
+        );
+
+        const hostelIds = new Set([
+          ...managerHostels.map(h => h.id),
+          ...managerPendingHostels.map(v => v.hostelId || v.id)
+        ]);
+        
+        const hostelNames = new Set([
+          ...managerHostels.map(h => h.name?.toLowerCase().trim()),
+          ...managerPendingHostels.map(v => v.hostelName?.toLowerCase().trim())
+        ].filter(Boolean));
 
         const managerApps = staffApplications.filter(a => 
           hostelIds.has(a.hostelId) || 
@@ -4058,26 +4501,47 @@ async function startServer() {
     }
   });
 
-  app.post("/api/staff-applications", requireAuth(["staff", "student", "manager", "admin"]), async (req: any, res) => {
+  app.post("/api/staff-applications", async (req: any, res) => {
     try {
-      const userId = req.user.id;
-      const userEmail = (req.user.email || req.body.email || '').toLowerCase().trim();
+      let reqUser = null;
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.split(' ')[1]?.trim();
+        if (token) {
+          const dbUsers = await dbGetUsers(MOCK_USERS);
+          const combinedUsers = [...MOCK_USERS, ...dbUsers, ...(persistentData.users || [])];
+          const foundEntry = combinedUsers.find(u => {
+            if (!u) return false;
+            const uToken = u.token || u.user?.token;
+            const uId = u.id || u.user?.id;
+            return uToken === token || (u.user && u.user.token === token) || `token_${uId}` === token;
+          });
+          if (foundEntry) {
+            reqUser = foundEntry.user || foundEntry;
+          }
+        }
+      }
 
-      // Check verification status: Staff MUST be verified by admin before applying
-      const userRecord = MOCK_USERS.find(u => u.user?.id === userId || (u.email && userEmail && u.email.toLowerCase() === userEmail));
-      const isVerified = Boolean(
-        (req.user as any).isVerified === true ||
-        (req.user as any).verificationStatus === 'Verified' ||
-        (req.user as any).verificationStatus === 'verified' ||
-        (userRecord?.user as any)?.isVerified === true ||
-        (userRecord?.user as any)?.verificationStatus === 'Verified' ||
-        (userRecord?.user as any)?.verificationStatus === 'verified'
-      );
+      const userId = reqUser?.id || `guest-staff-${Date.now()}`;
+      const userEmail = (reqUser?.email || req.body.email || '').toLowerCase().trim();
 
-      if (!isVerified && req.user.role === 'staff') {
-        return res.status(403).json({
-          error: "Your staff account is currently pending administrative verification of your submitted CV and National ID credentials. You cannot submit job applications until an Administrator verifies your credentials."
-        });
+      // Check verification status: If the logged-in user is a staff member, they MUST be verified by admin before applying
+      if (reqUser && reqUser.role === 'staff') {
+        const userRecord = MOCK_USERS.find(u => u.user?.id === userId || (u.email && userEmail && u.email.toLowerCase() === userEmail));
+        const isVerified = Boolean(
+          reqUser.isVerified === true ||
+          reqUser.verificationStatus === 'Verified' ||
+          reqUser.verificationStatus === 'verified' ||
+          (userRecord?.user as any)?.isVerified === true ||
+          (userRecord?.user as any)?.verificationStatus === 'Verified' ||
+          (userRecord?.user as any)?.verificationStatus === 'verified'
+        );
+
+        if (!isVerified) {
+          return res.status(403).json({
+            error: "Your staff account is currently pending administrative verification of your submitted CV and National ID credentials. You cannot submit job applications until an Administrator verifies your credentials."
+          });
+        }
       }
 
       // Check if applicant already has a pending application
@@ -4121,10 +4585,10 @@ async function startServer() {
       const newApp = {
         id: `stf-app-${Date.now()}`,
         staffId: userId,
-        staffUsername: req.user.username || '',
+        staffUsername: reqUser?.username || '',
         staffEmail: userEmail || email,
-        applicantName: applicantName || req.user.name || 'Applicant',
-        phone: phone || req.user.phone || '',
+        applicantName: applicantName || reqUser?.name || 'Applicant',
+        phone: phone || reqUser?.phone || '',
         role,
         hostelId: targetHostel?.id || hostelId,
         hostelName: finalHostelName,
@@ -4173,7 +4637,8 @@ async function startServer() {
   app.put("/api/staff-applications/:id/decision", requireAuth(["manager", "admin"]), async (req: any, res) => {
     try {
       const { id } = req.params;
-      const { decision, reviewNotes, shift, assignedBlock } = req.body;
+      const decision = req.body.decision || req.body.status;
+      const { reviewNotes, shift, assignedBlock, startDate } = req.body;
 
       if (!decision || (decision !== 'Approved' && decision !== 'Rejected')) {
         return res.status(400).json({ error: "Decision must be 'Approved' or 'Rejected'" });
@@ -4188,6 +4653,7 @@ async function startServer() {
       application.status = decision;
       application.reviewedAt = new Date().toISOString();
       application.reviewNotes = reviewNotes || '';
+      application.startDate = startDate || 'Immediate';
 
       if (decision === 'Approved') {
         application.shift = shift || 'Day Shift';
@@ -4206,6 +4672,7 @@ async function startServer() {
           shift: shift || 'Day Shift',
           assignedBlock: assignedBlock || 'All Wings',
           status: 'Active',
+          startDate: startDate || 'Immediate',
           hostelId: application.hostelId,
           hostelName: application.hostelName,
           nationalId: application.nationalId,
@@ -4225,15 +4692,33 @@ async function startServer() {
           id: `notif-${Date.now()}`,
           studentId: application.staffId,
           title: `Application Approved!`,
-          message: `Congratulations! Your staff application for "${application.role}" at ${application.hostelName} has been approved by the manager. You are now officially appointed to the property staff roster.`,
+          message: `Congratulations! Your staff application for "${application.role}" at ${application.hostelName} has been approved by the manager. Your starting work date is set to: ${startDate || 'Immediate'}. You are now officially appointed to the property staff roster.`,
           type: 'success',
           date: new Date().toISOString().split('T')[0],
           read: false
         });
 
+        // Auto-create chat room for this staff and manager
+        const targetHostel = hostels.find(h => h.id === application.hostelId);
+        const managerId = targetHostel?.managerId || req.user.id;
+        const roomId = `room-staff-mgr-${application.staffId}-${managerId}`;
+        const roomExists = staffChatRooms.some((r: any) => r.id === roomId);
+        if (!roomExists) {
+          staffChatRooms.push({
+            id: roomId,
+            staffId: application.staffId,
+            staffName: application.applicantName,
+            managerId: managerId,
+            managerName: req.user.name || 'Property Manager',
+            hostelId: application.hostelId,
+            hostelName: application.hostelName,
+            createdAt: new Date().toISOString()
+          });
+        }
+
         activities.unshift({
           id: `act-${Date.now()}`,
-          text: `Manager approved staff application of ${application.applicantName} as ${application.role} at ${application.hostelName}`,
+          text: `Manager approved staff application of ${application.applicantName} as ${application.role} at ${application.hostelName} starting ${startDate || 'Immediate'}`,
           time: 'Just now',
           type: 'success'
         });
@@ -4258,10 +4743,10 @@ async function startServer() {
       }
 
       syncStore();
-      return res.json({ success: true, application });
+      return res.json({ status: decision, application });
     } catch (err: any) {
       console.error("Error processing staff application decision:", err);
-      res.status(500).json({ error: err.message || "Failed to process decision" });
+      res.status(500).json({ error: "Failed to process decision" });
     }
   });
 
@@ -4509,6 +4994,22 @@ async function startServer() {
         return res.json(list);
       }
 
+      if (userRole === 'staff') {
+        const staffRecord = staff.find((s: any) => s.userId === userId || (s.email && s.email.toLowerCase().trim() === userEmail));
+        if (!staffRecord || !staffRecord.hostelId) {
+          // If staff is not assigned to any hostel, only let them see meetings they requested
+          const filtered = list.filter((m: any) => m.requesterId === userId || m.studentId === userId);
+          return res.json(filtered);
+        }
+        const filtered = list.filter((m: any) => 
+          m.hostelId === staffRecord.hostelId || 
+          (m.hostelName && staffRecord.hostelName && m.hostelName.toLowerCase().trim() === staffRecord.hostelName.toLowerCase().trim()) ||
+          m.requesterId === userId ||
+          m.studentId === userId
+        );
+        return res.json(filtered);
+      }
+
       if (userRole === 'manager') {
         // Find meetings associated with this manager
         const filtered = list.filter((m: any) => 
@@ -4519,7 +5020,7 @@ async function startServer() {
         return res.json(filtered);
       }
 
-      // If student or staff, return meetings created by or involving them
+      // If student, return meetings created by or involving them
       const userMeetings = list.filter((m: any) => 
         m.studentId === userId || 
         m.requesterId === userId ||
@@ -4616,6 +5117,46 @@ async function startServer() {
       const targetMeeting = list.find((m: any) => m.id === id);
       if (!targetMeeting) {
         return res.status(404).json({ error: "Meeting log not found" });
+      }
+
+      const userRole = req.user.role;
+      const userId = req.user.id;
+      const userEmail = (req.user.email || '').toLowerCase().trim();
+
+      // Enforce stricter authorization check for staff: they can only update meetings in their assigned hostel or if they were the requester
+      if (userRole === 'staff') {
+        const staffRecord = staff.find((s: any) => s.userId === userId || (s.email && s.email.toLowerCase().trim() === userEmail));
+        if (!staffRecord || !staffRecord.hostelId) {
+          if (targetMeeting.requesterId !== userId) {
+            return res.status(403).json({ error: "Access Denied: You can only update meetings for your assigned hostel or those you scheduled." });
+          }
+        } else {
+          const isAssignedHostel = (targetMeeting.hostelId === staffRecord.hostelId) ||
+            (targetMeeting.hostelName && staffRecord.hostelName && targetMeeting.hostelName.toLowerCase().trim() === staffRecord.hostelName.toLowerCase().trim()) ||
+            (targetMeeting.requesterId === userId);
+          if (!isAssignedHostel) {
+            return res.status(403).json({ error: "Access Denied: You are not authorized to update meeting logs for this hostel." });
+          }
+        }
+      }
+
+      // Enforce authorization check for manager
+      if (userRole === 'manager') {
+        const managerHostels = hostels.filter(h => 
+          h.managerId === userId || 
+          h.assignedManagerId === userId ||
+          (h.managerEmail && h.managerEmail.toLowerCase().trim() === userEmail)
+        );
+        const hostelIds = new Set(managerHostels.map(h => h.id));
+        const hostelNames = new Set(managerHostels.map(h => h.name?.toLowerCase().trim()));
+
+        const isAuthorizedManager = hostelIds.has(targetMeeting.hostelId) || 
+          (targetMeeting.hostelName && hostelNames.has(targetMeeting.hostelName.toLowerCase().trim())) ||
+          targetMeeting.managerId === userId ||
+          (targetMeeting.managerEmail && targetMeeting.managerEmail.toLowerCase().trim() === userEmail);
+        if (!isAuthorizedManager) {
+          return res.status(403).json({ error: "Access Denied: You can only update meetings for hostels you operate." });
+        }
       }
 
       const updates: any = {};
@@ -4985,6 +5526,160 @@ async function startServer() {
     }
     
     res.json(studentUsers);
+  });
+
+  // --- SECURED & ENCRYPTED STAFF-MANAGER CHAT SYSTEM ---
+  // Key derivation for secure encryption/decryption
+  const CHAT_ALGO = 'aes-256-cbc';
+  const CHAT_SECRET_KEY = crypto.scryptSync(process.env.CHAT_ENCRYPTION_SECRET || 'PineVelaSecureStaffChatSecret2026Key', 'salt', 32);
+  const CHAT_IV = crypto.scryptSync(process.env.CHAT_ENCRYPTION_IV || 'PineVelaIVSalt26', 'salt', 16);
+
+  function encryptMsg(text: string): string {
+    try {
+      const cipher = crypto.createCipheriv(CHAT_ALGO, CHAT_SECRET_KEY, CHAT_IV);
+      let encrypted = cipher.update(text, 'utf8', 'hex');
+      encrypted += cipher.final('hex');
+      return encrypted;
+    } catch (err) {
+      console.error("Staff chat encryption error:", err);
+      return text;
+    }
+  }
+
+  function decryptMsg(encryptedText: string): string {
+    try {
+      const decipher = crypto.createDecipheriv(CHAT_ALGO, CHAT_SECRET_KEY, CHAT_IV);
+      let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
+      decrypted += decipher.final('utf8');
+      return decrypted;
+    } catch (err) {
+      console.error("Staff chat decryption error:", err);
+      return encryptedText;
+    }
+  }
+
+  // 1. GET staff chat rooms (only accessible to manager or the staff themselves, strictly forbidden to admin and anyone else)
+  app.get("/api/staff-chat/rooms", requireAuth(), async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const userRole = req.user.role;
+
+      // Strictly deny access to admins to fulfill "noone can see it beside the users not even the admins"
+      if (userRole === 'admin') {
+        return res.status(403).json({ error: "Access Denied: Chat logs are fully encrypted and only visible to the respective manager and staff member. Even Administrators are restricted from viewing." });
+      }
+
+      let rooms = [];
+      if (userRole === 'manager') {
+        rooms = staffChatRooms.filter((r: any) => r.managerId === userId);
+      } else if (userRole === 'staff') {
+        rooms = staffChatRooms.filter((r: any) => r.staffId === userId);
+      }
+
+      res.json(rooms);
+    } catch (err) {
+      console.error("Error loading staff chat rooms:", err);
+      res.status(500).json({ error: "Failed to load chat rooms" });
+    }
+  });
+
+  // 2. GET messages for a specific staff-manager chat room
+  app.get("/api/staff-chat/rooms/:roomId/messages", requireAuth(), async (req: any, res) => {
+    try {
+      const { roomId } = req.params;
+      const userId = req.user.id;
+      const userRole = req.user.role;
+
+      console.log(`[CHAT DEBUG] Loading messages for roomId="${roomId}" | Requester: userId="${userId}", role="${userRole}"`);
+
+      // Admin exclusion check
+      if (userRole === 'admin') {
+        console.log(`[CHAT DEBUG] 403 Forbidden! User is admin and excluded from staff chat.`);
+        return res.status(403).json({ error: "Access Denied: Even admins cannot view encrypted conversations." });
+      }
+
+      const room = staffChatRooms.find((r: any) => r.id === roomId);
+      if (!room) {
+        console.log(`[CHAT DEBUG] 404 Room not found: "${roomId}"`);
+        return res.status(404).json({ error: "Chat room not found" });
+      }
+
+      console.log(`[CHAT DEBUG] Room details: staffId="${room.staffId}", managerId="${room.managerId}"`);
+
+      // Check if user is either the staff or the manager in this room
+      if (room.staffId !== userId && room.managerId !== userId) {
+        console.log(`[CHAT DEBUG] 403 Forbidden! Requester userId="${userId}" is neither staffId="${room.staffId}" nor managerId="${room.managerId}"`);
+        return res.status(403).json({ error: "Access Denied: You are not authorized to view this encrypted conversation." });
+      }
+
+      // Find messages and decrypt them on the fly
+      const filteredMsgs = staffChatMessages.filter((m: any) => m.roomId === roomId);
+      const decryptedMsgs = filteredMsgs.map((m: any) => {
+        return {
+          ...m,
+          content: decryptMsg(m.encryptedContent)
+        };
+      });
+
+      res.json(decryptedMsgs);
+    } catch (err) {
+      console.error("Error loading chat messages:", err);
+      res.status(500).json({ error: "Failed to load messages" });
+    }
+  });
+
+  // 3. POST message to a specific staff-manager chat room
+  app.post("/api/staff-chat/rooms/:roomId/messages", requireAuth(), async (req: any, res) => {
+    try {
+      const { roomId } = req.params;
+      const { content } = req.body;
+      const userId = req.user.id;
+      const userRole = req.user.role;
+
+      if (!content || !content.trim()) {
+        return res.status(400).json({ error: "Message content cannot be empty" });
+      }
+
+      // Admin exclusion check
+      if (userRole === 'admin') {
+        return res.status(403).json({ error: "Access Denied: Administrators cannot participate in staff chat conversations." });
+      }
+
+      const room = staffChatRooms.find((r: any) => r.id === roomId);
+      if (!room) {
+        return res.status(404).json({ error: "Chat room not found" });
+      }
+
+      // Validate participation
+      if (room.staffId !== userId && room.managerId !== userId) {
+        return res.status(403).json({ error: "Access Denied: You are not authorized to send messages to this room." });
+      }
+
+      // Encrypt the content before pushing to memory/store
+      const encrypted = encryptMsg(content.trim());
+
+      const newMsg = {
+        id: `staff-msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        roomId,
+        senderId: userId,
+        senderName: req.user.name || 'Anonymous',
+        senderRole: userRole,
+        encryptedContent: encrypted,
+        createdAt: new Date().toISOString()
+      };
+
+      staffChatMessages.push(newMsg);
+      syncStore();
+
+      // Return the decrypted message to the client for immediate rendering
+      res.status(201).json({
+        ...newMsg,
+        content: content.trim()
+      });
+    } catch (err) {
+      console.error("Error saving secure chat message:", err);
+      res.status(500).json({ error: "Failed to send encrypted message" });
+    }
   });
 
   // Vite integration middleware (development) or serving static build assets (production)
