@@ -3,6 +3,7 @@ dotenv.config();
 
 import crypto from "crypto";
 import express from "express";
+import compression from "compression";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import {
@@ -692,6 +693,7 @@ async function startServer() {
   const PORT = 3000;
 
   // Support high-resolution hostel photograph uploads (up to 30MB)
+  app.use(compression());
   app.use(express.json({ limit: '30mb' }));
   app.use(express.urlencoded({ extended: true, limit: '30mb' }));
 
@@ -1544,7 +1546,7 @@ async function startServer() {
     }
   });
 
-  app.put("/api/manager-requests/:id/approve", async (req: any, res) => {
+  app.put("/api/manager-requests/:id/approve", requireAuth(["admin"]), async (req: any, res) => {
     try {
       const { id } = req.params;
       const target = managerRequests.find(r => r.id === id);
@@ -1635,7 +1637,7 @@ async function startServer() {
     }
   });
 
-  app.put("/api/manager-requests/:id/reject", async (req: any, res) => {
+  app.put("/api/manager-requests/:id/reject", requireAuth(["admin"]), async (req: any, res) => {
     try {
       const { id } = req.params;
       const target = managerRequests.find(r => r.id === id);

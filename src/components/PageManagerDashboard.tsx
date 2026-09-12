@@ -70,7 +70,7 @@ export default function PageManagerDashboard() {
   const [staffApplications, setStaffApplications] = useState<any[]>([]);
   const [staffSubTab, setStaffSubTab] = useState<'roster' | 'applications' | 'recruitment'>('roster');
   const [selectedCvApp, setSelectedCvApp] = useState<any | null>(null);
-  const [docPreviewModal, setDocPreviewModal] = useState<{ title: string; type: 'cv' | 'id'; data: string; fileName?: string; name?: string } | null>(null);
+  const [docPreviewModal, setDocPreviewModal] = useState<{ title: string; type: 'cv' | 'id'; data: string; fileName?: string; name?: string; endpoint?: string } | null>(null);
   const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -1622,7 +1622,8 @@ export default function PageManagerDashboard() {
                                       type: 'cv',
                                       data: app.cvData || '',
                                       fileName: app.cvFileName || 'Curriculum_Vitae.pdf',
-                                      name: app.applicantName
+                                      name: app.applicantName,
+                                      endpoint: `/api/staff-applications/${app.id}/cv`
                                     })}
                                     className="px-3.5 py-1.5 bg-blue-900 hover:bg-blue-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
                                   >
@@ -2058,19 +2059,25 @@ export default function PageManagerDashboard() {
                           </div>
                         ) : (
                           <div className="space-y-3">
-                            <iframe
-                              src={previewBlobUrl || undefined}
+                            <object
+                              data={docPreviewModal.endpoint || previewBlobUrl || undefined}
+                              type="application/pdf"
                               className="w-full h-96 rounded-xl border border-slate-300 shadow-inner bg-white"
                               title="CV PDF Viewer"
-                            />
+                            >
+                              <div className="flex flex-col items-center justify-center h-full text-slate-500 bg-slate-50 space-y-3 p-6 text-center border border-slate-200 rounded-xl">
+                                <p className="text-sm font-medium">Unable to render PDF securely in this frame.</p>
+                                <a href={docPreviewModal.endpoint || previewBlobUrl || '#'} target="_blank" rel="noopener noreferrer" className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700">Open PDF in New Tab</a>
+                              </div>
+                            </object>
                             <div className="flex items-center justify-between pt-1">
                               <span className="text-xs text-slate-500 font-mono flex items-center gap-1">
-                                MIME: <strong className="text-blue-900">application/pdf</strong> (Sanitized Blob)
+                                MIME: <strong className="text-blue-900">application/pdf</strong> {docPreviewModal.endpoint ? '(Backend Stream)' : '(Sanitized Blob)'}
                               </span>
                               <div className="flex items-center gap-2">
                                 {previewBlobUrl && (
                                   <a
-                                    href={previewBlobUrl}
+                                    href={docPreviewModal.endpoint || previewBlobUrl || '#'}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"

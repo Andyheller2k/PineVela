@@ -63,7 +63,7 @@ export default function PageAdminDashboard() {
   // Verified Staffs Review State
   const [staffVerifications, setStaffVerifications] = useState<any[]>([]);
   const [notifSubTab, setNotifSubTab] = useState<'verified_staffs' | 'manager_requests'>('verified_staffs');
-  const [docPreviewModal, setDocPreviewModal] = useState<{ title: string; type: 'cv' | 'id'; data: string; fileName?: string; name?: string } | null>(null);
+  const [docPreviewModal, setDocPreviewModal] = useState<{ title: string; type: 'cv' | 'id'; data: string; fileName?: string; name?: string; endpoint?: string } | null>(null);
   const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -1488,7 +1488,8 @@ export default function PageAdminDashboard() {
                                   name: staff.name,
                                   type: 'cv',
                                   data: staff.cvData || `CURRICULUM VITAE\n\nName: ${staff.name}\nEmail: ${staff.email}\nPhone: ${staff.phone}\nRole: ${staff.role}\nExperience: ${staff.yearsExperience || '3 Years'}\n\nQualifications & Summary:\nCertified technician with experience in electrical, plumbing, and residence facilities maintenance.`,
-                                  fileName: staff.cvFileName || `${staff.name}_CV.pdf`
+                                  fileName: staff.cvFileName || `${staff.name}_CV.pdf`,
+                                  endpoint: `/api/staff-applications/${staff.id}/cv`
                                 })}
                                 className="flex-1 py-2 px-3 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl text-xs font-bold text-blue-900 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                               >
@@ -2096,7 +2097,8 @@ export default function PageAdminDashboard() {
                                   name: staff.name,
                                   type: 'cv',
                                   data: staff.cvData || `CURRICULUM VITAE\n\nName: ${staff.name}\nEmail: ${staff.email}\nPhone: ${staff.phone}\nRole: ${staff.role}\nExperience: ${staff.yearsExperience || '3 Years'}\n\nQualifications & Summary:\nCertified technician with experience in electrical, plumbing, and residence facilities maintenance.`,
-                                  fileName: staff.cvFileName || `${staff.name}_CV.pdf`
+                                  fileName: staff.cvFileName || `${staff.name}_CV.pdf`,
+                                  endpoint: `/api/staff-verifications/${staff.userId || staff.id}/cv`
                                 })}
                                 className="flex-1 py-2 px-3 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl text-xs font-bold text-blue-900 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                               >
@@ -2377,20 +2379,26 @@ export default function PageAdminDashboard() {
               ) : (
                 <div className="space-y-4">
                   <div className="space-y-3">
-                    <iframe
-                      src={previewBlobUrl || undefined}
+                    <object
+                      data={docPreviewModal.endpoint || previewBlobUrl || undefined}
+                      type="application/pdf"
                       className="w-full h-[520px] rounded-xl border border-slate-300 shadow-inner bg-white"
                       title="CV PDF Viewer"
-                    />
+                    >
+                      <div className="flex flex-col items-center justify-center h-full text-slate-500 bg-slate-50 space-y-3">
+                        <p className="text-sm font-medium">Unable to render PDF securely in this frame.</p>
+                        <a href={docPreviewModal.endpoint || previewBlobUrl || '#'} target="_blank" rel="noopener noreferrer" className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700">Open PDF in New Tab</a>
+                      </div>
+                    </object>
                     <div className="flex items-center justify-between pt-1">
                       <span className="text-xs text-slate-500 font-mono flex items-center gap-1.5">
                         <FileCheck className="w-4 h-4 text-emerald-600" />
-                        MIME: <strong className="text-blue-900">application/pdf</strong> (Sanitized Blob)
+                        MIME: <strong className="text-blue-900">application/pdf</strong> {docPreviewModal.endpoint ? '(Backend Stream)' : '(Sanitized Blob)'}
                       </span>
                       <div className="flex items-center gap-2">
                         {previewBlobUrl && (
                           <a
-                            href={previewBlobUrl}
+                            href={docPreviewModal.endpoint || previewBlobUrl || '#'}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
@@ -2588,7 +2596,8 @@ export default function PageAdminDashboard() {
                       name: selectedVerifiedStaffModal.name,
                       type: 'cv',
                       data: selectedVerifiedStaffModal.cvData || `CURRICULUM VITAE\n\nName: ${selectedVerifiedStaffModal.name}\nEmail: ${selectedVerifiedStaffModal.email}\nPhone: ${selectedVerifiedStaffModal.phone}\nRole: ${selectedVerifiedStaffModal.role}\nExperience: ${selectedVerifiedStaffModal.yearsExperience || '3 Years'}\n\nQualifications & Summary:\nCertified technician with experience in electrical, plumbing, and residence facilities maintenance.`,
-                      fileName: selectedVerifiedStaffModal.cvFileName || `${selectedVerifiedStaffModal.name}_CV.pdf`
+                      fileName: selectedVerifiedStaffModal.cvFileName || `${selectedVerifiedStaffModal.name}_CV.pdf`,
+                      endpoint: `/api/staff-verifications/${selectedVerifiedStaffModal.userId || selectedVerifiedStaffModal.id}/cv`
                     });
                   }}
                   className="flex-1 py-2.5 px-3 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl text-xs font-bold text-blue-900 flex items-center justify-center gap-1.5 transition-all cursor-pointer"

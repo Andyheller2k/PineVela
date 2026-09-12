@@ -70,12 +70,20 @@ export default function PageStaffDashboard() {
   const [jobOffers, setJobOffers] = useState<any[]>([]);
   const [staffRecord, setStaffRecord] = useState<any | null>(null);
   const [viewingOfferMap, setViewingOfferMap] = useState<any | null>(null);
+  const mapInstanceRef = React.useRef<any>(null);
 
   useEffect(() => {
     if (viewingOfferMap) {
       const timer = setTimeout(() => {
         const container = document.getElementById('staff-offer-map-view');
         if (!container) return;
+        
+        // Clean up previous map if exists
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.remove();
+          mapInstanceRef.current = null;
+        }
+
         const L = (window as any).L;
         if (!L) return;
 
@@ -83,6 +91,8 @@ export default function PageStaffDashboard() {
         const lng = viewingOfferMap.lng || -0.1870;
 
         const map = L.map(container).setView([lat, lng], 16);
+        mapInstanceRef.current = map;
+
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           attribution: '&copy; OpenStreetMap contributors'
         }).addTo(map);
@@ -91,6 +101,11 @@ export default function PageStaffDashboard() {
           .bindPopup(`<b>${viewingOfferMap.requesterName}</b><br/>${viewingOfferMap.location}`).openPopup();
       }, 300);
       return () => clearTimeout(timer);
+    } else {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
     }
   }, [viewingOfferMap]);
 
