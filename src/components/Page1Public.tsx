@@ -83,8 +83,16 @@ export default function Page1Public({
   const [jobLng, setJobLng] = useState(-0.1870);
   const offerMapInstanceRef = React.useRef<any>(null);
   const offerMarkerInstanceRef = React.useRef<any>(null);
+  
   const [submittingOffer, setSubmittingOffer] = useState(false);
   const [offerToast, setOfferToast] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  // Review Form
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState('');
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [reviewToast, setReviewToast] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
 
   useEffect(() => {
     if (selectedStaffForOffer) {
