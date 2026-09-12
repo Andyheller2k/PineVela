@@ -5,6 +5,7 @@ export interface AuthenticatedUser {
   name: string;
   role: 'student' | 'manager' | 'admin' | 'staff';
   token: string;
+  username?: string;
   email?: string;
   phone?: string;
   nationalId?: string;
@@ -18,6 +19,7 @@ export interface AuthenticatedUser {
   avatar?: string;
   photoUrl?: string;
   avatarUrl?: string;
+  profilePicture?: string;
   hasApprovedHostel?: boolean;
   hostelStatus?: string;
 }
@@ -27,6 +29,7 @@ interface AuthContextType {
   loading: boolean;
   login: (usernameOrEmail: string, password: string) => Promise<AuthenticatedUser>;
   setSessionUser: (user: AuthenticatedUser) => void;
+  updateUser?: (updatedFields: Partial<AuthenticatedUser>) => void;
   logout: () => void;
   apiFetch: (url: string, options?: RequestInit) => Promise<any>;
 }
@@ -162,6 +165,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(newSessionUser);
   };
 
+  const updateUser = (updatedFields: Partial<AuthenticatedUser>) => {
+    setUser(prev => prev ? { ...prev, ...updatedFields } : null);
+  };
+
   const logout = () => {
     localStorage.removeItem('pinevela_session_token');
     localStorage.removeItem('token');
@@ -200,7 +207,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, setSessionUser, logout, apiFetch }}>
+    <AuthContext.Provider value={{ user, loading, login, setSessionUser, updateUser, logout, apiFetch }}>
       {children}
     </AuthContext.Provider>
   );

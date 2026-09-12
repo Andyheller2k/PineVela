@@ -11,6 +11,8 @@ import PageUnifiedLogin from './components/PageUnifiedLogin';
 import PageManagerOnboarding from './components/PageManagerOnboarding';
 import PageAdminDashboard from './components/PageAdminDashboard';
 import PageManagerDashboard from './components/PageManagerDashboard';
+import PageStaffDashboard from './components/PageStaffDashboard';
+import PageStaffRegister from './components/PageStaffRegister';
 
 // Elegant wrapper for transition animations
 function PageWrapper({ children, noAnimation = false }: { children: React.ReactNode; noAnimation?: boolean }) {
@@ -39,6 +41,18 @@ function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout, apiFetch } = useAuth();
+
+  // Ensure fresh page loads/reloads default directly to the Public Landing Page ('/')
+  useEffect(() => {
+    // If not authenticated and landing on staff registration without explicit in-session click
+    if (!user && (window.location.hash.includes('/staff/register') || location.pathname === '/staff/register')) {
+      const explicitNav = sessionStorage.getItem('navigated_to_staff_register');
+      if (!explicitNav) {
+        window.location.hash = '#/';
+        navigate('/', { replace: true });
+      }
+    }
+  }, []);
 
   // Stateful datasets synchronized with the secure Express API
   const [hostels, setHostels] = useState<Hostel[]>([]);
@@ -278,6 +292,36 @@ function AppContent() {
                 <PageManagerDashboard />
               </PageWrapper>
             </ProtectedRoute>
+          }
+        />
+
+        {/* 2E. STAFF REGISTRATION ROUTE */}
+        <Route
+          path="/staff/register"
+          element={
+            <PageWrapper>
+              <PageStaffRegister />
+            </PageWrapper>
+          }
+        />
+
+        {/* 2F. STAFF DASHBOARD ROUTE */}
+        <Route
+          path="/staff/dashboard"
+          element={
+            <ProtectedRoute allowedRoles={['staff', 'manager', 'admin']}>
+              <PageWrapper>
+                <PageStaffDashboard />
+              </PageWrapper>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* 2G. STAFF APPLY ALIAS */}
+        <Route
+          path="/staff/apply"
+          element={
+            <Navigate to="/staff/dashboard" replace />
           }
         />
 

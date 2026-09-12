@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Hostel } from '../types';
 import PineLogo from './PineLogo';
-import { Search, MapPin, Phone, ArrowRight, X, Sparkles, Shield, User, MessageSquare, Landmark, Layers, ChevronDown, HelpCircle, Navigation, LogOut, ShieldCheck, Wifi, Zap, BedDouble, Building2, CheckCircle2 } from 'lucide-react';
+import { Search, MapPin, Phone, ArrowRight, X, Sparkles, Shield, User, MessageSquare, Landmark, Layers, ChevronDown, HelpCircle, Navigation, LogOut, ShieldCheck, Wifi, Zap, BedDouble, Building2, CheckCircle2, ChevronLeft, ChevronRight, Maximize2, ImageIcon, Briefcase, FileText, UploadCloud, CheckCircle, AlertCircle, RefreshCw, Home, Wrench } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import FAQAccordion from './FAQAccordion';
 import TestimonialsCarousel from './TestimonialsCarousel';
@@ -28,6 +29,7 @@ export default function Page1Public({
   onCloseDrawer,
   onNavigate
 }: Page1PublicProps) {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedWing, setSelectedWing] = useState<'All' | 'North Wing' | 'South Side'>('All');
   const [scrollPercent, setScrollPercent] = useState(0);
@@ -36,6 +38,130 @@ export default function Page1Public({
 
   const { user, logout } = useAuth();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
+  // Light-box gallery states
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+
+  // Staff application modal states
+  const [showStaffAppModal, setShowStaffAppModal] = useState(false);
+  const [appRole, setAppRole] = useState('Facilities & Maintenance Technician');
+  const [appName, setAppName] = useState('');
+  const [appPhone, setAppPhone] = useState('');
+  const [appEmail, setAppEmail] = useState('');
+  const [appNationalId, setAppNationalId] = useState('');
+  const [appCvFileName, setAppCvFileName] = useState('');
+  const [appCvData, setAppCvData] = useState('');
+  const [appIdFileName, setAppIdFileName] = useState('');
+  const [appIdData, setAppIdData] = useState('');
+  const [appCover, setAppCover] = useState('');
+  const [submittingStaffApp, setSubmittingStaffApp] = useState(false);
+  const [staffAppToast, setStaffAppToast] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  const handleStaffAppCvUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setStaffAppToast({ text: "File size should be less than 5MB", type: 'error' });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setAppCvFileName(file.name);
+      setAppCvData(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleStaffAppIdUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setStaffAppToast({ text: "File size should be less than 5MB", type: 'error' });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setAppIdFileName(file.name);
+      setAppIdData(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleStaffAppSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedHostel) return;
+    if (!appName || !appPhone || !appCvData) {
+      setStaffAppToast({ text: "Please enter your name, phone number, and attach your CV.", type: 'error' });
+      return;
+    }
+
+    setSubmittingStaffApp(true);
+    try {
+      const res = await fetch('/api/staff-applications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          applicantName: appName,
+          phone: appPhone,
+          email: appEmail || `${appName.toLowerCase().replace(/\s+/g, '')}@applicant.pinevela.com`,
+          role: appRole,
+          hostelId: selectedHostel.id,
+          hostelName: selectedHostel.name,
+          nationalId: appNationalId,
+          idDocumentUrl: appIdData,
+          cvData: appCvData,
+          cvFileName: appCvFileName || 'Applicant_CV.pdf',
+          coverLetter: appCover
+        })
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.message || 'Failed to submit application');
+      }
+
+      setStaffAppToast({ 
+        text: `Application submitted! Your CV & details were delivered directly to the manager of ${selectedHostel.name}.`, 
+        type: 'success' 
+      });
+      setShowStaffAppModal(false);
+      setAppName('');
+      setAppPhone('');
+      setAppEmail('');
+      setAppNationalId('');
+      setAppCvData('');
+      setAppCvFileName('');
+      setAppIdData('');
+      setAppIdFileName('');
+      setAppCover('');
+    } catch (err: any) {
+      setStaffAppToast({ text: err.message || 'Error submitting application', type: 'error' });
+    } finally {
+      setSubmittingStaffApp(false);
+      setTimeout(() => setStaffAppToast(null), 5000);
+    }
+  };
+
+  useEffect(() => {
+    setActiveImageIndex(0);
+  }, [selectedHostel]);
+
+  const getGalleryImages = (hostel: any): string[] => {
+    if (!hostel) return [];
+    // If we have custom gallery from registration, prioritize it
+    if (Array.isArray(hostel.gallery) && hostel.gallery.length > 0) {
+      return hostel.gallery;
+    }
+    const mainImg = hostel.image || hostel.imageUrl || hostel.exteriorPhotoUrl || hostel.imagePreviewUrl || 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=1200&q=80';
+    return [
+      mainImg,
+      'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=800&q=80', // Bedroom Design
+      'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=800&q=80', // Study / Office
+      'https://images.unsplash.com/photo-1505691938895-1758d7feb511?auto=format&fit=crop&w=800&q=80', // Modern Lounge
+      'https://images.unsplash.com/photo-1484154218962-a197022b5858?auto=format&fit=crop&w=800&q=80'  // Dining Room
+    ];
+  };
 
   useEffect(() => {
     const handleScroll = () => {
@@ -282,7 +408,7 @@ export default function Page1Public({
                 visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } }
               }}
             >
-              The universal global dashboard for modern student living. Find your next home or manage your property with professional efficiency.
+              The all-in-one ecosystem for student ease, property management, and job finding. Find your ideal home, streamline hostel operations, or discover verified employment opportunities with effortless efficiency.
             </motion.p>
             
             <motion.div 
@@ -299,7 +425,31 @@ export default function Page1Public({
               >
                 <span>Login to Portal</span>
               </button>
+              <button
+                onClick={() => navigate('/register-manager')}
+                className="px-6 py-3.5 bg-white hover:bg-slate-50 text-blue-950 font-black rounded-xl border border-blue-200 shadow-md transition-all transform hover:-translate-y-1 flex items-center gap-2 text-sm cursor-pointer"
+              >
+                <Home className="w-4 h-4 text-blue-700" />
+                <span>Register your resident now!!</span>
+              </button>
             </motion.div>
+
+            {/* Want to work as a staff? Find work now!! button right below Register your resident now */}
+            <div className="pt-2">
+              <button
+                onClick={() => {
+                  sessionStorage.setItem('navigated_to_staff_register', 'true');
+                  navigate('/staff/register');
+                }}
+                className="group inline-flex items-center gap-2.5 text-xs md:text-sm font-extrabold text-blue-900 hover:text-blue-950 bg-blue-600/10 hover:bg-blue-600/15 backdrop-blur-md px-4 py-2.5 rounded-xl transition-all border border-blue-200/80 hover:border-blue-400/80 shadow-sm shadow-blue-500/5 hover:shadow-md hover:-translate-y-0.5 cursor-pointer"
+              >
+                <div className="w-6 h-6 rounded-lg bg-blue-600/15 flex items-center justify-center text-blue-700 group-hover:bg-blue-600 group-hover:text-white transition-all">
+                  <Wrench className="w-3.5 h-3.5 transition-transform group-hover:scale-110" />
+                </div>
+                <span>Want to work as a staff? Find work now!!</span>
+                <ArrowRight className="w-3.5 h-3.5 text-blue-600 group-hover:translate-x-0.5 transition-transform" />
+              </button>
+            </div>
 
             <div className="pt-2" />
           </motion.div>
@@ -564,7 +714,7 @@ export default function Page1Public({
             }
           }}
         >
-          <div className="relative z-10 grid grid-cols-1 md:grid-cols-3 gap-8 w-full">
+          <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 w-full">
           <motion.div 
             className="bg-blue-50/20 backdrop-blur-sm p-6 rounded-2xl border border-blue-200/20 shadow-md space-y-3 cursor-pointer"
             variants={{
@@ -627,6 +777,27 @@ export default function Page1Public({
               Property owners can track occupancy, maintenance requests, and bookings from a single powerful dashboard.
             </p>
           </motion.div>
+
+          <motion.div 
+            className="bg-blue-50/20 backdrop-blur-sm p-6 rounded-2xl border border-blue-200/20 shadow-md space-y-3 cursor-pointer"
+            variants={{
+              hidden: { opacity: 0, y: 30 },
+              visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } }
+            }}
+            whileHover={{ 
+              y: -8, 
+              scale: 1.02,
+              boxShadow: "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)"
+            }}
+          >
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
+              <Briefcase size={20} />
+            </div>
+            <h4 className="font-extrabold text-slate-900 text-lg">Job Finding & Careers</h4>
+            <p className="text-sm text-slate-700 font-medium leading-relaxed">
+              Easily search, apply for, and secure accredited hostel management, maintenance, plumbing, electrical, and administrative jobs directly on PineVela.
+            </p>
+          </motion.div>
           </div>
         </motion.section>
 
@@ -683,13 +854,13 @@ export default function Page1Public({
                   About PineVela
                 </h3>
                 <h4 className="text-base md:text-lg font-bold text-blue-950 leading-relaxed border-l-4 border-blue-900 pl-4">
-                  Making student accommodation simpler, safer, and easier to manage.
+                  Connecting students with verified housing, property owners with smart management, and skilled workers with accredited jobs.
                 </h4>
                 <p className="text-xs md:text-sm text-slate-600 leading-relaxed">
-                  PineVela is a digital hostel management platform built to connect students with accommodation providers while giving hostel managers and administrators the tools they need to manage accommodation efficiently.
+                  PineVela is a unified hostel living, management, and employment platform. We empower students to find safe accommodation, enable property managers to streamline hostel operations, and allow job seekers to discover accredited hostel employment opportunities.
                 </p>
                 <p className="text-xs md:text-sm text-slate-500 leading-relaxed">
-                  We believe finding a place to stay should not be complicated, and managing a hostel should not depend on scattered records, messages, spreadsheets, and manual processes.
+                  We believe finding student accommodation and securing hostel jobs should be seamless, verified, and accessible from a single trusted platform.
                 </p>
               </div>
 
@@ -697,7 +868,7 @@ export default function Page1Public({
               <div className="bg-blue-50/20 p-6 rounded-2xl border border-blue-200/25 space-y-2 shadow-sm">
                 <span className="text-xs font-bold text-blue-900 uppercase tracking-wider block">Our Mission</span>
                 <p className="text-xs md:text-sm text-slate-600 leading-relaxed font-medium">
-                  To bring the entire hostel experience into one connected platform — from discovering a hostel and submitting an application to managing rooms, beds, payments, maintenance, and communication.
+                  To bring the entire hostel ecosystem into one connected platform — from discovering verified accommodation and submitting booking applications to managing property operations, maintenance, and job placement.
                 </p>
               </div>
 
@@ -728,20 +899,30 @@ export default function Page1Public({
                   <div className="bg-blue-50/20 p-5 rounded-xl border border-blue-200/25 space-y-1.5 shadow-2xs">
                     <span className="text-xs font-black text-emerald-900 flex items-center gap-1.5">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-950" />
-                      For Staff
+                      For Job Seekers & Technicians
+                    </span>
+                    <p className="text-[11px] md:text-xs text-slate-500 leading-relaxed">
+                      Easily search and apply for verified hostel management, maintenance, plumbing, electrical, and administrative jobs directly on PineVela.
+                    </p>
+                  </div>
+
+                  <div className="bg-blue-50/20 p-5 rounded-xl border border-blue-200/25 space-y-1.5 shadow-2xs">
+                    <span className="text-xs font-black text-rose-900 flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-900" />
+                      For Maintenance Staff
                     </span>
                     <p className="text-[11px] md:text-xs text-slate-500 leading-relaxed">
                       Stay organized and respond instantly to daily hostel operations such as maintenance tickets within your assigned property wings.
                     </p>
                   </div>
 
-                  <div className="bg-blue-50/20 p-5 rounded-xl border border-blue-200/25 space-y-1.5 shadow-2xs">
+                  <div className="bg-blue-50/20 p-5 rounded-xl border border-blue-200/25 space-y-1.5 shadow-2xs md:col-span-2">
                     <span className="text-xs font-black text-amber-900 flex items-center gap-1.5">
                       <span className="w-1.5 h-1.5 rounded-full bg-amber-900" />
                       For Administrators
                     </span>
                     <p className="text-[11px] md:text-xs text-slate-500 leading-relaxed">
-                      Maintain oversight, verify managers and listed hostels, manage users, monitor transaction activity, and secure the trusted ecosystem.
+                      Maintain oversight, verify managers, staff applicants, and listed hostels, monitor transaction activity, and secure the trusted ecosystem.
                     </p>
                   </div>
                 </div>
@@ -786,7 +967,7 @@ export default function Page1Public({
             <div className="space-y-4">
               <PineLogo />
               <p className="text-xs text-slate-650 leading-relaxed font-medium">
-                The universal global dashboard for seamless hostel management and student accommodation experiences.
+                The complete ecosystem for student ease, property management, and verified job finding on PineVela.
               </p>
             </div>
             <div className="space-y-3">
@@ -845,12 +1026,6 @@ export default function Page1Public({
 
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => onNavigate('student-login')}
-                  className="px-5 py-2 bg-blue-900 hover:bg-blue-800 text-white font-black rounded-xl text-xs shadow-md transition-all cursor-pointer"
-                >
-                  Student Login
-                </button>
-                <button
                   onClick={onCloseDrawer}
                   className="w-9 h-9 rounded-full bg-sky-100/80 hover:bg-sky-200 text-sky-900 flex items-center justify-center transition-colors cursor-pointer border border-sky-200/60"
                   title="Close Full Screen View"
@@ -862,21 +1037,66 @@ export default function Page1Public({
 
             {/* Main Content Area */}
             <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 md:p-8 space-y-8 text-slate-950">
-              {/* Full Screen Banner / Hero Image */}
+              {/* Full Screen Banner / Hero Image with Multi-Photo Lightbox Controls */}
               <div className="relative w-full h-[320px] sm:h-[420px] md:h-[480px] rounded-3xl overflow-hidden shadow-2xl border border-white/80 bg-blue-50 group">
                 <img
-                  src={selectedHostel?.image || selectedHostel?.imageUrl || (selectedHostel as any)?.exteriorPhotoUrl || (selectedHostel as any)?.imagePreviewUrl || (selectedHostel as any)?.images?.[0] || 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=1200&q=80'}
-                  alt={selectedHostel.name}
+                  src={getGalleryImages(selectedHostel)[activeImageIndex]}
+                  alt={`${selectedHostel.name} - View ${activeImageIndex + 1}`}
                   referrerPolicy="no-referrer"
+                  onClick={() => setIsLightboxOpen(true)}
                   onError={(e) => {
                     (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=1200&q=80';
                   }}
-                  className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-700"
+                  className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-700 cursor-pointer"
+                  title="Click to expand full screen lightbox gallery"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-sky-950/80 via-sky-950/20 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-t from-sky-950/80 via-sky-950/25 to-transparent pointer-events-none" />
+
+                {/* Left navigation arrow inside banner */}
+                {activeImageIndex > 0 && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveImageIndex(activeImageIndex - 1);
+                    }}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-slate-900/60 hover:bg-slate-900/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 backdrop-blur-md cursor-pointer border border-white/20 z-10"
+                    title="Previous Photo"
+                  >
+                    <ChevronLeft size={20} />
+                  </button>
+                )}
+
+                {/* Right navigation arrow inside banner */}
+                {activeImageIndex < getGalleryImages(selectedHostel).length - 1 && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveImageIndex(activeImageIndex + 1);
+                    }}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-slate-900/60 hover:bg-slate-900/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 backdrop-blur-md cursor-pointer border border-white/20 z-10"
+                    title="Next Photo"
+                  >
+                    <ChevronRight size={20} />
+                  </button>
+                )}
+
+                {/* Lightbox Expand Trigger floating button */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsLightboxOpen(true);
+                  }}
+                  className="absolute top-4 left-4 bg-slate-900/65 hover:bg-slate-900/85 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-lg backdrop-blur-md flex items-center gap-2 cursor-pointer border border-white/20 opacity-90 hover:opacity-100 transition-all z-10"
+                >
+                  <Maximize2 size={13} />
+                  <span>Showcase Gallery ({getGalleryImages(selectedHostel).length})</span>
+                </button>
 
                 {/* Badges Floating Top Right */}
-                <div className="absolute top-4 right-4 flex flex-wrap gap-2 items-center">
+                <div className="absolute top-4 right-4 flex flex-wrap gap-2 items-center z-10">
                   <span className="bg-emerald-500/95 text-white text-xs font-black px-3.5 py-1.5 rounded-full shadow-lg backdrop-blur-md uppercase tracking-wider flex items-center gap-1.5">
                     <ShieldCheck size={14} />
                     <span>{selectedHostel.status || 'Active Accreditation'}</span>
@@ -888,7 +1108,7 @@ export default function Page1Public({
                 </div>
 
                 {/* Hero Overlay Details Bottom Left */}
-                <div className="absolute bottom-6 left-6 right-6 flex flex-col md:flex-row md:items-end justify-between gap-4 text-white">
+                <div className="absolute bottom-6 left-6 right-6 flex flex-col md:flex-row md:items-end justify-between gap-4 text-white z-10 pointer-events-none">
                   <div className="space-y-2 max-w-2xl">
                     <div className="flex items-center gap-2">
                       <span className="bg-amber-400 text-slate-950 text-[10px] font-black uppercase px-2.5 py-1 rounded-md tracking-wider">
@@ -905,7 +1125,7 @@ export default function Page1Public({
                   </div>
 
                   {/* Pricing Badge Overlay */}
-                  <div className="bg-white/15 backdrop-blur-xl border border-white/30 p-4 rounded-2xl flex flex-col items-start md:items-end shrink-0 shadow-2xl">
+                  <div className="bg-white/15 backdrop-blur-xl border border-white/30 p-4 rounded-2xl flex flex-col items-start md:items-end shrink-0 shadow-2xl pointer-events-auto">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-200">Annual Academic Fee</span>
                     <span className="text-2xl sm:text-3xl font-black text-amber-300">
                       GHS {(selectedHostel.price || 3500).toLocaleString()}
@@ -913,6 +1133,36 @@ export default function Page1Public({
                     <span className="text-[10px] text-slate-200 font-medium">Includes utility, maintenance & high-speed wifi</span>
                   </div>
                 </div>
+              </div>
+
+              {/* Thumbnail Gallery Row */}
+              <div className="flex items-center gap-3 bg-white/45 backdrop-blur-md border border-sky-100/60 p-3 rounded-2xl shadow-md overflow-x-auto">
+                <div className="flex items-center gap-1 shrink-0 text-sky-950 font-black text-xs mr-2">
+                  <ImageIcon size={14} className="text-blue-600 animate-pulse" />
+                  <span>Explore Rooms:</span>
+                </div>
+                {getGalleryImages(selectedHostel).map((imgUrl, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setActiveImageIndex(idx)}
+                    className={`relative w-20 h-14 rounded-xl overflow-hidden shrink-0 transition-all duration-300 cursor-pointer ${
+                      activeImageIndex === idx 
+                        ? 'ring-4 ring-blue-600 scale-105 border-transparent shadow-lg' 
+                        : 'opacity-70 hover:opacity-100 border border-slate-200'
+                    }`}
+                  >
+                    <img 
+                      src={imgUrl} 
+                      alt={`Thumbnail ${idx + 1}`} 
+                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=200&q=80';
+                      }}
+                    />
+                  </button>
+                ))}
               </div>
 
               {/* Highlighted Stat Cards Grid (Crystal Glass Tabs) */}
@@ -1091,9 +1341,371 @@ export default function Page1Public({
                       <span>Call Property Manager</span>
                     </a>
                   </div>
+
+                  {/* Staff Recruitment & Job Openings Card */}
+                  <div className="bg-gradient-to-br from-amber-500/10 via-amber-400/5 to-white/70 backdrop-blur-xl p-6 rounded-3xl border border-amber-300/80 shadow-lg shadow-amber-900/5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xs font-black uppercase tracking-wider text-amber-950 flex items-center gap-1.5">
+                        <Briefcase size={14} className="text-amber-700" />
+                        <span>Staff Career Opportunities</span>
+                      </h3>
+                      <span className="text-[9px] font-black uppercase bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full">
+                        Hiring
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-slate-700 font-medium">
+                      Interested in working at <strong>{selectedHostel.name}</strong>? Submit your details, CV, and ID directly to the manager.
+                    </p>
+
+                    {/* Needed Staff Roles */}
+                    <div className="space-y-1.5">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Needed Roles:</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(Array.isArray((selectedHostel as any).openStaffRoles) && (selectedHostel as any).openStaffRoles.length > 0 
+                          ? (selectedHostel as any).openStaffRoles 
+                          : [
+                              { role: 'Facilities Technician' },
+                              { role: 'Security Guard' },
+                              { role: 'Plumber & Water Systems' },
+                              { role: 'Housekeeping Supervisor' }
+                            ]
+                        ).map((r: any, idx: number) => (
+                          <span key={idx} className="px-2.5 py-1 bg-white border border-amber-200 text-amber-950 rounded-lg text-[10px] font-bold shadow-2xs">
+                            {r.role || r}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowStaffAppModal(true)}
+                      className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl text-xs flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer transform hover:-translate-y-0.5"
+                    >
+                      <Briefcase size={14} className="text-slate-950" />
+                      <span>Submit Details & CV to Manager</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </main>
+
+            {/* STAFF APPLICATION MODAL FOR THIS HOSTEL */}
+            <AnimatePresence>
+              {showStaffAppModal && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-60 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+                  onClick={() => setShowStaffAppModal(false)}
+                >
+                  <motion.div
+                    initial={{ scale: 0.95, y: 15 }}
+                    animate={{ scale: 1, y: 0 }}
+                    exit={{ scale: 0.95, y: 15 }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl border border-blue-200/80 space-y-6 max-h-[90vh] overflow-y-auto"
+                  >
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Briefcase className="w-4 h-4 text-amber-600" />
+                          <h3 className="text-base font-black text-slate-900">Apply for Staff Position</h3>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">Applying to: <strong>{selectedHostel.name}</strong></p>
+                      </div>
+                      <button
+                        onClick={() => setShowStaffAppModal(false)}
+                        className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center cursor-pointer"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleStaffAppSubmit} className="space-y-4">
+                      {/* Desired Role */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Role You Want to Apply For *</label>
+                        <select
+                          value={appRole}
+                          onChange={(e) => setAppRole(e.target.value)}
+                          className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600 focus:bg-white"
+                          required
+                        >
+                          <option value="Facilities & Maintenance Technician">Facilities & Maintenance Technician</option>
+                          <option value="Plumber & Water Systems Lead">Plumber & Water Systems Lead</option>
+                          <option value="Electrician & Backup Power Specialist">Electrician & Backup Power Specialist</option>
+                          <option value="Head of Security & Gate Operations">Head of Security & Gate Operations</option>
+                          <option value="Security Officer">Security Officer</option>
+                          <option value="Front Desk & Operations Assistant">Front Desk & Operations Assistant</option>
+                          <option value="Housekeeping & Sanitation Staff">Housekeeping & Sanitation Staff</option>
+                          <option value="Hostel Warden / Residential Assistant">Hostel Warden / Residential Assistant</option>
+                        </select>
+                      </div>
+
+                      {/* Name & Phone */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">Full Name *</label>
+                          <input
+                            type="text"
+                            value={appName}
+                            onChange={(e) => setAppName(e.target.value)}
+                            placeholder="e.g. Kwame Mensah"
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-blue-600 focus:bg-white"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">Phone Number *</label>
+                          <input
+                            type="text"
+                            value={appPhone}
+                            onChange={(e) => setAppPhone(e.target.value)}
+                            placeholder="+233 24 123 4567"
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-blue-600 focus:bg-white"
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      {/* Email & National ID */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">Email Address</label>
+                          <input
+                            type="email"
+                            value={appEmail}
+                            onChange={(e) => setAppEmail(e.target.value)}
+                            placeholder="kwame@example.com"
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-blue-600 focus:bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">National ID / Ghana Card</label>
+                          <input
+                            type="text"
+                            value={appNationalId}
+                            onChange={(e) => setAppNationalId(e.target.value)}
+                            placeholder="GHA-000000000-0"
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-blue-600 focus:bg-white"
+                          />
+                        </div>
+                      </div>
+
+                      {/* CV File Upload */}
+                      <div className="p-4 border-2 border-dashed border-blue-200 bg-blue-50/50 rounded-2xl text-center space-y-2">
+                        <FileText className="w-7 h-7 text-blue-600 mx-auto" />
+                        <div>
+                          <span className="text-xs font-bold text-slate-900 block">Curriculum Vitae (CV) *</span>
+                          <span className="text-[10px] text-slate-500">PDF, DOC, or image file (up to 5MB)</span>
+                        </div>
+                        {appCvFileName ? (
+                          <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-bold text-emerald-900 flex items-center justify-between">
+                            <span className="truncate max-w-[200px]">{appCvFileName}</span>
+                            <span className="text-[9px] bg-emerald-600 text-white px-2 py-0.5 rounded">Ready</span>
+                          </div>
+                        ) : (
+                          <label className="inline-block px-4 py-2 bg-blue-900 hover:bg-blue-800 text-white text-xs font-bold rounded-xl cursor-pointer shadow-xs transition-all">
+                            <span>Select CV File</span>
+                            <input
+                              type="file"
+                              accept=".pdf,.doc,.docx,image/*"
+                              onChange={handleStaffAppCvUpload}
+                              className="hidden"
+                            />
+                          </label>
+                        )}
+                      </div>
+
+                      {/* ID Document Upload (Optional) */}
+                      <div className="p-3 border border-slate-200 bg-slate-50 rounded-2xl flex items-center justify-between text-xs">
+                        <div>
+                          <span className="font-bold text-slate-900 block">National ID Photo / Scan</span>
+                          <span className="text-[10px] text-slate-500">{appIdFileName || 'Optional Ghana Card image'}</span>
+                        </div>
+                        <label className="px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 rounded-xl font-bold cursor-pointer transition-colors text-xs">
+                          <span>{appIdFileName ? 'Change' : 'Attach ID'}</span>
+                          <input
+                            type="file"
+                            accept="image/*,.pdf"
+                            onChange={handleStaffAppIdUpload}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+
+                      {/* Brief Note */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Brief Note / Experience</label>
+                        <textarea
+                          rows={2}
+                          value={appCover}
+                          onChange={(e) => setAppCover(e.target.value)}
+                          placeholder="Tell the property manager about your past experience in student hostels or technical maintenance."
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-blue-600 focus:bg-white"
+                        />
+                      </div>
+
+                      <div className="pt-2 border-t flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowStaffAppModal(false)}
+                          className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={submittingStaffApp || !appCvData}
+                          className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-2 disabled:opacity-50"
+                        >
+                          {submittingStaffApp ? (
+                            <>
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              <span>Sending CV to Manager...</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>Submit Application & CV</span>
+                              <ArrowRight className="w-3.5 h-3.5" />
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </form>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Staff App Toast */}
+            {staffAppToast && (
+              <div className="fixed bottom-6 right-6 z-70 animate-bounce">
+                <div className={`px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 text-xs font-bold ${
+                  staffAppToast.type === 'success' ? 'bg-emerald-700 text-white' : 'bg-rose-700 text-white'
+                }`}>
+                  {staffAppToast.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+                  <span>{staffAppToast.text}</span>
+                </div>
+              </div>
+            )}
+
+            {/* LIGHTBOX GALLERY FULL-SCREEN MODAL */}
+            <AnimatePresence>
+              {isLightboxOpen && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-55 bg-black/95 backdrop-blur-3xl flex flex-col justify-between p-4 md:p-8"
+                  onClick={() => setIsLightboxOpen(false)}
+                >
+                  {/* Top Bar inside Lightbox */}
+                  <div className="flex items-center justify-between text-white w-full max-w-7xl mx-auto z-10">
+                    <div className="flex flex-col">
+                      <span className="text-sm font-black tracking-tight text-slate-300">{selectedHostel.name}</span>
+                      <span className="text-[11px] font-bold text-slate-400 mt-0.5">
+                        Photo {activeImageIndex + 1} of {getGalleryImages(selectedHostel).length}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsLightboxOpen(false)}
+                      className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all cursor-pointer border border-white/10"
+                      title="Close Lightbox"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+
+                  {/* Middle Area: Active Image & Navigation Arrows */}
+                  <div className="flex-1 flex items-center justify-center relative w-full max-w-5xl mx-auto my-4">
+                    {/* Left arrow on lightbox */}
+                    {activeImageIndex > 0 && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveImageIndex(activeImageIndex - 1);
+                        }}
+                        className="absolute left-0 md:-left-16 z-20 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all cursor-pointer border border-white/10"
+                        title="Previous Photo"
+                      >
+                        <ChevronLeft size={24} />
+                      </button>
+                    )}
+
+                    {/* Active Image with slide animation */}
+                    <div 
+                      className="relative max-h-[65vh] md:max-h-[75vh] w-full flex items-center justify-center"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <motion.img
+                        key={activeImageIndex}
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        transition={{ duration: 0.3 }}
+                        src={getGalleryImages(selectedHostel)[activeImageIndex]}
+                        alt={`${selectedHostel.name} - Fullscreen ${activeImageIndex + 1}`}
+                        className="max-h-[65vh] md:max-h-[75vh] max-w-full object-contain rounded-2xl shadow-2xl border border-white/10"
+                        referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=1200&q=80';
+                        }}
+                      />
+                    </div>
+
+                    {/* Right arrow on lightbox */}
+                    {activeImageIndex < getGalleryImages(selectedHostel).length - 1 && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveImageIndex(activeImageIndex + 1);
+                        }}
+                        className="absolute right-0 md:-right-16 z-20 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all cursor-pointer border border-white/10"
+                        title="Next Photo"
+                      >
+                        <ChevronRight size={24} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Bottom Area: Thumbnails row inside lightbox */}
+                  <div 
+                    className="w-full max-w-3xl mx-auto flex items-center justify-center gap-2 overflow-x-auto pb-4 z-10"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {getGalleryImages(selectedHostel).map((imgUrl, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setActiveImageIndex(idx)}
+                        className={`relative w-16 h-12 rounded-lg overflow-hidden shrink-0 transition-all duration-300 cursor-pointer ${
+                          activeImageIndex === idx 
+                            ? 'ring-2 ring-white scale-105 border-transparent opacity-100 shadow-lg shadow-white/10' 
+                            : 'opacity-40 hover:opacity-80 border border-white/10'
+                        }`}
+                      >
+                        <img 
+                          src={imgUrl} 
+                          alt={`Lightbox Thumbnail ${idx + 1}`} 
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=200&q=80';
+                          }}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
         )}
       </AnimatePresence>

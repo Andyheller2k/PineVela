@@ -6,6 +6,8 @@ export interface HostelBlockConfig {
   roomPrefix: string;
   startNum: number;
   bedsPerRoom: number;
+  pricePerBlock?: number;
+  price?: number;
 }
 
 export interface HostelRegistrationDraft {
@@ -48,6 +50,7 @@ export interface HostelRegistrationDraft {
   imagePreviewUrl?: string;
   imagePath?: string;
   imageStorageType?: 'local' | 'external';
+  gallery?: string[];
 
   // Step 5: Capacity & Structure
   totalBlocks: number;
@@ -159,6 +162,7 @@ export interface Hostel {
   pricing?: any;
   campusProximity?: string;
   campusProximityDetails?: string;
+  gallery?: string[];
 }
 
 export interface HostelManager {
@@ -287,14 +291,58 @@ export interface MaintenanceStatus {
   water: 'Active' | 'Intermittent' | 'Critical';
 }
 
+export interface OpenStaffRole {
+  role: string;
+  vacancies: number;
+  shift?: string;
+  monthlyAllowance?: string;
+  description?: string;
+}
+
 export interface Staff {
   id: string;
+  userId?: string;
   name: string;
   role: string;
   phone: string;
-  contactMethod: 'WhatsApp' | 'Email';
+  contactMethod?: 'WhatsApp' | 'Email';
   email?: string;
+  username?: string;
+  photo?: string;
+  avatar?: string;
   hostelId: string;
+  hostelName?: string;
+  shift?: string;
+  assignedBlock?: string;
+  status?: string;
+  nationalId?: string;
+  cvUrl?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface StaffApplication {
+  id: string;
+  staffId: string;
+  staffUsername?: string;
+  staffEmail: string;
+  applicantName: string;
+  phone: string;
+  role: string;
+  hostelId: string;
+  hostelName: string;
+  nationalId?: string;
+  idDocumentUrl?: string;
+  cvUrl?: string;
+  cvData?: string;
+  cvFileName?: string;
+  coverLetter?: string;
+  status: 'pending' | 'Approved' | 'Rejected';
+  shift?: string;
+  assignedBlock?: string;
+  appliedAt: string;
+  reviewedAt?: string;
+  reviewNotes?: string;
 }
 
 export type ActiveScreen =

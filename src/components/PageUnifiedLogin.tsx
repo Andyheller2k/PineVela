@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import PineLogo from './PineLogo';
-import { Mail, Key, Eye, EyeOff, ShieldCheck, ArrowLeft, ArrowRight, ShieldAlert, CheckCircle, RefreshCw, Sparkles, LogIn, ClipboardList, Building, MapPin, Lock, Phone, ChevronRight, ChevronLeft, Search, User, X, Clock } from 'lucide-react';
+import { Mail, Key, Eye, EyeOff, ShieldCheck, ArrowLeft, ArrowRight, ShieldAlert, CheckCircle, RefreshCw, Sparkles, LogIn, ClipboardList, Building, MapPin, Lock, Phone, ChevronRight, ChevronLeft, Search, User, X, Clock, Briefcase, Home, Wrench } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 // Static asset imports
@@ -28,6 +28,12 @@ const slides = [
     title: "Vibrant Student Community",
     description: "Stay in touch with your friends from other hostels, chat and share interesting updates together.",
     badge: "Student Hub"
+  },
+  {
+    image: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=1200&q=80",
+    title: "Accredited Job Opportunities",
+    description: "Easily search and apply for jobs on PineVela.",
+    badge: "Careers & Jobs"
   }
 ];
 
@@ -790,16 +796,31 @@ export default function PageUnifiedLogin() {
 
             </form>
 
-            <div className="text-center pt-3 border-t border-slate-100">
-              <p className="text-xs sm:text-sm text-slate-500 font-semibold">
-                New to PineVela?{' '}
+            <div className="text-center pt-3 border-t border-slate-100 space-y-2">
+              <p className="text-xs sm:text-sm text-slate-500 font-semibold flex items-center justify-center gap-1.5 flex-wrap">
+                <span>New to PineVela?</span>
                 <button 
                   onClick={() => navigate('/register-manager')} 
-                  className="text-blue-900 hover:underline font-black cursor-pointer"
+                  className="inline-flex items-center gap-1 text-blue-900 hover:underline font-black cursor-pointer"
                 >
-                  Register your Hostel now!!
+                  <Home size={14} className="text-blue-700" />
+                  <span>Register your resident now!!</span>
                 </button>
               </p>
+              <div>
+                <button 
+                  type="button"
+                  onClick={() => {
+                    sessionStorage.setItem('navigated_to_staff_register', 'true');
+                    navigate('/staff/register');
+                  }} 
+                  className="group inline-flex items-center gap-2 text-xs font-black text-blue-900 hover:text-blue-950 bg-blue-600/10 hover:bg-blue-600/15 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-blue-200/80 hover:border-blue-400/80 transition-all cursor-pointer shadow-xs hover:shadow-sm hover:-translate-y-0.5"
+                >
+                  <Wrench size={13} className="text-blue-700 group-hover:scale-110 transition-transform" />
+                  <span>Want to work as a staff? Find work now!!</span>
+                  <ArrowRight size={12} className="text-blue-600 group-hover:translate-x-0.5 transition-transform" />
+                </button>
+              </div>
             </div>
 
           </div>

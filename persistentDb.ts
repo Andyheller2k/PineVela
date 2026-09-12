@@ -17,6 +17,9 @@ export interface PersistentStore {
   boardRequests?: any[];
   meetings?: any[];
   managerAccountSettings?: Record<string, any>;
+  staff?: any[];
+  staffApplications?: any[];
+  staffAuditLogs?: any[];
   platformSettings: {
     registrationFee: number;
     commission: number;
@@ -63,7 +66,7 @@ export function loadPersistentStore(defaultStore: PersistentStore): PersistentSt
       hostelVerifications: Array.isArray(parsed.hostelVerifications) ? parsed.hostelVerifications : defaultStore.hostelVerifications,
       managerRegistrationRequests: (Array.isArray(parsed.managerRegistrationRequests) && parsed.managerRegistrationRequests.length > 0) ? parsed.managerRegistrationRequests : defaultStore.managerRegistrationRequests,
       verificationAuditLogs: Array.isArray(parsed.verificationAuditLogs) ? parsed.verificationAuditLogs : defaultStore.verificationAuditLogs,
-      users: (Array.isArray(parsed.users) && parsed.users.length > 0) ? parsed.users : defaultStore.users,
+      users: (Array.isArray(parsed.users) && parsed.users.length > 0 ? parsed.users : defaultStore.users).filter((u: any) => u.email !== 'staff@pinevela.com' && u.username !== 'staff'),
       notifications: Array.isArray(parsed.notifications) ? parsed.notifications : defaultStore.notifications,
       chatMessages: Array.isArray(parsed.chatMessages) ? parsed.chatMessages : defaultStore.chatMessages,
       dmRooms: Array.isArray(parsed.dmRooms) ? parsed.dmRooms : defaultStore.dmRooms,
@@ -71,6 +74,9 @@ export function loadPersistentStore(defaultStore: PersistentStore): PersistentSt
       boardRequests: Array.isArray(parsed.boardRequests) ? parsed.boardRequests : (defaultStore.boardRequests || []),
       meetings: Array.isArray(parsed.meetings) ? parsed.meetings : (defaultStore.meetings || []),
       managerAccountSettings: (parsed.managerAccountSettings && typeof parsed.managerAccountSettings === 'object') ? parsed.managerAccountSettings : (defaultStore.managerAccountSettings || {}),
+      staff: Array.isArray(parsed.staff) ? parsed.staff : (defaultStore.staff || []),
+      staffApplications: Array.isArray(parsed.staffApplications) ? parsed.staffApplications : (defaultStore.staffApplications || []),
+      staffAuditLogs: Array.isArray(parsed.staffAuditLogs) ? parsed.staffAuditLogs : (defaultStore.staffAuditLogs || []),
       platformSettings: parsed.platformSettings || defaultStore.platformSettings,
     };
 

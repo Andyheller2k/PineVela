@@ -29,6 +29,9 @@ export function getStore(defaults?: { hostels: any[]; users: any[] }): Persisten
       dmRooms: [],
       chatProfiles: [],
       boardRequests: [],
+      staff: [],
+      staffApplications: [],
+      staffAuditLogs: [],
       platformSettings: {
         registrationFee: 3500,
         commission: 5,
@@ -217,13 +220,84 @@ export async function dbCreateStaff(staffData: any, ..._args: any[]): Promise<an
   return newStaff;
 }
 
+export async function dbUpdateStaff(id: string, updates: any): Promise<any> {
+  const store = getStore();
+  if (!(store as any).staff) (store as any).staff = [];
+  const index = (store as any).staff.findIndex((s: any) => s.id === id || s.userId === id || (s.email && updates.email && s.email.toLowerCase() === updates.email.toLowerCase()));
+  if (index !== -1) {
+    (store as any).staff[index] = { ...(store as any).staff[index], ...updates, updatedAt: new Date().toISOString() };
+    persistStore();
+    return (store as any).staff[index];
+  }
+  return null;
+}
+
 export async function dbDeleteStaff(id: string, ..._args: any[]): Promise<boolean> {
   const store = getStore();
   if ((store as any).staff) {
-    (store as any).staff = (store as any).staff.filter((s: any) => s.id !== id);
+    (store as any).staff = (store as any).staff.filter((s: any) => s.id !== id && s.userId !== id);
     persistStore();
   }
   return true;
+}
+
+// 5B. Staff Applications & Recruitment
+export async function dbGetStaffApplications(filter?: { hostelId?: string; staffId?: string }): Promise<any[]> {
+  const store = getStore();
+  let list = (store as any).staffApplications || [];
+  if (filter?.hostelId) {
+    list = list.filter((a: any) => a.hostelId === filter.hostelId);
+  }
+  if (filter?.staffId) {
+    list = list.filter((a: any) => a.staffId === filter.staffId || a.staffEmail === filter.staffId || a.email === filter.staffId);
+  }
+  return list;
+}
+
+export async function dbCreateStaffApplication(appData: any): Promise<any> {
+  const store = getStore();
+  if (!(store as any).staffApplications) (store as any).staffApplications = [];
+  const newApp = {
+    ...appData,
+    id: appData.id || `stf-app-${Date.now()}`,
+    status: appData.status || 'pending',
+    appliedAt: appData.appliedAt || new Date().toISOString()
+  };
+  (store as any).staffApplications.unshift(newApp);
+  persistStore();
+  return newApp;
+}
+
+export async function dbUpdateStaffApplication(id: string, updates: any): Promise<any> {
+  const store = getStore();
+  if (!(store as any).staffApplications) (store as any).staffApplications = [];
+  const idx = (store as any).staffApplications.findIndex((a: any) => a.id === id);
+  if (idx !== -1) {
+    (store as any).staffApplications[idx] = {
+      ...(store as any).staffApplications[idx],
+      ...updates,
+      updatedAt: new Date().toISOString()
+    };
+    persistStore();
+    return (store as any).staffApplications[idx];
+  }
+  return null;
+}
+
+export async function dbGetStaffAuditLogs(): Promise<any[]> {
+  const store = getStore();
+  return (store as any).staffAuditLogs || [];
+}
+
+export async function dbLogStaffAudit(logEntry: any): Promise<void> {
+  const store = getStore();
+  if (!(store as any).staffAuditLogs) (store as any).staffAuditLogs = [];
+  (store as any).staffAuditLogs.unshift({
+    id: `staff-audit-${Date.now()}`,
+    timestamp: new Date().toISOString(),
+    ...logEntry
+  });
+  persistStore();
 }
 
 // 6. Meetings
@@ -540,6 +614,7 @@ export async function dbRegisterHostelAtomic(registrationPayload: any, fallbackH
     amenities: registrationPayload.facilities || registrationPayload.amenities || [],
     campusProximity: registrationPayload.campusProximity || '5-10 Mins Walk',
     campusProximityDetails: registrationPayload.campusProximityDetails || 'Shuttle & walking routes',
+    gallery: registrationPayload.gallery || (registrationPayload.imageUrl ? [registrationPayload.imageUrl] : []),
     hostel_type: registrationPayload.hostelType || registrationPayload.hostel_type || 'Hostel'
   };
 

@@ -117,6 +117,13 @@ export default function HostelRegistration({
     imagePreviewUrl: '',
     imagePath: '',
     imageStorageType: 'local',
+    gallery: [
+      'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=1200&q=80',
+      'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1505691938895-1758d7feb511?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1484154218962-a197022b5858?auto=format&fit=crop&w=800&q=80'
+    ],
 
     // Step 5: Capacity
     totalBlocks: 2,
@@ -125,8 +132,8 @@ export default function HostelRegistration({
     totalBeds: 120,
     maximumCapacity: 120,
     blocksList: [
-      { id: 'block-1', name: 'Block A (Alpha)', floors: 4, totalRooms: 20, roomPrefix: 'A', startNum: 101, bedsPerRoom: 3 },
-      { id: 'block-2', name: 'Block B (Beta)', floors: 4, totalRooms: 20, roomPrefix: 'B', startNum: 201, bedsPerRoom: 3 }
+      { id: 'block-1', name: 'Block A (Alpha)', floors: 4, totalRooms: 20, roomPrefix: 'A', startNum: 101, bedsPerRoom: 3, pricePerBlock: 3500 },
+      { id: 'block-2', name: 'Block B (Beta)', floors: 4, totalRooms: 20, roomPrefix: 'B', startNum: 201, bedsPerRoom: 3, pricePerBlock: 3800 }
     ],
 
     // Step 6: Facilities
@@ -315,7 +322,8 @@ export default function HostelRegistration({
       totalRooms: 15,
       roomPrefix: blockLetter,
       startNum: nextIdx * 100 + 1,
-      bedsPerRoom: 2
+      bedsPerRoom: 2,
+      pricePerBlock: formData.defaultFee || 3500
     };
     const nextBlocks = [...formData.blocksList, newBlock];
     const totalBedsCalc = nextBlocks.reduce((acc, b) => acc + b.totalRooms * b.bedsPerRoom, 0);
@@ -469,6 +477,7 @@ export default function HostelRegistration({
         image: finalImageUrl,
         exteriorPhotoUrl: finalImageUrl,
         imagePath: finalImagePath,
+        gallery: formData.gallery || [finalImageUrl],
         hostelName: formData.name.trim(),
         totalCapacity: formData.maximumCapacity,
         capacity: formData.maximumCapacity,
@@ -1143,8 +1152,10 @@ export default function HostelRegistration({
               <div className="space-y-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
                   <div>
-                    <h3 className="text-lg font-black text-slate-900 tracking-tight">Step 5: Capacity & Structure</h3>
-                    <p className="text-xs text-slate-500">Configure residential blocks, floors, sequential rooms, and overall student capacity.</p>
+                    <h3 className="text-lg font-black text-slate-900 tracking-tight">Step 5: Capacity & Block Structure</h3>
+                    <p className="text-xs text-slate-500">
+                      Configure residential blocks, room counts, beds per room, and specific pricing for each block.
+                    </p>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-black text-blue-950 bg-blue-50 border border-blue-200 px-3 py-1 rounded-xl">
@@ -1153,95 +1164,159 @@ export default function HostelRegistration({
                   </div>
                 </div>
 
-                {/* Blocks Builder Table */}
-                <div className="space-y-3">
+                {/* Blocks Builder List */}
+                <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">
-                      Configured Residential Blocks ({formData.blocksList.length})
-                    </span>
+                    <div>
+                      <span className="text-xs font-extrabold text-slate-800 uppercase tracking-wider block">
+                        Configured Residential Blocks ({formData.blocksList.length})
+                      </span>
+                      <span className="text-[11px] text-slate-500">
+                        Set unique bed counts and individual pricing per block/wing.
+                      </span>
+                    </div>
                     <button
                       type="button"
                       onClick={handleAddBlock}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-900 hover:bg-blue-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
+                      className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-900 hover:bg-blue-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
                     >
                       <Plus size={14} />
                       <span>Add Another Block</span>
                     </button>
                   </div>
 
-                  <div className="space-y-3">
-                    {formData.blocksList.map((block, idx) => (
-                      <div
-                        key={block.id}
-                        className="bg-slate-50 border border-slate-200 rounded-2xl p-4 grid grid-cols-1 sm:grid-cols-6 gap-3 items-end text-left"
-                      >
-                        <div className="sm:col-span-2 space-y-1">
-                          <label className="text-[10px] font-bold text-slate-500 uppercase">Block Name</label>
-                          <input
-                            type="text"
-                            value={block.name}
-                            onChange={(e) => handleBlockChange(block.id, 'name', e.target.value)}
-                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
-                          />
-                        </div>
+                  <div className="space-y-4">
+                    {formData.blocksList.map((block, idx) => {
+                      const blockBeds = (block.totalRooms || 0) * (block.bedsPerRoom || 1);
+                      const blockPrice = block.pricePerBlock !== undefined ? block.pricePerBlock : formData.defaultFee;
+                      return (
+                        <div
+                          key={block.id}
+                          className="bg-slate-50/80 border border-slate-200 rounded-2xl p-4 sm:p-5 space-y-4 text-left transition-all hover:border-blue-200 hover:shadow-xs"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/60 pb-3">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-8 h-8 rounded-xl bg-blue-900 text-white font-black text-xs flex items-center justify-center shadow-xs">
+                                {block.roomPrefix || String.fromCharCode(65 + idx)}
+                              </div>
+                              <div>
+                                <span className="text-xs font-bold text-slate-900">Block #{idx + 1} Configuration</span>
+                                <span className="text-[10px] text-slate-500 block">Prefix: {block.roomPrefix}{block.startNum}+</span>
+                              </div>
+                            </div>
 
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-slate-500 uppercase">Floors</label>
-                          <input
-                            type="number"
-                            min={1}
-                            value={block.floors}
-                            onChange={(e) => handleBlockChange(block.id, 'floors', parseInt(e.target.value) || 1)}
-                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
-                          />
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-slate-500 uppercase">Rooms</label>
-                          <input
-                            type="number"
-                            min={1}
-                            value={block.totalRooms}
-                            onChange={(e) => handleBlockChange(block.id, 'totalRooms', parseInt(e.target.value) || 1)}
-                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
-                          />
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-slate-500 uppercase">Beds/Room</label>
-                          <input
-                            type="number"
-                            min={1}
-                            max={8}
-                            value={block.bedsPerRoom}
-                            onChange={(e) => handleBlockChange(block.id, 'bedsPerRoom', parseInt(e.target.value) || 1)}
-                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
-                          />
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 text-[11px] font-bold text-slate-600 bg-white border border-slate-200 rounded-xl px-2.5 py-2 text-center">
-                            {block.totalRooms * block.bedsPerRoom} beds
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-extrabold text-blue-900 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-lg">
+                                {blockBeds} Beds ({block.bedsPerRoom} in a room)
+                              </span>
+                              {formData.blocksList.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveBlock(block.id)}
+                                  className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+                                  title="Delete block"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              )}
+                            </div>
                           </div>
-                          {formData.blocksList.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveBlock(block.id)}
-                              className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-colors"
-                              title="Delete block"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          )}
+
+                          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3.5 items-start">
+                            {/* Block Name */}
+                            <div className="sm:col-span-4 space-y-1">
+                              <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">
+                                Block Name / Wing
+                              </label>
+                              <input
+                                type="text"
+                                value={block.name}
+                                onChange={(e) => handleBlockChange(block.id, 'name', e.target.value)}
+                                placeholder="e.g. Block A (Alpha Wing)"
+                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-900"
+                              />
+                            </div>
+
+                            {/* Floors */}
+                            <div className="sm:col-span-2 space-y-1">
+                              <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">
+                                Floors
+                              </label>
+                              <input
+                                type="number"
+                                min={1}
+                                max={20}
+                                value={block.floors}
+                                onChange={(e) => handleBlockChange(block.id, 'floors', parseInt(e.target.value) || 1)}
+                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-900"
+                              />
+                            </div>
+
+                            {/* Total Rooms */}
+                            <div className="sm:col-span-2 space-y-1">
+                              <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">
+                                Rooms
+                              </label>
+                              <input
+                                type="number"
+                                min={1}
+                                value={block.totalRooms}
+                                onChange={(e) => handleBlockChange(block.id, 'totalRooms', parseInt(e.target.value) || 1)}
+                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-900"
+                              />
+                            </div>
+
+                            {/* Beds per Room */}
+                            <div className="sm:col-span-2 space-y-1">
+                              <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">
+                                Beds / Room
+                              </label>
+                              <input
+                                type="number"
+                                min={1}
+                                max={10}
+                                value={block.bedsPerRoom}
+                                onChange={(e) => handleBlockChange(block.id, 'bedsPerRoom', parseInt(e.target.value) || 1)}
+                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-900"
+                              />
+                            </div>
+
+                            {/* Individual Price for this Block */}
+                            <div className="sm:col-span-2 space-y-1">
+                              <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">
+                                Price ({formData.currency})
+                              </label>
+                              <input
+                                type="number"
+                                min={0}
+                                value={blockPrice}
+                                onChange={(e) => handleBlockChange(block.id, 'pricePerBlock', parseFloat(e.target.value) || 0)}
+                                placeholder="Block price"
+                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-700"
+                              />
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
 
-                <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100 flex items-center justify-between text-xs font-semibold text-blue-950">
-                  <span>Summary: {formData.blocksList.length} Blocks • {formData.totalRooms} Total Rooms</span>
-                  <span className="font-extrabold">{formData.maximumCapacity} Total Capacity</span>
+                {/* Capacity & Price Breakdown Card */}
+                <div className="p-4 bg-blue-50/70 rounded-2xl border border-blue-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-blue-950">
+                  <div className="space-y-0.5">
+                    <span className="font-extrabold text-sm block">
+                      {formData.blocksList.length} Blocks • {formData.totalRooms} Total Rooms • {formData.maximumCapacity} Beds
+                    </span>
+                    <span className="text-[11px] text-blue-800">
+                      Block pricing rates:{' '}
+                      {formData.blocksList.map((b) => `${b.name || 'Block'}: ${formData.currency} ${(b.pricePerBlock ?? formData.defaultFee).toLocaleString()} (${b.bedsPerRoom} beds/rm)`).join(' • ')}
+                    </span>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="text-[10px] font-bold uppercase text-blue-700 block">Total Residential Capacity</span>
+                    <span className="text-lg font-black text-blue-950">{formData.maximumCapacity} Students</span>
+                  </div>
                 </div>
               </div>
             )}
@@ -1499,6 +1574,59 @@ export default function HostelRegistration({
                   </div>
                 </div>
 
+                {/* Configured Block Specific Rates */}
+                <div className="space-y-3 pt-3 border-t border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-extrabold text-slate-800 uppercase tracking-wider block">
+                        Individual Block Pricing ({formData.blocksList.length} Blocks)
+                      </span>
+                      <span className="text-[11px] text-slate-500">
+                        Customize or fine-tune the exact fee for each residential block.
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updated = formData.blocksList.map(b => ({ ...b, pricePerBlock: formData.defaultFee }));
+                        updateFormData({ blocksList: updated });
+                      }}
+                      className="text-[11px] font-bold text-blue-900 hover:text-blue-700 underline cursor-pointer"
+                    >
+                      Apply standard fee to all blocks
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {formData.blocksList.map((block, idx) => {
+                      const currentPrice = block.pricePerBlock !== undefined ? block.pricePerBlock : formData.defaultFee;
+                      return (
+                        <div
+                          key={block.id}
+                          className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-3"
+                        >
+                          <div className="space-y-0.5">
+                            <span className="text-xs font-bold text-slate-900 block">{block.name || `Block ${idx + 1}`}</span>
+                            <span className="text-[10px] text-slate-500 font-semibold">
+                              {block.bedsPerRoom} Beds/Room • {block.totalRooms * block.bedsPerRoom} Total Beds
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 w-36">
+                            <span className="text-[11px] font-bold text-slate-500">{formData.currency}</span>
+                            <input
+                              type="number"
+                              min={0}
+                              value={currentPrice}
+                              onChange={(e) => handleBlockChange(block.id, 'pricePerBlock', parseFloat(e.target.value) || 0)}
+                              className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-700"
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 flex items-center justify-between text-xs font-bold text-emerald-900">
                   <span>Gross Initial Payment per Student:</span>
                   <span className="text-base font-black">
@@ -1573,6 +1701,33 @@ export default function HostelRegistration({
                         {formData.latitude.toFixed(6)}, {formData.longitude.toFixed(6)}
                       </span>
                     </div>
+                  </div>
+                </div>
+
+                {/* Blocks & Pricing Breakdown Summary */}
+                <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+                      Block Structure & Individual Rates ({formData.blocksList.length} Blocks)
+                    </span>
+                    <span className="text-[11px] font-bold text-blue-900">
+                      Total: {formData.maximumCapacity} Beds
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {formData.blocksList.map((b, idx) => (
+                      <div key={b.id || idx} className="p-2.5 rounded-xl bg-white border border-slate-200/80 flex items-center justify-between text-xs">
+                        <div>
+                          <span className="font-bold text-slate-900 block">{b.name || `Block ${idx + 1}`}</span>
+                          <span className="text-[10px] text-slate-500 font-semibold">
+                            {b.floors} Floors • {b.totalRooms} Rooms ({b.bedsPerRoom} beds/rm = {b.totalRooms * b.bedsPerRoom} beds)
+                          </span>
+                        </div>
+                        <span className="font-extrabold text-emerald-800 text-xs">
+                          {formData.currency} {(b.pricePerBlock ?? formData.defaultFee).toLocaleString()}
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 </div>
 

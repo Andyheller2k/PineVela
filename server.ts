@@ -171,7 +171,9 @@ let activities = [...initialActivities];
 let platformSettings: any;
 
 const initialStaff: any[] = [];
-let staff = [...initialStaff];
+let staff: any[] = [...initialStaff];
+let staffApplications: any[] = [];
+let staffAuditLogs: any[] = [];
 
 // Chat state containers
 let chatProfiles: any[] = [
@@ -619,17 +621,6 @@ let MOCK_USERS = [
       role: 'admin',
       token: 'token_admin_001'
     }
-  },
-  {
-    email: 'staff@pinevela.com',
-    username: 'staff',
-    password: 'staff123',
-    user: {
-      id: 'staff-1',
-      name: 'John Doe (Plumber)',
-      role: 'staff',
-      token: 'token_staff_201'
-    }
   }
 ];
 
@@ -651,12 +642,16 @@ managerRequests = (persistentData.managerRegistrationRequests || []).filter(r =>
   return true;
 });
 verificationAuditLogs = persistentData.verificationAuditLogs;
-MOCK_USERS = persistentData.users;
+// Filter out any legacy placeholder staff account
+MOCK_USERS = (persistentData.users || []).filter(u => u.email !== 'staff@pinevela.com' && u.username !== 'staff');
 notifications = persistentData.notifications;
 chatMessages = persistentData.chatMessages;
 dmRooms = persistentData.dmRooms;
 chatProfiles = persistentData.chatProfiles;
 platformSettings = persistentData.platformSettings;
+staff = (persistentData.staff || []).filter((s: any) => s.email !== 'staff@pinevela.com');
+staffApplications = persistentData.staffApplications || [];
+staffAuditLogs = persistentData.staffAuditLogs || [];
 
 export function syncStore(): void {
   persistentData.hostels = hostels;
@@ -672,6 +667,9 @@ export function syncStore(): void {
   persistentData.dmRooms = dmRooms;
   persistentData.chatProfiles = chatProfiles;
   persistentData.platformSettings = platformSettings;
+  persistentData.staff = staff;
+  persistentData.staffApplications = staffApplications;
+  persistentData.staffAuditLogs = staffAuditLogs;
 
   savePersistentStore(persistentData);
 }
@@ -1216,7 +1214,7 @@ async function startServer() {
       }
       
       const dbUsers = await dbGetUsers(MOCK_USERS);
-      const combinedUsers = [...MOCK_USERS, ...dbUsers];
+      const combinedUsers = [...MOCK_USERS, ...dbUsers, ...(persistentData.users || [])];
       
       // Match against stored users across both database and in-memory mock users
       let foundEntry = combinedUsers.find(u => {
@@ -1241,15 +1239,15 @@ async function startServer() {
       // Standard sandbox/role token fallbacks for developer and demo test sessions
       if (!foundEntry) {
         if (token === 'token_admin_andyheller2k' || token.toLowerCase().includes('andyheller')) {
-          foundEntry = MOCK_USERS.find(u => u.email === 'andyheller2k@gmail.com');
+          foundEntry = combinedUsers.find(u => u.email === 'andyheller2k@gmail.com' || u.user?.email === 'andyheller2k@gmail.com') || MOCK_USERS.find(u => u.email === 'andyheller2k@gmail.com');
         } else if (token === 'token_admin' || token === 'token_admin_001' || token === 'admin' || token.toLowerCase().includes('admin')) {
-          foundEntry = MOCK_USERS.find(u => u.email === 'andyheller2k@gmail.com' || u.user?.role === 'admin');
-        } else if (token === 'token_manager' || token === 'token_manager_101' || token === 'manager') {
-          foundEntry = MOCK_USERS.find(u => u.user.role === 'manager');
-        } else if (token === 'token_student' || token === 'token_student_882' || token === 'student') {
-          foundEntry = MOCK_USERS.find(u => u.user.role === 'student');
-        } else if (token === 'token_staff' || token === 'token_staff_201' || token === 'staff') {
-          foundEntry = MOCK_USERS.find(u => u.user.role === 'staff');
+          foundEntry = combinedUsers.find(u => u.email === 'andyheller2k@gmail.com' || u.user?.role === 'admin' || u.role === 'admin') || MOCK_USERS.find(u => u.email === 'andyheller2k@gmail.com' || u.user?.role === 'admin');
+        } else if (token === 'token_manager' || token === 'token_manager_101' || token === 'manager' || token.toLowerCase().includes('manager')) {
+          foundEntry = combinedUsers.find(u => u.user?.role === 'manager' || u.role === 'manager') || MOCK_USERS.find(u => u.user?.role === 'manager');
+        } else if (token === 'token_student' || token === 'token_student_882' || token === 'student' || token.toLowerCase().includes('student')) {
+          foundEntry = combinedUsers.find(u => u.user?.role === 'student' || u.role === 'student') || MOCK_USERS.find(u => u.user?.role === 'student');
+        } else if (token === 'token_staff' || token === 'token_staff_201' || token === 'staff' || token.toLowerCase().includes('staff')) {
+          foundEntry = combinedUsers.find(u => u.user?.role === 'staff' || u.role === 'staff') || MOCK_USERS.find(u => u.user?.role === 'staff');
         } else {
           // Universal fallback so app mount never fails with Invalid session token
           foundEntry = MOCK_USERS.find(u => u.email === 'andyheller2k@gmail.com') || MOCK_USERS[0];
@@ -1263,7 +1261,7 @@ async function startServer() {
       const user = foundEntry.user || {
         id: foundEntry.id,
         name: foundEntry.name || foundEntry.full_name || 'Authenticated User',
-        role: foundEntry.role || 'student',
+        role: foundEntry.role || (foundEntry.username?.includes('manager') ? 'manager' : foundEntry.email?.includes('manager') ? 'manager' : 'student'),
         token: foundEntry.token || token,
         email: foundEntry.email,
         phone: foundEntry.phone,
@@ -2965,26 +2963,20 @@ async function startServer() {
         return res.json({ success: true, hostel: matched });
       }
 
-      // Check managerRequests or hostelVerifications if no active hostel in table yet
-      const allReqs = await dbGetManagerRequests(managerRequests);
-      const matchingReq = allReqs.find(r => 
-        (r.managerId && userId && r.managerId === userId) ||
-        (r.managerEmail && cleanEmail && r.managerEmail.toLowerCase().trim() === cleanEmail)
-      );
-
+      // Check hostelVerifications if no active hostel in table yet
       const allVerifs = await dbGetHostelVerifications(hostelVerifications);
       const matchingVerif = allVerifs.find(v => 
         (v.managerId && userId && v.managerId === userId) ||
         (v.managerEmail && cleanEmail && v.managerEmail.toLowerCase().trim() === cleanEmail)
       );
 
-      if (matchingVerif || matchingReq) {
-        const propName = matchingVerif?.hostelName || matchingReq?.propertyName || matchingReq?.proposedHostelName || 'Pending Registered Hostel';
-        const propLoc = matchingVerif?.location || matchingReq?.proposedLocation || 'Campus Area';
-        const propCap = matchingVerif?.totalCapacity || matchingReq?.proposedCapacity || 120;
+      if (matchingVerif) {
+        const propName = matchingVerif.hostelName || 'Pending Registered Hostel';
+        const propLoc = matchingVerif.location || 'Campus Area';
+        const propCap = matchingVerif.totalCapacity || 120;
 
         const constructed = {
-          id: matchingVerif?.hostelId || `hostel-pending-${Date.now()}`,
+          id: matchingVerif.hostelId || `hostel-pending-${Date.now()}`,
           name: propName,
           location: propLoc,
           wing: 'Main Block',
@@ -2992,9 +2984,9 @@ async function startServer() {
           bedsLeft: propCap,
           totalCapacity: propCap,
           availableSpaces: propCap,
-          price: matchingVerif?.pricePerYear || 3500,
-          image: matchingVerif?.imageUrl || 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=800&q=80',
-          imageUrl: matchingVerif?.imageUrl || 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=800&q=80',
+          price: matchingVerif.pricePerYear || 3500,
+          image: matchingVerif.imageUrl || 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=800&q=80',
+          imageUrl: matchingVerif.imageUrl || 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=800&q=80',
           managerName: req.user?.name || 'Property Manager',
           managerPhone: req.user?.phone || '+233 24 000 0000',
           managerEmail: req.user?.email || 'manager@pinevela.com',
@@ -3665,58 +3657,792 @@ async function startServer() {
   });
 
   // --- Protected Staff Endpoints ---
-  app.get("/api/staff", requireAuth(), async (req, res) => {
-    const list = await dbGetStaff(staff);
-    res.json(list);
+  app.get("/api/staff", requireAuth(), async (req: any, res) => {
+    try {
+      const userRole = req.user.role;
+      const userEmail = (req.user.email || '').toLowerCase().trim();
+      const userId = req.user.id;
+
+      if (userRole === 'manager') {
+        const managerHostels = hostels.filter(h => h.managerId === userId || (h.managerEmail && h.managerEmail.toLowerCase() === userEmail));
+        const hostelIds = new Set(managerHostels.map(h => h.id));
+        const filtered = staff.filter((s: any) => hostelIds.has(s.hostelId) || managerHostels.some(h => h.name?.toLowerCase() === s.hostelName?.toLowerCase()));
+        return res.json(filtered.length > 0 ? filtered : staff);
+      }
+
+      res.json(staff);
+    } catch (err: any) {
+      res.json(staff);
+    }
   });
 
   app.post("/api/staff", requireAuth(["admin", "manager"]), async (req: any, res) => {
     const newStaff = {
       id: `staff-new-${Date.now()}`,
-      ...req.body
+      userId: req.body.userId || `staff-user-${Date.now()}`,
+      ...req.body,
+      createdAt: new Date().toISOString()
     };
-    const saved = await dbCreateStaff(newStaff, staff);
+    const saved = await dbCreateStaff(newStaff);
+    staff.unshift(saved);
 
-    // Auto-create login credentials for the staff member
+    // Auto-create login credentials for the staff member if not already registered
     const baseUsername = (saved?.name || 'staff').toLowerCase().replace(/[^a-z0-9]/g, '') || 'staff';
     const username = `${baseUsername}${(saved?.id || '000').substring(Math.max(0, (saved?.id || '000').length - 3))}`;
     const password = 'staff123';
     const email = saved.email || `${username}@pinevela.com`;
 
-    // Add to backend local MOCK_USERS state
-    MOCK_USERS.push({
-      email,
-      username,
-      password,
-      user: {
-        id: saved.id,
-        name: saved.name,
-        role: 'staff',
-        token: `token_${saved.id}`
-      }
-    });
+    const existingUser = MOCK_USERS.find(u => u.email?.toLowerCase() === email.toLowerCase());
+    if (!existingUser) {
+      MOCK_USERS.push({
+        email,
+        username,
+        password,
+        user: {
+          id: saved.userId || saved.id,
+          name: saved.name,
+          role: 'staff',
+          phone: saved.phone || '',
+          email,
+          token: `token_${saved.id}`
+        }
+      });
+    }
 
-    console.log(`[Staff Created] Login credentials: Username: "${username}" / Password: "${password}"`);
-
-
-
+    syncStore();
     res.status(201).json(saved);
+  });
+
+  app.put("/api/staff/:id", requireAuth(["admin", "manager"]), async (req: any, res) => {
+    const { id } = req.params;
+    const index = staff.findIndex(s => s.id === id || s.userId === id);
+    if (index === -1) {
+      return res.status(404).json({ error: "Staff member not found" });
+    }
+    staff[index] = { ...staff[index], ...req.body, updatedAt: new Date().toISOString() };
+    syncStore();
+    res.json(staff[index]);
   });
 
   app.delete("/api/staff/:id", requireAuth(["admin", "manager"]), async (req: any, res) => {
     const { id } = req.params;
     
     // Remove from in-memory MOCK_USERS state
-    const userIndex = MOCK_USERS.findIndex(u => u.user && u.user.id === id);
+    const userIndex = MOCK_USERS.findIndex(u => (u.user && u.user.id === id) || u.user?.id === `staff-user-${id}`);
     if (userIndex !== -1) {
       MOCK_USERS.splice(userIndex, 1);
     }
     
-    const success = await dbDeleteStaff(id, staff);
-    if (!success) {
-      return res.status(500).json({ error: "Failed to delete staff member" });
-    }
+    staff = staff.filter(s => s.id !== id && s.userId !== id);
+    syncStore();
     res.status(200).json({ success: true });
+  });
+
+  // --- Staff Settings: Profile Sync with Manager's Staff Directory ---
+  app.put("/api/staff/profile", requireAuth(["staff", "manager", "admin"]), async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { name, username, email, phone, profilePicture, avatar, photo } = req.body;
+      const pic = profilePicture || avatar || photo;
+
+      // 1. Find user in MOCK_USERS
+      const userIndex = MOCK_USERS.findIndex(u => 
+        (u.user && u.user.id === userId) || 
+        u.username === req.user.username || 
+        (u.email && req.user.email && u.email.toLowerCase() === req.user.email.toLowerCase())
+      );
+
+      if (userIndex === -1) {
+        return res.status(404).json({ error: "User account not found" });
+      }
+
+      const existingUser = MOCK_USERS[userIndex];
+      const oldEmail = (existingUser.email || existingUser.user?.email || '').toLowerCase().trim();
+
+      if (username && username !== existingUser.username) {
+        const cleanUser = username.trim().toLowerCase();
+        const usernameTaken = MOCK_USERS.some(u => u !== existingUser && u.username?.toLowerCase() === cleanUser);
+        if (usernameTaken) {
+          return res.status(400).json({ error: "Username is already taken by another user." });
+        }
+        existingUser.username = cleanUser;
+        (existingUser.user as any).username = cleanUser;
+      }
+
+      if (email && email.toLowerCase().trim() !== oldEmail) {
+        const cleanMail = email.toLowerCase().trim();
+        const emailTaken = MOCK_USERS.some(u => u !== existingUser && u.email?.toLowerCase() === cleanMail);
+        if (emailTaken) {
+          return res.status(400).json({ error: "Email is already registered by another account." });
+        }
+        existingUser.email = cleanMail;
+        (existingUser.user as any).email = cleanMail;
+      }
+
+      if (name) existingUser.user.name = name.trim();
+      if (phone) (existingUser.user as any).phone = phone.trim();
+      if (pic) {
+        (existingUser.user as any).avatar = pic;
+        (existingUser.user as any).photo = pic;
+        (existingUser.user as any).profilePicture = pic;
+      }
+
+      // 2. Directly update corresponding staff record in manager's staff directory
+      let updatedStaffRecord = null;
+      for (let i = 0; i < staff.length; i++) {
+        const s = staff[i];
+        const matchesStaff = 
+          s.userId === userId || 
+          s.id === userId || 
+          (oldEmail && s.email && s.email.toLowerCase() === oldEmail) ||
+          (email && s.email && s.email.toLowerCase() === email.toLowerCase().trim());
+
+        if (matchesStaff) {
+          staff[i] = {
+            ...staff[i],
+            name: name ? name.trim() : staff[i].name,
+            username: username || staff[i].username,
+            email: email ? email.toLowerCase().trim() : staff[i].email,
+            phone: phone ? phone.trim() : staff[i].phone,
+            photo: pic || staff[i].photo,
+            avatar: pic || staff[i].avatar,
+            updatedAt: new Date().toISOString()
+          };
+          updatedStaffRecord = staff[i];
+          break;
+        }
+      }
+
+      syncStore();
+
+      return res.json({
+        success: true,
+        user: existingUser.user,
+        staffRecord: updatedStaffRecord
+      });
+    } catch (err: any) {
+      console.error("Error updating staff profile:", err);
+      res.status(500).json({ error: err.message || "Failed to update profile" });
+    }
+  });
+
+  // --- Staff Recruitment & Open Vacancies on Hostels ---
+  app.put("/api/hostels/:id/recruitment", requireAuth(["manager", "admin"]), async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { staffHiringOpen, openStaffRoles } = req.body;
+
+      const hostelIndex = hostels.findIndex(h => h.id === id);
+      if (hostelIndex === -1) {
+        return res.status(404).json({ error: "Hostel not found" });
+      }
+
+      hostels[hostelIndex] = {
+        ...hostels[hostelIndex],
+        staffHiringOpen: typeof staffHiringOpen === 'boolean' ? staffHiringOpen : true,
+        openStaffRoles: Array.isArray(openStaffRoles) ? openStaffRoles : []
+      };
+
+      syncStore();
+      return res.json({ success: true, hostel: hostels[hostelIndex] });
+    } catch (err: any) {
+      console.error("Error updating hostel recruitment:", err);
+      res.status(500).json({ error: "Failed to update recruitment settings" });
+    }
+  });
+
+  // --- Staff Applications: Apply, Review & Decisions ---
+  // --- Admin Staff Verification Endpoint ---
+  app.get("/api/admin/staff-verifications", requireAuth(["admin"]), async (req: any, res) => {
+    try {
+      const staffList = MOCK_USERS
+        .filter(u => u.user?.role === 'staff')
+        .map(u => {
+          const usr = ((u as any).user || u) as any;
+          return {
+            id: usr.id,
+            userId: usr.id,
+            name: usr.name,
+            username: (u as any).username || usr.username,
+            email: usr.email,
+            phone: usr.phone,
+            role: usr.staffRole || usr.specialization || 'Staff Member',
+            specialization: usr.specialization,
+            yearsExperience: usr.yearsExperience,
+            nationalId: usr.nationalId,
+            idType: usr.idType,
+            idCardDoc: usr.idCardDoc,
+            cvData: usr.cvData,
+            cvFileName: usr.cvFileName,
+            verificationStatus: usr.verificationStatus || (usr.isVerified ? 'Verified' : 'Pending'),
+            isVerified: Boolean(usr.isVerified || usr.verificationStatus === 'Verified' || usr.verificationStatus === 'verified'),
+            createdAt: usr.createdAt || new Date().toISOString()
+          };
+        });
+      res.json(staffList);
+    } catch (err: any) {
+      res.status(500).json({ error: "Failed to fetch staff verifications" });
+    }
+  });
+
+  app.put("/api/admin/staff-verifications/:id/decision", requireAuth(["admin"]), async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { status, decision, reviewNotes } = req.body;
+      const finalStatus = status || decision || 'Verified';
+
+      const userIndex = MOCK_USERS.findIndex(u => (u as any).user?.id === id || u.username === id);
+      if (userIndex === -1) {
+        return res.status(404).json({ error: "Staff account not found" });
+      }
+
+      const staffUserObj = MOCK_USERS[userIndex] as any;
+      const isApproved = finalStatus === 'Verified' || finalStatus === 'Approved';
+      const statusText = isApproved ? 'Verified' : 'Rejected';
+
+      if (staffUserObj.user) {
+        staffUserObj.user.verificationStatus = statusText;
+        staffUserObj.user.isVerified = isApproved;
+      }
+      staffUserObj.verificationStatus = statusText;
+      staffUserObj.isVerified = isApproved;
+
+      // Also update in staff array if present
+      const staffIndex = staff.findIndex(s => s.userId === id || s.id === id);
+      if (staffIndex !== -1) {
+        (staff[staffIndex] as any).verificationStatus = statusText;
+        (staff[staffIndex] as any).isVerified = isApproved;
+      }
+
+      // Notify the staff member
+      notifications.unshift({
+        id: `notif-vrf-dec-${Date.now()}`,
+        studentId: staffUserObj.user.id,
+        title: isApproved ? `Staff Verification Approved!` : `Staff Verification Status Update`,
+        message: isApproved
+          ? `Congratulations! Your staff profile, CV, and National ID credentials have been verified by PineVela Administration. You are now unlocked to apply for positions at accredited hostels.`
+          : `Your staff credential verification status has been updated to ${statusText}.${reviewNotes ? ` Reason: ${reviewNotes}` : ''}`,
+        type: isApproved ? 'success' : 'warning',
+        date: new Date().toISOString().split('T')[0],
+        read: false
+      });
+
+      activities.unshift({
+        id: `act-${Date.now()}`,
+        text: `Staff verification for ${staffUserObj.user.name} (@${staffUserObj.user.username}) marked as ${statusText}`,
+        time: 'Just now',
+        type: isApproved ? 'success' : 'warning'
+      });
+
+      syncStore();
+      return res.json({
+        success: true,
+        user: staffUserObj.user,
+        message: `Staff member account ${statusText} successfully.`
+      });
+    } catch (err: any) {
+      console.error("Error processing staff verification decision:", err);
+      return res.status(500).json({ error: err.message || "Failed to process verification decision" });
+    }
+  });
+
+  // --- Admin Disable / Ban / Update Staff Account Status ---
+  app.put("/api/admin/staff-verifications/:id/status", requireAuth(["admin"]), async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { accountStatus, reason } = req.body; // 'Active' | 'Disabled' | 'Banned'
+
+      if (!accountStatus || !['Active', 'Disabled', 'Banned'].includes(accountStatus)) {
+        return res.status(400).json({ error: "Invalid status. Must be 'Active', 'Disabled', or 'Banned'." });
+      }
+
+      const userIndex = MOCK_USERS.findIndex(u => (u as any).user?.id === id || u.username === id || (u as any).user?.username === id);
+      if (userIndex === -1) {
+        return res.status(404).json({ error: "Staff account not found" });
+      }
+
+      const staffUserObj = MOCK_USERS[userIndex] as any;
+      if (staffUserObj.user) {
+        staffUserObj.user.accountStatus = accountStatus;
+        staffUserObj.user.status = accountStatus;
+        if (accountStatus === 'Disabled') staffUserObj.user.isDisabled = true;
+        if (accountStatus === 'Banned') staffUserObj.user.isBanned = true;
+        if (accountStatus === 'Active') {
+          staffUserObj.user.isDisabled = false;
+          staffUserObj.user.isBanned = false;
+        }
+      }
+      staffUserObj.accountStatus = accountStatus;
+      staffUserObj.status = accountStatus;
+
+      // Update in staff list
+      const staffIdx = staff.findIndex(s => s.userId === id || s.id === id);
+      if (staffIdx !== -1) {
+        (staff[staffIdx] as any).accountStatus = accountStatus;
+        (staff[staffIdx] as any).status = accountStatus;
+      }
+
+      // Notify staff member
+      notifications.unshift({
+        id: `notif-stf-stat-${Date.now()}`,
+        studentId: staffUserObj.user ? staffUserObj.user.id : id,
+        title: `Account Access Status Update: ${accountStatus}`,
+        message: accountStatus === 'Active'
+          ? `Your staff account access has been restored to Active status by Administration.`
+          : `Your staff account access has been set to ${accountStatus}.${reason ? ` Reason: ${reason}` : ''}`,
+        type: accountStatus === 'Active' ? 'success' : 'danger',
+        date: new Date().toISOString().split('T')[0],
+        read: false
+      });
+
+      activities.unshift({
+        id: `act-stf-stat-${Date.now()}`,
+        text: `Staff account for ${staffUserObj.user?.name || id} set to ${accountStatus}`,
+        time: 'Just now',
+        type: accountStatus === 'Active' ? 'info' : 'warning'
+      });
+
+      syncStore();
+      return res.json({
+        success: true,
+        accountStatus,
+        user: staffUserObj.user,
+        message: `Staff member account marked as ${accountStatus}.`
+      });
+    } catch (err: any) {
+      console.error("Error updating staff account status:", err);
+      return res.status(500).json({ error: err.message || "Failed to update staff account status" });
+    }
+  });
+
+  app.get("/api/staff-applications", requireAuth(), async (req: any, res) => {
+    try {
+      const userRole = req.user.role;
+      const userId = req.user.id;
+      const userEmail = (req.user.email || '').toLowerCase().trim();
+      const userName = (req.user.name || '').toLowerCase().trim();
+
+      if (userRole === 'staff') {
+        const staffApps = staffApplications.filter(a => 
+          a.staffId === userId || 
+          (a.staffEmail && a.staffEmail.toLowerCase() === userEmail) ||
+          (a.email && a.email.toLowerCase() === userEmail)
+        );
+        return res.json(staffApps);
+      }
+
+      if (userRole === 'manager') {
+        const managerHostels = hostels.filter(h => 
+          h.managerId === userId || 
+          h.assignedManagerId === userId ||
+          (h.managerEmail && userEmail && h.managerEmail.toLowerCase().trim() === userEmail) ||
+          (h.managerName && userName && h.managerName.toLowerCase().trim() === userName)
+        );
+        const hostelIds = new Set(managerHostels.map(h => h.id));
+        const hostelNames = new Set(managerHostels.map(h => h.name?.toLowerCase().trim()));
+
+        const managerApps = staffApplications.filter(a => 
+          hostelIds.has(a.hostelId) || 
+          (a.managerId && a.managerId === userId) ||
+          (a.managerEmail && userEmail && a.managerEmail.toLowerCase().trim() === userEmail) ||
+          (a.hostelName && hostelNames.has(a.hostelName.toLowerCase().trim()))
+        );
+        return res.json(managerApps);
+      }
+
+      // Admin gets all
+      return res.json(staffApplications);
+    } catch (err: any) {
+      console.error("Error fetching staff applications:", err);
+      res.status(500).json({ error: "Failed to load staff applications" });
+    }
+  });
+
+  app.post("/api/staff-applications", requireAuth(["staff", "student", "manager", "admin"]), async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const userEmail = (req.user.email || req.body.email || '').toLowerCase().trim();
+
+      // Check verification status: Staff MUST be verified by admin before applying
+      const userRecord = MOCK_USERS.find(u => u.user?.id === userId || (u.email && userEmail && u.email.toLowerCase() === userEmail));
+      const isVerified = Boolean(
+        (req.user as any).isVerified === true ||
+        (req.user as any).verificationStatus === 'Verified' ||
+        (req.user as any).verificationStatus === 'verified' ||
+        (userRecord?.user as any)?.isVerified === true ||
+        (userRecord?.user as any)?.verificationStatus === 'Verified' ||
+        (userRecord?.user as any)?.verificationStatus === 'verified'
+      );
+
+      if (!isVerified && req.user.role === 'staff') {
+        return res.status(403).json({
+          error: "Your staff account is currently pending administrative verification of your submitted CV and National ID credentials. You cannot submit job applications until an Administrator verifies your credentials."
+        });
+      }
+
+      // Check if applicant already has a pending application
+      const activePending = staffApplications.find(a => 
+        (a.staffId === userId || (a.staffEmail && a.staffEmail.toLowerCase() === userEmail)) &&
+        a.status === 'pending'
+      );
+
+      if (activePending) {
+        return res.status(400).json({
+          error: `You already have an active staff application pending review for "${activePending.role}" at ${activePending.hostelName}. You cannot apply for another staff role until a decision is finalized.`
+        });
+      }
+
+      const {
+        applicantName,
+        phone,
+        email,
+        role,
+        hostelId,
+        hostelName,
+        nationalId,
+        idDocumentUrl,
+        cvUrl,
+        cvData,
+        cvFileName,
+        coverLetter
+      } = req.body;
+
+      if (!role || !hostelId || !phone) {
+        return res.status(400).json({ error: "Role, hostel, and phone number are required." });
+      }
+
+      const targetHostel = hostels.find(h => 
+        h.id === hostelId || 
+        (h.name && hostelName && h.name.toLowerCase().trim() === hostelName.toLowerCase().trim()) ||
+        (h.name && hostelId && h.name.toLowerCase().trim() === hostelId.toLowerCase().trim())
+      );
+      const finalHostelName = targetHostel?.name || hostelName || "Accredited Hostel";
+
+      const newApp = {
+        id: `stf-app-${Date.now()}`,
+        staffId: userId,
+        staffUsername: req.user.username || '',
+        staffEmail: userEmail || email,
+        applicantName: applicantName || req.user.name || 'Applicant',
+        phone: phone || req.user.phone || '',
+        role,
+        hostelId: targetHostel?.id || hostelId,
+        hostelName: finalHostelName,
+        managerId: targetHostel?.managerId || targetHostel?.assignedManagerId || '',
+        managerEmail: targetHostel?.managerEmail || '',
+        managerName: targetHostel?.managerName || '',
+        nationalId: nationalId || '',
+        idDocumentUrl: idDocumentUrl || '',
+        cvUrl: cvUrl || '',
+        cvData: cvData || '',
+        cvFileName: cvFileName || 'Curriculum_Vitae.pdf',
+        coverLetter: coverLetter || '',
+        status: 'pending',
+        appliedAt: new Date().toISOString()
+      };
+
+      staffApplications.unshift(newApp);
+
+      // Notify the manager
+      const managerNotif = {
+        id: `notif-${Date.now()}`,
+        studentId: targetHostel?.managerId || 'manager_101',
+        title: `New Staff Application: ${role}`,
+        message: `${newApp.applicantName} submitted a job application with CV for the position of "${role}" at ${finalHostelName}.`,
+        type: 'info',
+        date: new Date().toISOString().split('T')[0],
+        read: false
+      };
+      notifications.unshift(managerNotif);
+
+      activities.unshift({
+        id: `act-${Date.now()}`,
+        text: `Staff application submitted by ${newApp.applicantName} for ${role} at ${finalHostelName}`,
+        time: 'Just now',
+        type: 'info'
+      });
+
+      syncStore();
+      return res.status(201).json(newApp);
+    } catch (err: any) {
+      console.error("Error creating staff application:", err);
+      res.status(500).json({ error: err.message || "Failed to submit staff application" });
+    }
+  });
+
+  app.put("/api/staff-applications/:id/decision", requireAuth(["manager", "admin"]), async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { decision, reviewNotes, shift, assignedBlock } = req.body;
+
+      if (!decision || (decision !== 'Approved' && decision !== 'Rejected')) {
+        return res.status(400).json({ error: "Decision must be 'Approved' or 'Rejected'" });
+      }
+
+      const appIndex = staffApplications.findIndex(a => a.id === id);
+      if (appIndex === -1) {
+        return res.status(404).json({ error: "Staff application not found" });
+      }
+
+      const application = staffApplications[appIndex];
+      application.status = decision;
+      application.reviewedAt = new Date().toISOString();
+      application.reviewNotes = reviewNotes || '';
+
+      if (decision === 'Approved') {
+        application.shift = shift || 'Day Shift';
+        application.assignedBlock = assignedBlock || 'All Blocks';
+
+        const staffId = `staff-${application.staffId || Date.now()}`;
+        const existingStaffIdx = staff.findIndex((s: any) => s.userId === application.staffId || s.id === staffId);
+        
+        const staffRecord = {
+          id: staffId,
+          userId: application.staffId,
+          name: application.applicantName,
+          role: application.role,
+          phone: application.phone,
+          email: application.staffEmail,
+          shift: shift || 'Day Shift',
+          assignedBlock: assignedBlock || 'All Wings',
+          status: 'Active',
+          hostelId: application.hostelId,
+          hostelName: application.hostelName,
+          nationalId: application.nationalId,
+          cvUrl: application.cvUrl,
+          cvData: application.cvData,
+          createdAt: new Date().toISOString()
+        };
+
+        if (existingStaffIdx !== -1) {
+          staff[existingStaffIdx] = staffRecord;
+        } else {
+          staff.unshift(staffRecord);
+        }
+
+        // Notify staff applicant
+        notifications.unshift({
+          id: `notif-${Date.now()}`,
+          studentId: application.staffId,
+          title: `Application Approved!`,
+          message: `Congratulations! Your staff application for "${application.role}" at ${application.hostelName} has been approved by the manager. You are now officially appointed to the property staff roster.`,
+          type: 'success',
+          date: new Date().toISOString().split('T')[0],
+          read: false
+        });
+
+        activities.unshift({
+          id: `act-${Date.now()}`,
+          text: `Manager approved staff application of ${application.applicantName} as ${application.role} at ${application.hostelName}`,
+          time: 'Just now',
+          type: 'success'
+        });
+      } else {
+        // Rejected
+        notifications.unshift({
+          id: `notif-${Date.now()}`,
+          studentId: application.staffId,
+          title: `Staff Application Notice`,
+          message: `Your application for "${application.role}" at ${application.hostelName} was reviewed and not accepted at this time. Notes: ${reviewNotes || 'Criteria not met'}. You are now eligible to apply for other positions.`,
+          type: 'warning',
+          date: new Date().toISOString().split('T')[0],
+          read: false
+        });
+
+        activities.unshift({
+          id: `act-${Date.now()}`,
+          text: `Staff application for ${application.applicantName} at ${application.hostelName} was not accepted`,
+          time: 'Just now',
+          type: 'warning'
+        });
+      }
+
+      syncStore();
+      return res.json({ success: true, application });
+    } catch (err: any) {
+      console.error("Error processing staff application decision:", err);
+      res.status(500).json({ error: err.message || "Failed to process decision" });
+    }
+  });
+
+  // --- Dedicated Username Availability Check ---
+  app.get("/api/auth/check-username", (req, res) => {
+    const raw = (req.query.username as string || '').toLowerCase().trim();
+    if (!raw) {
+      return res.json({ available: false, message: "Username cannot be empty" });
+    }
+    const clean = raw.replace(/[^a-z0-9_]/g, '_');
+    const isTaken = MOCK_USERS.some(u => (u.username || '').toLowerCase() === clean);
+    let suggestion = clean;
+    if (isTaken) {
+      let suffix = 1;
+      while (MOCK_USERS.some(u => (u.username || '').toLowerCase() === `${clean}_${suffix}`)) {
+        suffix += 1;
+      }
+      suggestion = `${clean}_${suffix}`;
+    }
+    return res.json({
+      available: !isTaken,
+      username: clean,
+      suggestion: isTaken ? suggestion : undefined
+    });
+  });
+
+  // --- Dedicated Staff Account Registration Endpoint ---
+  app.post("/api/auth/register-staff", async (req, res) => {
+    try {
+      const {
+        name,
+        username,
+        email,
+        phone,
+        altPhone,
+        password,
+        role: staffRole,
+        specialization,
+        yearsExperience,
+        preferredShift,
+        address,
+        city,
+        region,
+        digitalAddress,
+        commutePreference,
+        nationalId,
+        idType,
+        idCardDoc,
+        cvData,
+        cvFileName,
+        qualifications,
+        experienceSummary,
+        declarationAccepted,
+        photoUrl
+      } = req.body;
+
+      if (!name || !email || !password) {
+        return res.status(400).json({ error: "Full Name, Email address, and Password are required." });
+      }
+
+      const cleanEmail = email.toLowerCase().trim();
+      const existingEmail = MOCK_USERS.find(u => u.email?.toLowerCase() === cleanEmail);
+      if (existingEmail) {
+        return res.status(400).json({ error: "An account with this email address already exists. Please log in or use another email." });
+      }
+
+      let baseUsername = (username || cleanEmail.split('@')[0])
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9_]/g, '_')
+        .replace(/^_+|_+$/g, '');
+
+      if (!baseUsername) {
+        baseUsername = `staff_${Math.floor(1000 + Math.random() * 9000)}`;
+      }
+
+      // Auto-resolve username collisions if duplicate by generating next unique handle
+      let finalUsername = baseUsername;
+      let suffix = 1;
+      while (MOCK_USERS.some(u => (u.username || '').toLowerCase() === finalUsername.toLowerCase())) {
+        suffix += 1;
+        finalUsername = `${baseUsername}_${suffix}`;
+      }
+
+      const staffUserId = `staff-user-${Date.now()}`;
+      const token = `token_staff_${staffUserId}`;
+
+      const assignedSpecialization = specialization || staffRole || 'Facilities & Maintenance Technician';
+
+      const newStaffUser = {
+        email: cleanEmail,
+        username: finalUsername,
+        password,
+        user: {
+          id: staffUserId,
+          name: name.trim(),
+          username: finalUsername,
+          email: cleanEmail,
+          phone: phone || '',
+          altPhone: altPhone || '',
+          role: 'staff',
+          staffRole: assignedSpecialization,
+          specialization: assignedSpecialization,
+          yearsExperience: yearsExperience || '1 - 3 Years',
+          preferredShift: preferredShift || 'Day Shift (8 AM - 5 PM)',
+          address: address || '',
+          city: city || 'Accra',
+          region: region || 'Greater Accra',
+          digitalAddress: digitalAddress || '',
+          commutePreference: commutePreference || 'Daily Commuter',
+          nationalId: nationalId || '',
+          idType: idType || 'Ghana Card (National ID)',
+          idCardDoc: idCardDoc || '',
+          cvData: cvData || '',
+          cvFileName: cvFileName || '',
+          qualifications: qualifications || '',
+          experienceSummary: experienceSummary || '',
+          declarationAccepted: Boolean(declarationAccepted),
+          photo: photoUrl || '',
+          avatar: photoUrl || '',
+          verificationStatus: 'Pending',
+          isVerified: false,
+          token,
+          createdAt: new Date().toISOString()
+        }
+      };
+
+      MOCK_USERS.push(newStaffUser);
+
+      // Add to staff collection so Admin and Managers can track verification status
+      const newStaffRecord = {
+        id: `staff-${staffUserId}`,
+        userId: staffUserId,
+        name: name.trim(),
+        username: finalUsername,
+        email: cleanEmail,
+        phone: phone || '',
+        role: assignedSpecialization,
+        staffRole: assignedSpecialization,
+        specialization: assignedSpecialization,
+        yearsExperience: yearsExperience || '1 - 3 Years',
+        nationalId: nationalId || '',
+        idType: idType || 'Ghana Card (National ID)',
+        idCardDoc: idCardDoc || '',
+        cvData: cvData || '',
+        cvFileName: cvFileName || '',
+        verificationStatus: 'Pending',
+        isVerified: false,
+        createdAt: new Date().toISOString()
+      };
+      staff.unshift(newStaffRecord);
+
+      // Create Admin Notification for staff verification
+      notifications.unshift({
+        id: `notif-vrf-${Date.now()}`,
+        studentId: 'admin_001',
+        title: `Staff Registration Verification Required: ${name.trim()}`,
+        message: `Staff applicant "${name.trim()}" (@${finalUsername}) has registered and submitted CV & National ID for verification review.`,
+        type: 'verification',
+        date: new Date().toISOString().split('T')[0],
+        read: false
+      });
+
+      activities.unshift({
+        id: `act-${Date.now()}`,
+        text: `New staff account registered for "${name}" (@${finalUsername}) - Pending Verification`,
+        time: 'Just now',
+        type: 'warning'
+      });
+
+      syncStore();
+
+      return res.status(201).json({
+        success: true,
+        token,
+        user: newStaffUser.user
+      });
+    } catch (err: any) {
+      console.error("Error registering staff account:", err);
+      return res.status(500).json({ error: err.message || "Failed to register staff account" });
+    }
   });
 
   // --- Manager Account Settings Endpoints ---
@@ -4006,7 +4732,7 @@ async function startServer() {
     res.status(201).json(saved);
   });
 
-  app.get("/api/activities", requireAuth(["admin"]), async (req, res) => {
+  app.get("/api/activities", requireAuth(["admin", "manager", "staff", "student"]), async (req, res) => {
     const list = await dbGetActivities(activities);
     res.json(list);
   });

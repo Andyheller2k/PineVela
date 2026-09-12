@@ -11,7 +11,8 @@ import {
   Building2, Users, MapPin, DollarSign, CheckCircle2, XCircle, Clock, Plus, 
   ShieldCheck, LogOut, Search, Home, Hotel, Coffee, UserPlus, 
   AlertCircle, Check, Sparkles, ArrowRight, Layers, Wrench, Settings, Bell,
-  Send, MessageSquare, Phone, Mail, Shield, Trash2, Edit3, Eye, FileText, CheckCircle, Lock, Calendar, CalendarCheck
+  Send, MessageSquare, Phone, Mail, Shield, Trash2, Edit3, Eye, FileText, CheckCircle, Lock, Calendar, CalendarCheck,
+  Briefcase, Sliders, ExternalLink, Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -55,14 +56,7 @@ export default function PageManagerDashboard() {
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [showAccountSettingsModal, setShowAccountSettingsModal] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-  const [showWelcomePopup, setShowWelcomePopup] = useState(() => {
-    if (isPendingOnboarding) {
-      const sessionKey = `pinevela_welcome_dismissed_${user.id}`;
-      const dismissed = sessionStorage.getItem(sessionKey);
-      return !dismissed;
-    }
-    return false;
-  });
+  const [showWelcomePopup, setShowWelcomePopup] = useState(false);
 
   // Manager specific states
   const [properties, setProperties] = useState<any[]>([]);
@@ -72,6 +66,23 @@ export default function PageManagerDashboard() {
 
   // Staff state
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
+  const [staffApplications, setStaffApplications] = useState<any[]>([]);
+  const [staffSubTab, setStaffSubTab] = useState<'roster' | 'applications' | 'recruitment'>('roster');
+  const [selectedCvApp, setSelectedCvApp] = useState<any | null>(null);
+  const [approveModalApp, setApproveModalApp] = useState<any | null>(null);
+  const [approveShift, setApproveShift] = useState('Day Shift (8 AM - 5 PM)');
+  const [approveBlock, setApproveBlock] = useState('All Blocks');
+  const [hiringOpen, setHiringOpen] = useState(true);
+  const [recruitmentRoles, setRecruitmentRoles] = useState<any[]>([
+    { role: 'Facilities & Maintenance Technician', vacancies: 2, shift: 'Day Shift' },
+    { role: 'Security Officer (Night Shift)', vacancies: 1, shift: 'Night Shift' },
+    { role: 'Plumber & Water Systems Lead', vacancies: 1, shift: 'Day Shift' }
+  ]);
+  const [newRecruitRole, setNewRecruitRole] = useState('Facilities & Maintenance Technician');
+  const [newRecruitVacancies, setNewRecruitVacancies] = useState(1);
+  const [newRecruitShift, setNewRecruitShift] = useState('Day Shift (8 AM - 5 PM)');
+  const [savingRecruitment, setSavingRecruitment] = useState(false);
+
   const [showAddStaffModal, setShowAddStaffModal] = useState(false);
   const [newStaffName, setNewStaffName] = useState('');
   const [newStaffRole, setNewStaffRole] = useState('Front Desk Operations Lead');
@@ -196,6 +207,24 @@ export default function PageManagerDashboard() {
         setStaffList([]);
       }
 
+      // 4b. Fetch staff applications & CV submissions
+      const resStaffApps = await apiFetch('/api/staff-applications').catch(() => []);
+      if (Array.isArray(resStaffApps)) {
+        setStaffApplications(resStaffApps);
+      } else {
+        setStaffApplications([]);
+      }
+
+      // Load recruitment settings from primary property if present
+      if (managerProperties[0]) {
+        if (managerProperties[0].staffHiringOpen !== undefined) {
+          setHiringOpen(managerProperties[0].staffHiringOpen);
+        }
+        if (Array.isArray(managerProperties[0].openStaffRoles) && managerProperties[0].openStaffRoles.length > 0) {
+          setRecruitmentRoles(managerProperties[0].openStaffRoles);
+        }
+      }
+
       // 5. Fetch manager's board requests
       const resBoard = await apiFetch('/api/board-requests').catch(() => []);
       setBoardRequests(Array.isArray(resBoard) ? resBoard : []);
@@ -215,11 +244,18 @@ export default function PageManagerDashboard() {
         ]);
       }
       
-      // Determine initial tab after fetching properties
+      // Determine initial tab and popup after fetching properties
       if (managerProperties.some(isPropertyApproved)) {
         setActiveTab('overview');
+        setShowWelcomePopup(false);
       } else {
         setActiveTab('notifications');
+        // Only show welcome popup if the manager has NOT registered any hostel yet
+        if (managerProperties.length === 0) {
+          setShowWelcomePopup(true);
+        } else {
+          setShowWelcomePopup(false);
+        }
       }
     } catch (err) {
       console.error("Error loading manager data:", err);
@@ -233,10 +269,11 @@ export default function PageManagerDashboard() {
     if (!property) return [];
     if (Array.isArray(property.blocksList) && property.blocksList.length > 0) {
       return property.blocksList.map((b: any, idx: number) => {
-        const totalRooms = b.totalRooms || 200;
+        const totalRooms = b.totalRooms || 20;
         const floors = b.floors || 4;
         const bedsPerRoom = b.bedsPerRoom || 3;
         const roomsPerFloor = Math.ceil(totalRooms / floors);
+        const blockPrice = b.pricePerBlock !== undefined && b.pricePerBlock !== null ? b.pricePerBlock : (b.price || property.price || 3500);
         return {
           id: b.id || `block-${idx + 1}`,
           blockName: b.name || `Block ${String.fromCharCode(65 + idx)} (${idx === 0 ? 'Alpha' : 'Beta'})`,
@@ -244,14 +281,15 @@ export default function PageManagerDashboard() {
           totalRooms,
           roomsPerFloor,
           bedsPerRoom,
+          pricePerBlock: blockPrice,
           totalBeds: totalRooms * bedsPerRoom,
           roomPrefix: b.roomPrefix || String.fromCharCode(65 + idx),
           startNum: b.startNum || (idx + 1) * 100 + 1,
           genderCategory: idx === 0 ? 'Male & Female (Co-Ed Wing)' : 'Female Wing & Executive',
           roomTypes: [
-            { type: `${bedsPerRoom} in a Room (Standard)`, priceGHS: property.price || 35000, spaces: Math.round(totalRooms * bedsPerRoom * 0.7) },
-            { type: '2 in a Room (Deluxe Ensuite)', priceGHS: Math.round((property.price || 35000) * 1.2), spaces: Math.round(totalRooms * bedsPerRoom * 0.2) },
-            { type: '1 in a Room (Executive Private)', priceGHS: Math.round((property.price || 35000) * 1.6), spaces: Math.round(totalRooms * bedsPerRoom * 0.1) }
+            { type: `${bedsPerRoom} in a Room (Standard)`, priceGHS: blockPrice, spaces: Math.round(totalRooms * bedsPerRoom * 0.7) },
+            { type: '2 in a Room (Deluxe Ensuite)', priceGHS: Math.round(blockPrice * 1.2), spaces: Math.round(totalRooms * bedsPerRoom * 0.2) },
+            { type: '1 in a Room (Executive Private)', priceGHS: Math.round(blockPrice * 1.5), spaces: Math.round(totalRooms * bedsPerRoom * 0.1) }
           ],
           amenities: property.facilities || property.amenities || [
             'Fiber-Optic Wi-Fi', 'Standby Generator', '24/7 Uniformed Security', 'Borehole Water', 'Study Hall'
@@ -261,25 +299,32 @@ export default function PageManagerDashboard() {
     }
     
     if (Array.isArray(property.blocks) && property.blocks.length > 0) {
-      return property.blocks.map((b: any, idx: number) => ({
-        id: b.id || `block-${idx + 1}`,
-        blockName: b.blockName || b.name || `Block ${String.fromCharCode(65 + idx)}`,
-        floors: b.floors || 4,
-        totalRooms: b.totalRooms || 200,
-        roomsPerFloor: b.roomsPerFloor || 50,
-        bedsPerRoom: b.bedsPerRoom || 3,
-        totalBeds: b.totalBeds || (b.totalRooms || 200) * 3,
-        roomPrefix: b.roomPrefix || String.fromCharCode(65 + idx),
-        startNum: b.startNum || (idx + 1) * 100 + 1,
-        genderCategory: b.genderCategory || 'Mixed Community',
-        roomTypes: b.roomTypes || [
-          { type: 'Standard Room', priceGHS: property.price || 35000, spaces: 600 }
-        ],
-        amenities: b.amenities || property.facilities || []
-      }));
+      return property.blocks.map((b: any, idx: number) => {
+        const blockPrice = b.pricePerBlock !== undefined && b.pricePerBlock !== null ? b.pricePerBlock : (b.price || property.price || 3500);
+        const bedsPerRoom = b.bedsPerRoom || 3;
+        const totalRooms = b.totalRooms || 20;
+        return {
+          id: b.id || `block-${idx + 1}`,
+          blockName: b.blockName || b.name || `Block ${String.fromCharCode(65 + idx)}`,
+          floors: b.floors || 4,
+          totalRooms,
+          roomsPerFloor: b.roomsPerFloor || Math.ceil(totalRooms / (b.floors || 4)),
+          bedsPerRoom,
+          pricePerBlock: blockPrice,
+          totalBeds: b.totalBeds || (totalRooms * bedsPerRoom),
+          roomPrefix: b.roomPrefix || String.fromCharCode(65 + idx),
+          startNum: b.startNum || (idx + 1) * 100 + 1,
+          genderCategory: b.genderCategory || 'Mixed Community',
+          roomTypes: b.roomTypes || [
+            { type: `${bedsPerRoom} in a Room (Standard)`, priceGHS: blockPrice, spaces: totalRooms * bedsPerRoom }
+          ],
+          amenities: b.amenities || property.facilities || []
+        };
+      });
     }
 
     const cap = property.totalCapacity || property.capacity || 1200;
+    const defaultPrice = property.price || 3500;
     return [
       {
         id: 'block-1',
@@ -288,12 +333,13 @@ export default function PageManagerDashboard() {
         totalRooms: Math.ceil(cap / 6),
         roomsPerFloor: Math.ceil(cap / 24),
         bedsPerRoom: 3,
+        pricePerBlock: defaultPrice,
         totalBeds: Math.ceil(cap / 2),
         roomPrefix: 'A',
         startNum: 101,
         genderCategory: 'Male & Female (Co-Ed)',
         roomTypes: [
-          { type: '3 in a Room (Standard)', priceGHS: property.price || 35000, spaces: Math.ceil(cap / 2) }
+          { type: '3 in a Room (Standard)', priceGHS: defaultPrice, spaces: Math.ceil(cap / 2) }
         ],
         amenities: property.facilities || property.amenities || ['Fiber-Optic Wi-Fi', 'Standby Generator', 'Security']
       },
@@ -304,12 +350,13 @@ export default function PageManagerDashboard() {
         totalRooms: Math.ceil(cap / 6),
         roomsPerFloor: Math.ceil(cap / 24),
         bedsPerRoom: 3,
+        pricePerBlock: defaultPrice,
         totalBeds: Math.ceil(cap / 2),
         roomPrefix: 'B',
         startNum: 201,
         genderCategory: 'Executive & Quiet Wing',
         roomTypes: [
-          { type: '3 in a Room (Standard)', priceGHS: property.price || 35000, spaces: Math.ceil(cap / 2) }
+          { type: '3 in a Room (Standard)', priceGHS: defaultPrice, spaces: Math.ceil(cap / 2) }
         ],
         amenities: property.facilities || property.amenities || ['Fiber-Optic Wi-Fi', 'Standby Generator', 'Security']
       }
@@ -409,6 +456,64 @@ export default function PageManagerDashboard() {
     }
   };
 
+  const handleStaffAppDecision = async (appId: string, status: 'Approved' | 'Rejected', shift?: string, block?: string) => {
+    try {
+      await apiFetch(`/api/staff-applications/${appId}/decision`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          status,
+          shift: shift || 'Day Shift (8 AM - 5 PM)',
+          assignedBlock: block || 'All Blocks',
+          reviewNotes: status === 'Approved' ? 'Application reviewed and approved.' : 'Application reviewed. Position filled or criteria not met.'
+        })
+      });
+      setStaffApplications(prev => prev.map(a => a.id === appId ? { ...a, status } : a));
+      setApproveModalApp(null);
+      // If approved, refresh the staff list
+      if (status === 'Approved') {
+        const resStaff = await apiFetch('/api/staff').catch(() => []);
+        if (Array.isArray(resStaff)) setStaffList(resStaff);
+      }
+      triggerToast(`Application ${status.toLowerCase()} successfully!`);
+    } catch (err: any) {
+      triggerToast(err.message || 'Failed to update application decision.');
+    }
+  };
+
+  const handleSaveRecruitment = async () => {
+    if (!primaryProperty) {
+      triggerToast('Please ensure a hostel is registered to update recruitment settings.');
+      return;
+    }
+    setSavingRecruitment(true);
+    try {
+      await apiFetch(`/api/hostels/${primaryProperty.id}/recruitment`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          staffHiringOpen: hiringOpen,
+          openStaffRoles: recruitmentRoles
+        })
+      });
+      triggerToast('Staff recruitment settings published to accredited hostel listings!');
+    } catch (err: any) {
+      triggerToast(err.message || 'Failed to save recruitment settings.');
+    } finally {
+      setSavingRecruitment(false);
+    }
+  };
+
+  const handleAddRecruitmentRole = () => {
+    if (!newRecruitRole) return;
+    setRecruitmentRoles(prev => [
+      ...prev,
+      { role: newRecruitRole, vacancies: Number(newRecruitVacancies) || 1, shift: newRecruitShift }
+    ]);
+  };
+
+  const handleRemoveRecruitmentRole = (idx: number) => {
+    setRecruitmentRoles(prev => prev.filter((_, i) => i !== idx));
+  };
+
   const handleAddMaintenance = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newIssueTitle.trim()) {
@@ -499,13 +604,16 @@ export default function PageManagerDashboard() {
         properties.some(isPropApproved) || 
         Boolean(properties[0] && isPropApproved(properties[0]));
 
+      const hasAnyHostel = properties.length > 0;
+
       if (!hasApprovedProp) {
         setActiveTab('notifications');
-        const sessionKey = `pinevela_welcome_dismissed_${user.id}`;
-        const dismissed = sessionStorage.getItem(sessionKey);
-        if (!dismissed) {
+        // Welcoming onboarding popup remains persistent on login until manager has registered an approved hostel
+        if (!hasAnyHostel) {
           setShowWelcomePopup(true);
         }
+      } else {
+        setShowWelcomePopup(false);
       }
     }
   }, [loading, properties, user]);
@@ -515,8 +623,10 @@ export default function PageManagerDashboard() {
   };
 
   const confirmLogout = () => {
-    logout();
-    navigate('/');
+    navigate('/', { replace: true });
+    setTimeout(() => {
+      logout();
+    }, 50);
   };
 
   // Derived stats
@@ -699,9 +809,10 @@ export default function PageManagerDashboard() {
               <HostelRegistration 
                 onSuccess={(h) => {
                   setProperties([h]);
-                  triggerToast('Hostel Registration Submitted to Admin!');
+                  setShowWelcomePopup(false);
+                  triggerToast('Hostel Registration Submitted to Admin for Review!');
                   setShowRegistration(false);
-                  setActiveTab('overview');
+                  setActiveTab('notifications');
                 }} 
                 onCancel={() => setShowRegistration(false)} 
                 currentUserId={user?.id}
@@ -1172,78 +1283,451 @@ export default function PageManagerDashboard() {
             {activeTab === 'staff' && (
               <div className="animate-fadeIn relative z-10 space-y-6">
                 <div className="bg-white/70 border border-blue-200/50 p-6 md:p-8 rounded-3xl backdrop-blur-xl shadow-lg space-y-6">
+                  
+                  {/* Top Header & Sub-tabs */}
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-6">
                     <div>
                       <h3 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
                         <Users className="w-6 h-6 text-blue-600" />
-                        <span>Property Staff & Personnel Directory</span>
+                        <span>Property Staff & Recruitment Operations</span>
                       </h3>
-                      <p className="text-xs text-slate-500 mt-1">Manage assigned security officers, front desk managers, technicians, and janitorial supervisors.</p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Manage active hostel employees, review candidate applications & CVs, and publish open positions to accredited hostel listings.
+                      </p>
                     </div>
-                    <button 
-                      onClick={() => setShowAddStaffModal(true)}
-                      className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-5 py-3 rounded-2xl shadow-lg shadow-blue-600/30 transition-all cursor-pointer self-start md:self-auto"
-                    >
-                      <Plus className="w-4 h-4" />
-                      <span>Add Staff Member</span>
-                    </button>
+
+                    {/* Sub-Navigation Buttons */}
+                    <div className="flex flex-wrap items-center gap-2 bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200 self-start md:self-auto">
+                      <button
+                        type="button"
+                        onClick={() => setStaffSubTab('roster')}
+                        className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                          staffSubTab === 'roster'
+                            ? 'bg-white text-blue-900 shadow-sm'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        <Users className="w-3.5 h-3.5" />
+                        <span>Staff Roster ({staffList.length})</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setStaffSubTab('applications')}
+                        className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 relative ${
+                          staffSubTab === 'applications'
+                            ? 'bg-white text-blue-900 shadow-sm'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        <Briefcase className="w-3.5 h-3.5" />
+                        <span>Applications & CVs</span>
+                        {staffApplications.filter(a => a.status === 'pending').length > 0 && (
+                          <span className="w-5 h-5 bg-amber-500 text-slate-950 font-black text-[10px] rounded-full flex items-center justify-center">
+                            {staffApplications.filter(a => a.status === 'pending').length}
+                          </span>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setStaffSubTab('recruitment')}
+                        className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                          staffSubTab === 'recruitment'
+                            ? 'bg-white text-blue-900 shadow-sm'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        <Sliders className="w-3.5 h-3.5" />
+                        <span>Recruitment Settings</span>
+                      </button>
+                    </div>
                   </div>
 
-                  {/* Staff Grid */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
-                    {staffList.map(staff => (
-                      <div key={staff.id} className="p-6 bg-white border border-slate-200/80 rounded-2xl shadow-sm space-y-4 hover:shadow-md transition-all">
-                        <div className="flex justify-between items-start">
-                          <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 to-cyan-700 text-white flex items-center justify-center font-bold text-base shadow-sm">
-                              {staff.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                  {/* ======================================================== */}
+                  {/* SUBTAB 1: STAFF ROSTER                                   */}
+                  {/* ======================================================== */}
+                  {staffSubTab === 'roster' && (
+                    <div className="space-y-6">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-500">
+                          {staffList.length} Active Personnel Assigned to Property
+                        </span>
+                        <button 
+                          onClick={() => setShowAddStaffModal(true)}
+                          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Add Staff Member</span>
+                        </button>
+                      </div>
+
+                      {staffList.length === 0 ? (
+                        <div className="p-12 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                          <Users className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                          <p className="text-xs font-bold text-slate-700">No staff members enrolled yet</p>
+                          <p className="text-[11px] text-slate-400 mt-1">Review applicant CVs or add staff manually using the button above.</p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
+                          {staffList.map(staff => (
+                            <div key={staff.id} className="p-6 bg-white border border-slate-200/80 rounded-2xl shadow-sm space-y-4 hover:shadow-md transition-all">
+                              <div className="flex justify-between items-start">
+                                <div className="flex items-center gap-3">
+                                  {(staff as any).avatarUrl ? (
+                                    <img 
+                                      src={(staff as any).avatarUrl} 
+                                      alt={staff.name} 
+                                      className="w-12 h-12 rounded-2xl object-cover border border-slate-200 shadow-sm"
+                                    />
+                                  ) : (
+                                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 to-cyan-700 text-white flex items-center justify-center font-bold text-base shadow-sm">
+                                      {staff.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                                    </div>
+                                  )}
+                                  <div>
+                                    <h4 className="text-sm font-bold text-slate-900">{staff.name}</h4>
+                                    {(staff as any).username && (
+                                      <p className="text-[11px] text-slate-400 font-semibold">@{(staff as any).username}</p>
+                                    )}
+                                    <p className="text-xs text-blue-600 font-semibold mt-0.5">{staff.role}</p>
+                                  </div>
+                                </div>
+                                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${
+                                  staff.status === 'Active' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'
+                                }`}>
+                                  {staff.status}
+                                </span>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                <div><span className="text-slate-400 font-medium">Shift:</span> <span className="font-semibold text-slate-800">{staff.shift}</span></div>
+                                <div><span className="text-slate-400 font-medium">Block:</span> <span className="font-semibold text-slate-800">{staff.assignedBlock}</span></div>
+                                <div className="col-span-2"><span className="text-slate-400 font-medium">Phone:</span> <span className="font-semibold text-slate-800">{staff.phone}</span></div>
+                                {(staff as any).nationalId && (
+                                  <div className="col-span-2"><span className="text-slate-400 font-medium">ID / Ghana Card:</span> <span className="font-semibold text-slate-800">{(staff as any).nationalId}</span></div>
+                                )}
+                              </div>
+
+                              <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
+                                <div className="flex gap-2">
+                                  <a 
+                                    href={`tel:${staff.phone}`}
+                                    className="px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl font-bold flex items-center gap-1.5 transition-all"
+                                  >
+                                    <Phone className="w-3.5 h-3.5" />
+                                    <span>Call</span>
+                                  </a>
+                                  <a 
+                                    href={`mailto:${staff.email}`}
+                                    className="px-3 py-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl font-bold flex items-center gap-1.5 transition-all"
+                                  >
+                                    <Mail className="w-3.5 h-3.5" />
+                                    <span>Email</span>
+                                  </a>
+                                </div>
+
+                                <button 
+                                  onClick={() => handleDeleteStaff(staff.id)}
+                                  className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg transition-colors cursor-pointer"
+                                  title="Remove staff record"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
                             </div>
-                            <div>
-                              <h4 className="text-sm font-bold text-slate-900">{staff.name}</h4>
-                              <p className="text-xs text-blue-600 font-semibold">{staff.role}</p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ======================================================== */}
+                  {/* SUBTAB 2: APPLICATIONS & CV REVIEWS                      */}
+                  {/* ======================================================== */}
+                  {staffSubTab === 'applications' && (
+                    <div className="space-y-6">
+                      <div className="p-4 bg-amber-50/70 border border-amber-200/80 rounded-2xl flex items-start gap-3">
+                        <Briefcase className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+                        <div>
+                          <h4 className="text-xs font-black text-amber-950 uppercase tracking-wide">Candidate Application Portal</h4>
+                          <p className="text-xs text-amber-900 mt-0.5 font-medium">
+                            Candidates who apply via the accredited hostel page or staff portal appear here. You can read their full CV, review their ID, and choose to <strong>Approve & Enrol</strong> them directly into your staff roster or <strong>Reject</strong>.
+                          </p>
+                        </div>
+                      </div>
+
+                      {staffApplications.length === 0 ? (
+                        <div className="p-12 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                          <FileText className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                          <p className="text-xs font-bold text-slate-700">No candidate applications received yet</p>
+                          <p className="text-[11px] text-slate-400 mt-1">Applications submitted by candidates on your hostel listing will appear here in real time.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {staffApplications.map(app => (
+                            <div 
+                              key={app.id}
+                              className="p-5 bg-white border border-slate-200/80 rounded-2xl shadow-xs space-y-4 hover:border-blue-200 transition-all"
+                            >
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-black text-sm">
+                                    {app.applicantName?.slice(0, 2)?.toUpperCase() || 'ST'}
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <h4 className="text-sm font-black text-slate-900">{app.applicantName}</h4>
+                                      <span className="text-[10px] font-bold text-slate-400">({app.appliedAt || 'Recent'})</span>
+                                    </div>
+                                    <p className="text-xs font-bold text-blue-700">{app.role}</p>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                                    app.status === 'Approved' ? 'bg-emerald-100 text-emerald-800' :
+                                    app.status === 'Rejected' ? 'bg-rose-100 text-rose-800' :
+                                    'bg-amber-100 text-amber-900'
+                                  }`}>
+                                    {app.status === 'pending' ? 'Pending Review' : app.status}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Candidate Contact & ID Details */}
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                <div>
+                                  <span className="text-slate-400 font-bold block text-[10px] uppercase">Phone:</span>
+                                  <a href={`tel:${app.phone}`} className="font-semibold text-blue-700 hover:underline">{app.phone}</a>
+                                </div>
+                                <div>
+                                  <span className="text-slate-400 font-bold block text-[10px] uppercase">Email:</span>
+                                  <a href={`mailto:${app.email}`} className="font-semibold text-slate-800 hover:underline truncate block">{app.email}</a>
+                                </div>
+                                <div>
+                                  <span className="text-slate-400 font-bold block text-[10px] uppercase">Ghana Card / ID:</span>
+                                  <span className="font-semibold text-slate-800">{app.nationalId || 'Provided in Document'}</span>
+                                </div>
+                              </div>
+
+                              {/* Brief cover note / experience */}
+                              {app.coverLetter && (
+                                <div className="p-3 bg-blue-50/40 rounded-xl border border-blue-100 text-xs text-slate-700">
+                                  <span className="font-bold text-blue-900 block text-[10px] uppercase mb-0.5">Candidate Note:</span>
+                                  <p className="italic">"{app.coverLetter}"</p>
+                                </div>
+                              )}
+
+                              {/* Action Buttons: Read CV, View ID, Approve, Reject */}
+                              <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                                <div className="flex items-center gap-2">
+                                  {/* Read CV Button */}
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedCvApp(app)}
+                                    className="px-3.5 py-1.5 bg-blue-900 hover:bg-blue-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                                  >
+                                    <FileText className="w-3.5 h-3.5" />
+                                    <span>Read CV Document</span>
+                                  </button>
+
+                                  {/* ID Attachment preview if present */}
+                                  {app.idDocumentUrl && (
+                                    <a
+                                      href={app.idDocumentUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"
+                                    >
+                                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                                      <span>Inspect National ID</span>
+                                    </a>
+                                  )}
+                                </div>
+
+                                {/* Decision Controls for Pending Applications */}
+                                {app.status === 'pending' ? (
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleStaffAppDecision(app.id, 'Rejected')}
+                                      className="px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                                    >
+                                      Reject
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setApproveModalApp(app);
+                                        setApproveShift('Day Shift (8 AM - 5 PM)');
+                                        setApproveBlock('All Blocks');
+                                      }}
+                                      className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
+                                    >
+                                      <CheckCircle className="w-3.5 h-3.5" />
+                                      <span>Approve & Enrol</span>
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="text-xs font-bold text-slate-500">
+                                    Decision recorded: <span className="font-black text-slate-800">{app.status}</span>
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${
-                            staff.status === 'Active' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ======================================================== */}
+                  {/* SUBTAB 3: RECRUITMENT SETTINGS                            */}
+                  {/* ======================================================== */}
+                  {staffSubTab === 'recruitment' && (
+                    <div className="space-y-6">
+                      <div className="p-5 bg-gradient-to-r from-blue-900 to-indigo-900 rounded-2xl text-white space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-sm font-black flex items-center gap-2">
+                            <Sliders className="w-4 h-4 text-amber-400" />
+                            <span>Public Staff Recruitment & Vacancy Broadcaster</span>
+                          </h4>
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
+                            hiringOpen ? 'bg-emerald-400 text-slate-950' : 'bg-slate-400 text-slate-900'
                           }`}>
-                            {staff.status}
+                            {hiringOpen ? 'Hiring Open' : 'Hiring Paused'}
                           </span>
                         </div>
+                        <p className="text-xs text-blue-100">
+                          These roles are broadcast directly on your hostel's public page. Interested candidates can apply and attach their CVs for you to review.
+                        </p>
+                      </div>
 
-                        <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                          <div><span className="text-slate-400 font-medium">Shift:</span> <span className="font-semibold text-slate-800">{staff.shift}</span></div>
-                          <div><span className="text-slate-400 font-medium">Block:</span> <span className="font-semibold text-slate-800">{staff.assignedBlock}</span></div>
-                          <div className="col-span-2"><span className="text-slate-400 font-medium">Phone:</span> <span className="font-semibold text-slate-800">{staff.phone}</span></div>
+                      {/* Hiring Switch */}
+                      <div className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-2xl">
+                        <div>
+                          <span className="text-xs font-bold text-slate-900 block">Accept Staff Applications</span>
+                          <span className="text-[11px] text-slate-500">Allow job seekers to submit CVs and applications for this hostel</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setHiringOpen(!hiringOpen)}
+                          className={`w-14 h-7 flex items-center rounded-full p-1 transition-colors cursor-pointer ${
+                            hiringOpen ? 'bg-emerald-600 justify-end' : 'bg-slate-300 justify-start'
+                          }`}
+                        >
+                          <div className="bg-white w-5 h-5 rounded-full shadow-md transform" />
+                        </button>
+                      </div>
+
+                      {/* Open Roles List */}
+                      <div className="space-y-3">
+                        <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Active Open Roles Broadcasted</h4>
+                        
+                        <div className="space-y-2">
+                          {recruitmentRoles.map((r, idx) => (
+                            <div key={idx} className="flex items-center justify-between p-3.5 bg-white border border-slate-200 rounded-xl text-xs">
+                              <div className="flex items-center gap-2">
+                                <Briefcase className="w-4 h-4 text-blue-600" />
+                                <div>
+                                  <span className="font-bold text-slate-900">{r.role}</span>
+                                  <span className="text-[11px] text-slate-500 block">
+                                    Vacancies: {r.vacancies || 1} &bull; Shift: {r.shift || 'Day Shift'}
+                                  </span>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveRecruitmentRole(idx)}
+                                className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ))}
                         </div>
 
-                        <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
-                          <div className="flex gap-2">
-                            <a 
-                              href={`tel:${staff.phone}`}
-                              className="px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl font-bold flex items-center gap-1.5 transition-all"
-                            >
-                              <Phone className="w-3.5 h-3.5" />
-                              <span>Call</span>
-                            </a>
-                            <a 
-                              href={`mailto:${staff.email}`}
-                              className="px-3 py-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl font-bold flex items-center gap-1.5 transition-all"
-                            >
-                              <Mail className="w-3.5 h-3.5" />
-                              <span>Email</span>
-                            </a>
+                        {/* Add Role Form */}
+                        <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                          <span className="text-xs font-bold text-slate-900 block">Add Needed Role</span>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <div>
+                              <label className="text-[10px] font-bold text-slate-500 block mb-1">Role Title</label>
+                              <select
+                                value={newRecruitRole}
+                                onChange={(e) => setNewRecruitRole(e.target.value)}
+                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800"
+                              >
+                                <option value="Facilities & Maintenance Technician">Facilities & Maintenance Technician</option>
+                                <option value="Plumber & Water Systems Lead">Plumber & Water Systems Lead</option>
+                                <option value="Electrician & Backup Power Specialist">Electrician & Backup Power Specialist</option>
+                                <option value="Head of Security & Gate Operations">Head of Security & Gate Operations</option>
+                                <option value="Security Officer (Night Shift)">Security Officer (Night Shift)</option>
+                                <option value="Housekeeping Supervisor">Housekeeping Supervisor</option>
+                                <option value="Front Desk Operations Lead">Front Desk Operations Lead</option>
+                                <option value="Hostel Warden / Residential Assistant">Hostel Warden / Residential Assistant</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="text-[10px] font-bold text-slate-500 block mb-1">Number of Vacancies</label>
+                              <input
+                                type="number"
+                                min={1}
+                                max={20}
+                                value={newRecruitVacancies}
+                                onChange={(e) => setNewRecruitVacancies(Number(e.target.value))}
+                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="text-[10px] font-bold text-slate-500 block mb-1">Preferred Shift</label>
+                              <select
+                                value={newRecruitShift}
+                                onChange={(e) => setNewRecruitShift(e.target.value)}
+                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800"
+                              >
+                                <option value="Day Shift (8 AM - 5 PM)">Day Shift (8 AM - 5 PM)</option>
+                                <option value="Night Shift (6 PM - 6 AM)">Night Shift (6 PM - 6 AM)</option>
+                                <option value="Morning Shift (6 AM - 2 PM)">Morning Shift (6 AM - 2 PM)</option>
+                                <option value="Flexible / Rotating">Flexible / Rotating</option>
+                              </select>
+                            </div>
                           </div>
 
-                          <button 
-                            onClick={() => handleDeleteStaff(staff.id)}
-                            className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg transition-colors cursor-pointer"
+                          <button
+                            type="button"
+                            onClick={handleAddRecruitmentRole}
+                            className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-xl text-xs font-bold cursor-pointer"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            + Add Role to List
+                          </button>
+                        </div>
+
+                        {/* Save Button */}
+                        <div className="pt-2">
+                          <button
+                            type="button"
+                            onClick={handleSaveRecruitment}
+                            disabled={savingRecruitment}
+                            className="w-full sm:w-auto px-8 py-3 bg-blue-900 hover:bg-blue-800 text-white font-black text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+                          >
+                            {savingRecruitment ? (
+                              <span>Saving Recruitment Settings...</span>
+                            ) : (
+                              <>
+                                <CheckCircle className="w-4 h-4" />
+                                <span>Save & Publish Open Roles to Hostel Info</span>
+                              </>
+                            )}
                           </button>
                         </div>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  )}
+
                 </div>
 
                 {/* ADD STAFF MODAL */}
@@ -1281,7 +1765,8 @@ export default function PageManagerDashboard() {
                               <option value="Front Desk Operations Lead">Front Desk Operations Lead</option>
                               <option value="Head of Security & Biometrics">Head of Security & Biometrics</option>
                               <option value="Security Officer">Security Officer</option>
-                              <option value="Facilities & Plumbing Technician">Facilities & Plumbing Technician</option>
+                              <option value="Facilities & Maintenance Technician">Facilities & Maintenance Technician</option>
+                              <option value="Plumber & Water Systems Lead">Plumber & Water Systems Lead</option>
                               <option value="Electrical & Power Lead">Electrical & Power Lead</option>
                               <option value="Housekeeping Supervisor">Housekeeping Supervisor</option>
                             </select>
@@ -1298,6 +1783,17 @@ export default function PageManagerDashboard() {
                               required
                             />
                           </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">Email Address</label>
+                          <input 
+                            type="email" 
+                            value={newStaffEmail} 
+                            onChange={(e) => setNewStaffEmail(e.target.value)} 
+                            placeholder="staff@pinevela.com" 
+                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-600 focus:bg-white"
+                          />
                         </div>
 
                         <div className="grid grid-cols-2 gap-3">
@@ -1348,6 +1844,160 @@ export default function PageManagerDashboard() {
                     </div>
                   </div>
                 )}
+
+                {/* CV VIEWER MODAL */}
+                {selectedCvApp && (
+                  <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-60">
+                    <div className="bg-white rounded-3xl p-6 md:p-8 max-w-2xl w-full shadow-2xl border border-blue-200/80 space-y-4 max-h-[90vh] flex flex-col">
+                      <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                        <div>
+                          <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                            <FileText className="w-5 h-5 text-blue-600" />
+                            <span>Curriculum Vitae (CV) — {selectedCvApp.applicantName}</span>
+                          </h3>
+                          <p className="text-xs text-slate-500 mt-0.5">Role: <strong>{selectedCvApp.role}</strong> &bull; File: {selectedCvApp.cvFileName || 'CV Document'}</p>
+                        </div>
+                        <button onClick={() => setSelectedCvApp(null)} className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center cursor-pointer">
+                          <XCircle className="w-5 h-5 text-slate-500" />
+                        </button>
+                      </div>
+
+                      {/* CV Display Content */}
+                      <div className="flex-1 overflow-y-auto p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
+                        {selectedCvApp.cvData && selectedCvApp.cvData.startsWith('data:image/') ? (
+                          <img 
+                            src={selectedCvApp.cvData} 
+                            alt="CV Document" 
+                            className="max-w-full rounded-xl shadow-sm border border-slate-200 mx-auto"
+                          />
+                        ) : selectedCvApp.cvData && selectedCvApp.cvData.startsWith('data:application/pdf') ? (
+                          <iframe
+                            src={selectedCvApp.cvData}
+                            title="CV PDF"
+                            className="w-full h-96 rounded-xl border border-slate-200"
+                          />
+                        ) : (
+                          <div className="p-6 bg-white rounded-xl border border-slate-200 space-y-3">
+                            <div className="border-b pb-2">
+                              <h4 className="text-lg font-black text-slate-900">{selectedCvApp.applicantName}</h4>
+                              <p className="text-xs text-blue-700 font-bold">{selectedCvApp.role}</p>
+                              <p className="text-xs text-slate-500">Phone: {selectedCvApp.phone} | Email: {selectedCvApp.email}</p>
+                            </div>
+                            <div className="text-xs text-slate-700 space-y-2 leading-relaxed">
+                              <p className="font-bold text-slate-900">National ID: <span className="font-normal">{selectedCvApp.nationalId || 'Verified on application'}</span></p>
+                              <p className="font-bold text-slate-900">Professional Summary:</p>
+                              <p className="bg-slate-50 p-3 rounded-lg border border-slate-100 italic">
+                                {selectedCvApp.coverLetter || 'Experienced technician/supervisor seeking full-time assignment at an accredited university hostel.'}
+                              </p>
+                              <p className="font-bold text-slate-900">Attached File:</p>
+                              <p className="text-[11px] text-slate-500 font-mono">{selectedCvApp.cvFileName || 'Document delivered to manager'}</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                        <div className="text-xs text-slate-500">
+                          Applicant Phone: <strong className="text-slate-900">{selectedCvApp.phone}</strong>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedCvApp(null)}
+                            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold cursor-pointer"
+                          >
+                            Close
+                          </button>
+                          {selectedCvApp.status === 'pending' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setApproveModalApp(selectedCvApp);
+                                setSelectedCvApp(null);
+                              }}
+                              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black cursor-pointer flex items-center gap-1.5 shadow-sm"
+                            >
+                              <CheckCircle className="w-4 h-4" />
+                              <span>Approve & Enrol</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* APPROVE & ENROL MODAL */}
+                {approveModalApp && (
+                  <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-60">
+                    <div className="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl border border-emerald-200 space-y-5">
+                      <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                        <div>
+                          <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                            <CheckCircle className="w-5 h-5 text-emerald-600" />
+                            <span>Enrol Candidate into Staff Roster</span>
+                          </h3>
+                          <p className="text-xs text-slate-500 mt-0.5">{approveModalApp.applicantName} &bull; {approveModalApp.role}</p>
+                        </div>
+                        <button onClick={() => setApproveModalApp(null)} className="text-slate-400 hover:text-slate-600">
+                          <XCircle className="w-5 h-5" />
+                        </button>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div>
+                          <label className="text-xs font-bold text-slate-700 block mb-1">Assign Shift</label>
+                          <select
+                            value={approveShift}
+                            onChange={(e) => setApproveShift(e.target.value)}
+                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800"
+                          >
+                            <option value="Day Shift (8 AM - 5 PM)">Day Shift (8 AM - 5 PM)</option>
+                            <option value="Night Shift (6 PM - 6 AM)">Night Shift (6 PM - 6 AM)</option>
+                            <option value="Morning Shift (6 AM - 2 PM)">Morning Shift (6 AM - 2 PM)</option>
+                            <option value="On-Call 24/7">On-Call 24/7</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="text-xs font-bold text-slate-700 block mb-1">Assign Wing / Block</label>
+                          <select
+                            value={approveBlock}
+                            onChange={(e) => setApproveBlock(e.target.value)}
+                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800"
+                          >
+                            <option value="All Blocks">All Blocks</option>
+                            <option value="Block A (Alpha)">Block A (Alpha)</option>
+                            <option value="Block B (Beta)">Block B (Beta)</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-[11px] text-emerald-950">
+                        Approving this candidate will automatically notify them and add their active profile to your staff directory.
+                      </div>
+
+                      <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={() => setApproveModalApp(null)}
+                          className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-800"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleStaffAppDecision(approveModalApp.id, 'Approved', approveShift, approveBlock)}
+                          className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-md cursor-pointer flex items-center gap-1.5"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          <span>Confirm & Enrol Staff</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
               </div>
             )}
 
@@ -1591,6 +2241,44 @@ export default function PageManagerDashboard() {
 
                 {hasApprovedProperty && (
                   <>
+                    {/* OFFICIAL WELCOME BANNER FOR APPROVED MANAGERS */}
+                    <div className="bg-gradient-to-br from-emerald-700 via-teal-800 to-blue-950 border border-emerald-400/40 p-8 md:p-10 rounded-3xl shadow-2xl shadow-emerald-950/20 text-white relative overflow-hidden">
+                      <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-white/10 rounded-full blur-3xl mix-blend-overlay pointer-events-none"></div>
+                      <div className="absolute bottom-0 left-0 -ml-16 -mb-16 w-64 h-64 bg-teal-400/10 rounded-full blur-3xl mix-blend-overlay pointer-events-none"></div>
+                      
+                      <div className="relative z-10 space-y-4">
+                        <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/15 border border-white/25 rounded-full text-xs font-bold uppercase tracking-wider backdrop-blur-md">
+                          <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                          <span>Accredited Community Partner</span>
+                        </div>
+
+                        <h2 className="text-2xl md:text-3xl font-black tracking-tight text-white">
+                          Welcome to the PineVela Community, {user?.name || 'Manager'}!
+                        </h2>
+
+                        <p className="text-sm font-medium text-emerald-50 max-w-2xl leading-relaxed">
+                          Congratulations on successfully registering your residence with the PineVela community! Your property <strong>"{primaryProperty?.name || 'Your Residence'}"</strong> has been approved by the housing administration. All operational tabs are now fully unlocked — you can manage room capacity, view bookings, assign staff, and coordinate student services.
+                        </p>
+
+                        <div className="pt-2 flex flex-wrap gap-3">
+                          <button
+                            onClick={() => setActiveTab('overview')}
+                            className="px-5 py-2.5 bg-white text-emerald-950 font-black text-xs rounded-xl shadow-lg hover:bg-emerald-50 hover:scale-[1.02] transition-all cursor-pointer inline-flex items-center gap-2"
+                          >
+                            <ShieldCheck className="w-4 h-4 text-emerald-700" />
+                            <span>Go to Operations Overview</span>
+                          </button>
+                          <button
+                            onClick={() => setActiveTab('blocks')}
+                            className="px-5 py-2.5 bg-white/20 hover:bg-white/30 border border-white/30 text-white font-bold text-xs rounded-xl transition-all cursor-pointer inline-flex items-center gap-2"
+                          >
+                            <Layers className="w-4 h-4" />
+                            <span>Explore Blocks & Room Rates</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
                     <h2 className="text-2xl font-black text-slate-800 tracking-tight">System Alerts & Admin Board Direct Line</h2>
 
                     {/* MANAGER TO ADMIN BOARD REQUESTS */}
@@ -1765,14 +2453,22 @@ export default function PageManagerDashboard() {
       {/* WELCOME ONBOARDING POPUP */}
       <AnimatePresence>
         {showWelcomePopup && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-blue-950/30 backdrop-blur-xl">
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-blue-950/40 backdrop-blur-xl">
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 15 }}
               transition={{ duration: 0.3, ease: "easeOut" }}
-              className="relative max-w-md w-full bg-blue-50/70 backdrop-blur-2xl rounded-3xl p-8 border border-white/80 shadow-2xl shadow-blue-950/20 text-center space-y-6"
+              className="relative max-w-md w-full bg-blue-50/90 backdrop-blur-2xl rounded-3xl p-8 border border-white/80 shadow-2xl shadow-blue-950/30 text-center space-y-6"
             >
+              <button
+                onClick={() => setShowWelcomePopup(false)}
+                className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-white/50 transition-colors cursor-pointer"
+                title="Dismiss dialog"
+              >
+                <XCircle size={20} />
+              </button>
+
               <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-600 to-cyan-500 text-white flex items-center justify-center shadow-lg shadow-blue-500/20 animate-pulse">
                 <Building2 className="w-8 h-8" />
               </div>
@@ -1792,28 +2488,16 @@ export default function PageManagerDashboard() {
                 To unlock your operational dashboard and start accepting students, tap the button below to register your official residence property.
               </p>
 
-              <div className="pt-2 flex flex-col gap-2">
+              <div className="pt-2">
                 <button
                   onClick={() => {
-                    const sessionKey = `pinevela_welcome_dismissed_${user?.id}`;
-                    sessionStorage.setItem(sessionKey, 'true');
                     setShowWelcomePopup(false);
                     setShowRegistration(true);
                   }}
-                  className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-black rounded-2xl text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full py-4 bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-black rounded-2xl text-sm shadow-xl shadow-blue-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  <Building2 className="w-4 h-4" />
+                  <Building2 className="w-5 h-5" />
                   <span>Register a Hostel to Start</span>
-                </button>
-                <button
-                  onClick={() => {
-                    const sessionKey = `pinevela_welcome_dismissed_${user?.id}`;
-                    sessionStorage.setItem(sessionKey, 'true');
-                    setShowWelcomePopup(false);
-                  }}
-                  className="w-full py-2.5 bg-white/40 hover:bg-white/60 text-blue-900 border border-white/60 font-extrabold rounded-2xl text-xs transition-all cursor-pointer"
-                >
-                  Go to Notifications
                 </button>
               </div>
             </motion.div>
