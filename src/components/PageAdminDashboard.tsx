@@ -8,7 +8,7 @@ import LogoutConfirmationModal from './LogoutConfirmationModal';
 import { getPdfBlobUrl, downloadPdfDocument } from '../utils/pdfHelper';
 import { 
   Building2, Users, DollarSign, CheckCircle2, XCircle, Clock, Plus, 
-  ShieldCheck, LogOut, Search, Filter, Home, Hotel, Coffee, UserPlus, 
+  ShieldCheck, LogOut as LogOutIcon, Search, Filter, Home, Hotel, Coffee, UserPlus, 
   AlertCircle, Check, Trash2, Edit3, Eye, Sparkles, ArrowRight,
   Bell, MessageSquare, Send, X, FileText, File, Download, Lock, FileCheck,
   ChevronRight, ShieldAlert, RefreshCw, Ban, ExternalLink
@@ -451,7 +451,7 @@ export default function PageAdminDashboard() {
         </div>
         <div className="flex items-center gap-3">
           <button onClick={() => setShowLogoutConfirm(true)} className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg">
-            <LogOut className="w-4 h-4" />
+            <LogOutIcon className="w-4 h-4" />
           </button>
         </div>
       </header>
@@ -564,7 +564,7 @@ export default function PageAdminDashboard() {
             onClick={handleLogout}
             className="w-full flex items-center justify-center space-x-2 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 px-4 py-3 rounded-2xl font-semibold text-xs transition-all shadow-sm cursor-pointer"
           >
-            <LogOut className="w-4 h-4" />
+            <LogOutIcon className="w-4 h-4" />
             <span>Sign Out Session</span>
           </button>
         </div>

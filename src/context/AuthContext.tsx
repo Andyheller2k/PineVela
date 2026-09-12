@@ -53,7 +53,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
           });
           if (res.ok) {
-            const userData = await res.json();
+            const text = await res.text();
+            let userData;
+            try {
+              userData = JSON.parse(text);
+            } catch (e) {
+              console.error("Failed to parse auth me JSON:", e, "Raw response:", text.substring(0, 100));
+              throw new Error("Invalid response from auth service");
+            }
+            
             let hasApprovedHostel = false;
             let hostelStatus = 'None';
 
@@ -66,12 +74,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   }
                 });
                 if (hostelRes.ok) {
-                  const hostelData = await hostelRes.json();
-                  if (hostelData?.hostel) {
-                    const h = hostelData.hostel;
-                    const isApproved = h.isApproved === true || h.isApproved === 'true' || h.approvalStatus === 'Approved' || h.approvalStatus === 'approved' || h.status === 'Approved' || h.status === 'approved' || h.status === 'Active' || h.status === 'active' || h.status === 'Open' || h.status === 'open';
-                    hasApprovedHostel = isApproved;
-                    hostelStatus = h.approvalStatus || h.status || 'Pending';
+                  const hText = await hostelRes.text();
+                  try {
+                    const hostelData = JSON.parse(hText);
+                    if (hostelData?.hostel) {
+                      const h = hostelData.hostel;
+                      const isApproved = h.isApproved === true || h.isApproved === 'true' || h.approvalStatus === 'Approved' || h.approvalStatus === 'approved' || h.status === 'Approved' || h.status === 'approved' || h.status === 'Active' || h.status === 'active' || h.status === 'Open' || h.status === 'open';
+                      hasApprovedHostel = isApproved;
+                      hostelStatus = h.approvalStatus || h.status || 'Pending';
+                    }
+                  } catch (e) {
+                    console.error("Failed to parse manager hostel JSON:", e);
                   }
                 }
               } catch (e) {

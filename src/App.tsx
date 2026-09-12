@@ -68,9 +68,14 @@ function AppContent() {
       try {
         const response = await fetch('/api/hostels');
         if (response.ok) {
-          const hostelsList = await response.json();
-          if (Array.isArray(hostelsList)) {
-            setHostels(hostelsList);
+          const text = await response.text();
+          try {
+            const hostelsList = JSON.parse(text);
+            if (Array.isArray(hostelsList)) {
+              setHostels(hostelsList);
+            }
+          } catch (e) {
+            console.error("Failed to parse hostels JSON:", e, "Raw response:", text.substring(0, 100));
           }
         }
       } catch (err) {
@@ -88,8 +93,15 @@ function AppContent() {
         // Fetch hostels (publicly accessible now)
         const response = await fetch('/api/hostels');
         if (response.ok) {
-          const hostelsList = await response.json();
-          setHostels(hostelsList);
+          const text = await response.text();
+          try {
+            const hostelsList = JSON.parse(text);
+            setHostels(hostelsList);
+          } catch (e) {
+            console.error("Failed to parse public hostels JSON:", e, "Raw response:", text.substring(0, 100));
+          }
+        } else {
+          console.error("Failed to fetch public hostels, status:", response.status);
         }
       } catch (err) {
         console.error("Failed to fetch public hostels:", err);

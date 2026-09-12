@@ -1057,6 +1057,10 @@
   "staff": [],
   "staffApplications": [],
   "staffAuditLogs": [],
+  "staffChatRooms": [],
+  "staffChatMessages": [],
+  "staffReviews": [],
+  "jobOffers": [],
   "platformSettings": {
     "registrationFee": 3500,
     "commission": 5,

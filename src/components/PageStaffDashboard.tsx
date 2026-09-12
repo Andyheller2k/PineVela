@@ -9,7 +9,7 @@ import {
   Bell, Settings, Briefcase, CheckCircle2, Clock, XCircle, AlertCircle,
   Phone, Mail, User, Building2, FileText, UploadCloud, ChevronRight,
   ShieldCheck, ArrowRight, RefreshCw, Sparkles, MapPin, Eye, ExternalLink,
-  Camera, Check, Lock, Send, X, MessageSquare
+  Camera, Check, Lock, Send, X, MessageSquare, LogOut as LogOutIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -528,7 +528,7 @@ export default function PageStaffDashboard() {
         </div>
         <div className="flex items-center gap-3">
           <button onClick={() => setShowLogoutConfirm(true)} className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg">
-            <LogOut className="w-4 h-4" />
+            <LogOutIcon className="w-4 h-4" />
           </button>
         </div>
       </header>

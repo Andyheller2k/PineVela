@@ -75,6 +75,32 @@ import {
 } from "./verificationService.js";
 import { loadPersistentStore, savePersistentStore } from "./persistentDb.js";
 
+// Global crash handlers for debugging
+process.on('unhandledRejection', (reason, promise) => {
+  // Silent handling for common networking errors that aren't critical application crashes
+  const err = reason as any;
+  if (err?.code === 'EPIPE' || err?.code === 'ECONNRESET') {
+    console.warn(`[Network Warning] ${err.code} detected during async operation.`);
+    return;
+  }
+  console.error('[CRITICAL] Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  // Gracefully handle EPIPE (Broken Pipe) - usually occurs when client disconnects mid-response
+  if (err && (err as any).code === 'EPIPE') {
+    console.warn('[Network Warning] EPIPE detected (client likely disconnected). Ignoring.');
+    return;
+  }
+  if (err && (err as any).code === 'ECONNRESET') {
+    console.warn('[Network Warning] ECONNRESET detected. Ignoring.');
+    return;
+  }
+  console.error('[CRITICAL] Uncaught Exception:', err);
+  // Note: For truly unknown fatal errors, we log and keep running, 
+  // but in a production environment one might consider a graceful shutdown.
+});
+
 // Stateful backend baseline datasets - only 1 registered manager and accredited property
 const defaultHostels: any[] = [
   {
@@ -5684,6 +5710,12 @@ ${400 + streamLength}
     }
   });
 
+  // 404 handler for API routes to prevent falling through to SPA HTML
+  app.all('/api/*', (req, res) => {
+    console.warn(`[API 404] ${req.method} ${req.url}`);
+    res.status(404).json({ error: `API route not found: ${req.method} ${req.url}` });
+  });
+
   // Vite integration middleware (development) or serving static build assets (production)
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
@@ -5698,6 +5730,21 @@ ${400 + streamLength}
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
+
+  // Global Error Handler
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error("[SERVER ERROR]", err);
+    if (res.headersSent) {
+      return next(err);
+    }
+    if (req.path.startsWith('/api/')) {
+      return res.status(err.status || 500).json({ 
+        error: err.message || "Internal Server Error",
+        details: process.env.NODE_ENV === 'development' ? err.stack : undefined
+      });
+    }
+    next(err);
+  });
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`[PineVela Backend] Server listening at http://0.0.0.0:${PORT}`);
