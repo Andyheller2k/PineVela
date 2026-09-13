@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import FAQAccordion from './FAQAccordion';
 import TestimonialsCarousel from './TestimonialsCarousel';
 import { useAuth } from '../context/AuthContext';
+import { apiFetch } from '../lib/api';
 import LogoutConfirmationModal from './LogoutConfirmationModal';
 import {
   validateEmail,
@@ -37,7 +38,7 @@ export default function Page1Public({
 }: Page1PublicProps) {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedWing, setSelectedWing] = useState<'All' | 'North Wing' | 'South Side'>('All');
+  const [selectedWing, setSelectedWing] = useState<'All' | 'Hostel' | 'Inn' | 'Hotel' | 'Estate'>('All');
   const [scrollPercent, setScrollPercent] = useState(0);
   const [activeSection, setActiveSection] = useState('welcome-section');
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
@@ -71,15 +72,23 @@ export default function Page1Public({
   const [selectedStaffForReviews, setSelectedStaffForReviews] = useState<any | null>(null);
 
   useEffect(() => {
-    fetch('/api/accredited-staff')
-      .then(res => {
-        if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-        return res.json();
-      })
+    apiFetch('/api/accredited-staff')
       .then(data => {
-        if (Array.isArray(data)) setAccreditedStaff(data);
+        if (Array.isArray(data)) {
+          // Client-side deduplication safeguard
+          const unique = data.filter((s, idx, self) => 
+            self.findIndex(t => 
+              (t.email && s.email && t.email.toLowerCase().trim() === s.email.toLowerCase().trim()) || 
+              (t.id === s.id)
+            ) === idx
+          );
+          setAccreditedStaff(unique);
+        }
       })
-      .catch(err => console.error("Error loading accredited staff:", err));
+      .catch(err => {
+        console.warn("Notice loading accredited staff:", err);
+        setAccreditedStaff([]);
+      });
   }, []);
 
   // Job Offer Form
@@ -681,31 +690,7 @@ export default function Page1Public({
               >
                 <span>Login to Portal</span>
               </button>
-              <button
-                onClick={() => navigate('/register-manager')}
-                className="px-6 py-3.5 bg-white hover:bg-slate-50 text-blue-950 font-black rounded-xl border border-blue-200 shadow-md transition-all transform hover:-translate-y-1 flex items-center gap-2 text-sm cursor-pointer"
-              >
-                <Home className="w-4 h-4 text-blue-700" />
-                <span>Register your resident now!!</span>
-              </button>
             </motion.div>
-
-            {/* Want to work as a staff? Find work now!! button right below Register your resident now */}
-            <div className="pt-2">
-              <button
-                onClick={() => {
-                  sessionStorage.setItem('navigated_to_staff_register', 'true');
-                  navigate('/staff/register');
-                }}
-                className="group inline-flex items-center gap-2.5 text-xs md:text-sm font-extrabold text-blue-900 hover:text-blue-950 bg-blue-600/10 hover:bg-blue-600/15 backdrop-blur-md px-4 py-2.5 rounded-xl transition-all border border-blue-200/80 hover:border-blue-400/80 shadow-sm shadow-blue-500/5 hover:shadow-md hover:-translate-y-0.5 cursor-pointer"
-              >
-                <div className="w-6 h-6 rounded-lg bg-blue-600/15 flex items-center justify-center text-blue-700 group-hover:bg-blue-600 group-hover:text-white transition-all">
-                  <Wrench className="w-3.5 h-3.5 transition-transform group-hover:scale-110" />
-                </div>
-                <span>Want to work as a staff? Find work now!!</span>
-                <ArrowRight className="w-3.5 h-3.5 text-blue-600 group-hover:translate-x-0.5 transition-transform" />
-              </button>
-            </div>
 
             <div className="pt-2" />
           </motion.div>
@@ -893,33 +878,53 @@ export default function Page1Public({
                 <div className="flex items-center gap-2 bg-blue-50/40 backdrop-blur-md p-1.5 rounded-xl border border-blue-200/30 shadow-sm">
                   <button
                     onClick={() => setSelectedWing('All')}
-                    className={`px-5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                       selectedWing === 'All'
                         ? 'bg-blue-900 text-white shadow-sm'
                         : 'text-slate-600 hover:bg-blue-100/50'
                     }`}
                   >
-                    All
+                    All Properties
                   </button>
                   <button
-                    onClick={() => setSelectedWing('North Wing')}
-                    className={`px-5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      selectedWing === 'North Wing'
+                    onClick={() => setSelectedWing('Hostel')}
+                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      selectedWing === 'Hostel'
                         ? 'bg-blue-900 text-white shadow-sm'
                         : 'text-slate-600 hover:bg-blue-100/50'
                     }`}
                   >
-                    North Wing
+                    Hostels
                   </button>
                   <button
-                    onClick={() => setSelectedWing('South Side')}
-                    className={`px-5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      selectedWing === 'South Side'
+                    onClick={() => setSelectedWing('Inn')}
+                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      selectedWing === 'Inn'
                         ? 'bg-blue-900 text-white shadow-sm'
                         : 'text-slate-650 hover:bg-blue-100/50'
                     }`}
                   >
-                    South Side
+                    Inns
+                  </button>
+                  <button
+                    onClick={() => setSelectedWing('Hotel')}
+                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      selectedWing === 'Hotel'
+                        ? 'bg-blue-900 text-white shadow-sm'
+                        : 'text-slate-650 hover:bg-blue-100/50'
+                    }`}
+                  >
+                    Hotels
+                  </button>
+                  <button
+                    onClick={() => setSelectedWing('Estate')}
+                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      selectedWing === 'Estate'
+                        ? 'bg-blue-900 text-white shadow-sm'
+                        : 'text-slate-650 hover:bg-blue-100/50'
+                    }`}
+                  >
+                    Estates
                   </button>
                 </div>
 

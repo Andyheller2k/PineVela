@@ -1288,14 +1288,14 @@ export default function PageStaffRegister() {
                     </div>
 
                     {/* Safeguarding & Conduct Declaration */}
-                    <label className="flex items-start gap-3 p-4 bg-amber-50/70 rounded-2xl border border-amber-200/80 cursor-pointer">
+                    <label className="flex items-start gap-3.5 p-5 bg-blue-50 border-2 border-blue-400 rounded-2xl cursor-pointer shadow-sm transition-all hover:bg-blue-100/50 hover:border-blue-500">
                       <input
                         type="checkbox"
                         checked={declarationAccepted}
                         onChange={(e) => setDeclarationAccepted(e.target.checked)}
-                        className="mt-1 w-4 h-4 rounded text-blue-900 focus:ring-blue-900 cursor-pointer"
+                        className="mt-0.5 w-5 h-5 rounded border-blue-400 text-blue-600 focus:ring-blue-600 cursor-pointer accent-blue-600 shrink-0"
                       />
-                      <span className="text-xs text-slate-700 font-semibold leading-relaxed">
+                      <span className="text-xs text-blue-950 font-extrabold leading-relaxed">
                         I hereby declare that all submitted personal records, vocational experience, and national identification credentials are authentic. I agree to abide by PineVela hostel security policies, university student safeguarding regulations, and professional codes of conduct.
                       </span>
                     </label>

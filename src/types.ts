@@ -14,7 +14,7 @@ export interface HostelRegistrationDraft {
   // Step 1: Basic Information
   name: string;
   description: string;
-  hostelType: 'University hostel' | 'Private hostel' | 'Residential hostel' | 'Student accommodation' | 'Other';
+  hostelType: string;
   customHostelType?: string;
   genderCategory: 'Male' | 'Female' | 'Mixed';
   status: 'Open' | 'Full' | 'Under Maintenance';
@@ -23,7 +23,7 @@ export interface HostelRegistrationDraft {
   contactPhone: string;
   alternativePhone: string;
   website: string;
-  wing: 'North Wing' | 'South Side' | 'East Side' | 'West Campus' | 'Other';
+  wing: string;
 
   // Step 2: Address Details
   addressLine1: string;
@@ -115,7 +115,7 @@ export interface Hostel {
   id: string;
   name: string;
   location: string;
-  wing: 'North Wing' | 'South Side' | 'East Side' | 'West Campus' | 'Other';
+  wing: string;
   status: 'Open' | 'Full' | 'Under Maintenance';
   bedsLeft: number;
   totalCapacity: number;

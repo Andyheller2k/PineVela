@@ -90,7 +90,7 @@ export default function HostelRegistration({
     contactPhone: '',
     alternativePhone: '',
     website: '',
-    wing: 'North Wing',
+    wing: 'Hostel',
 
     // Step 2: Address
     addressLine1: '',
@@ -793,13 +793,54 @@ export default function HostelRegistration({
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700">Resident Property Type <span className="text-rose-500">*</span></label>
+                    <select
+                      value={formData.wing}
+                      onChange={(e: any) => {
+                        const val = e.target.value;
+                        let defaultHType = 'Student accommodation';
+                        if (val === 'Inn') defaultHType = 'Guesthouse / Inn';
+                        if (val === 'Hotel') defaultHType = 'Hotel / Commercial';
+                        if (val === 'Estate') defaultHType = 'Residential Estate / Apartment';
+                        updateFormData({ 
+                          wing: val,
+                          hostelType: defaultHType
+                        });
+                      }}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-900 text-slate-800"
+                    >
+                      <option value="Hostel">Hostel (Student & Academic)</option>
+                      <option value="Inn">Inn (Guesthouse & Short-stay)</option>
+                      <option value="Hotel">Hotel (Commercial Lodging)</option>
+                      <option value="Estate">Estate (Residential Apartments)</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700">Gender Allocation Category</label>
+                    <select
+                      value={formData.genderCategory}
+                      onChange={(e: any) => updateFormData({ genderCategory: e.target.value })}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-900 text-slate-800"
+                    >
+                      <option value="Mixed">Mixed (All-Gender / Separate wings)</option>
+                      <option value="Male">All Male Only</option>
+                      <option value="Female">All Female Only</option>
+                    </select>
+                  </div>
+
                   <div className="sm:col-span-2 space-y-1.5">
                     <label className="text-xs font-bold text-slate-700">
-                      Hostel Official Name <span className="text-rose-500">*</span>
+                      {formData.wing === 'Hostel' ? 'Hostel Official Name' : 
+                       formData.wing === 'Inn' ? 'Inn / Guesthouse Official Name' :
+                       formData.wing === 'Hotel' ? 'Hotel Official Name' : 'Estate / Apartment Name'} <span className="text-rose-500">*</span>
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. Pine Crest Residency, Emerald Heights Block A"
+                      placeholder={formData.wing === 'Hostel' ? 'e.g. Pine Crest Residency, Emerald Heights' :
+                                   formData.wing === 'Inn' ? 'e.g. The Travelers Inn, Cozy Guesthouse' :
+                                   formData.wing === 'Hotel' ? 'e.g. PineVela Luxury Suites' : 'e.g. Royal Palms Residential Estate'}
                       value={formData.name}
                       onChange={(e) => updateFormData({ name: e.target.value })}
                       className={`w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-900 text-slate-800 ${
@@ -812,45 +853,39 @@ export default function HostelRegistration({
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700">Hostel Classification Type</label>
+                    <label className="text-xs font-bold text-slate-700">Property Classification Type</label>
                     <select
                       value={formData.hostelType}
                       onChange={(e: any) => updateFormData({ hostelType: e.target.value })}
                       className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-900 text-slate-800"
                     >
-                      <option value="Student accommodation">Student accommodation</option>
-                      <option value="University hostel">University hostel</option>
-                      <option value="Private hostel">Private hostel</option>
-                      <option value="Residential hostel">Residential hostel</option>
+                      {formData.wing === 'Hostel' ? (
+                        <>
+                          <option value="Student accommodation">Student accommodation</option>
+                          <option value="University hostel">University hostel</option>
+                          <option value="Private hostel">Private hostel</option>
+                          <option value="Residential hostel">Residential hostel</option>
+                        </>
+                      ) : formData.wing === 'Inn' ? (
+                        <>
+                          <option value="Guesthouse / Inn">Guesthouse / Inn</option>
+                          <option value="Bed & Breakfast">Bed & Breakfast</option>
+                          <option value="Motel">Motel</option>
+                        </>
+                      ) : formData.wing === 'Hotel' ? (
+                        <>
+                          <option value="Hotel / Commercial">Hotel / Commercial</option>
+                          <option value="Boutique Hotel">Boutique Hotel</option>
+                          <option value="Luxury Hotel">Luxury Hotel</option>
+                        </>
+                      ) : (
+                        <>
+                          <option value="Residential Estate / Apartment">Residential Estate / Apartment</option>
+                          <option value="Condominium">Condominium</option>
+                          <option value="Townhouse Complex">Townhouse Complex</option>
+                        </>
+                      )}
                       <option value="Other">Other Category</option>
-                    </select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700">Gender Allocation</label>
-                    <select
-                      value={formData.genderCategory}
-                      onChange={(e: any) => updateFormData({ genderCategory: e.target.value })}
-                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-900 text-slate-800"
-                    >
-                      <option value="Mixed">Mixed (Separate male/female wings)</option>
-                      <option value="Male">All Male Only</option>
-                      <option value="Female">All Female Only</option>
-                    </select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700">Campus Wing / Sector</label>
-                    <select
-                      value={formData.wing}
-                      onChange={(e: any) => updateFormData({ wing: e.target.value })}
-                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-900 text-slate-800"
-                    >
-                      <option value="North Wing">North Wing</option>
-                      <option value="South Side">South Side</option>
-                      <option value="East Side">East Side</option>
-                      <option value="West Campus">West Campus</option>
-                      <option value="Other">Other Sector</option>
                     </select>
                   </div>
 
@@ -1060,11 +1095,15 @@ export default function HostelRegistration({
                     />
                   </div>
 
-                  <div className="sm:col-span-2 space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700">Nearby Campus Landmark</label>
+                   <div className="sm:col-span-2 space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700">
+                      {formData.wing === 'Hostel' ? 'Nearby Campus Landmark' :
+                       formData.wing === 'Inn' || formData.wing === 'Hotel' ? 'Nearby City/Transit Landmark' : 'Nearby Primary Local Landmark'}
+                    </label>
                     <input
                       type="text"
-                      placeholder="e.g. 200m from University Stadium Gate, Opposite Central Library"
+                      placeholder={formData.wing === 'Hostel' ? 'e.g. 200m from University Stadium Gate, Opposite Central Library' :
+                                   formData.wing === 'Inn' || formData.wing === 'Hotel' ? 'e.g. 10min from Airport Terminal, Opposite Central Metro' : 'e.g. Near Royal Palms Golf Course, Gated Security Gate'}
                       value={formData.landmark}
                       onChange={(e) => updateFormData({ landmark: e.target.value })}
                       className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-900 text-slate-800"
@@ -1072,10 +1111,14 @@ export default function HostelRegistration({
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700">Campus Proximity Time/Walk <span className="text-rose-500">*</span></label>
+                    <label className="text-xs font-bold text-slate-700">
+                      {formData.wing === 'Hostel' ? 'Campus Proximity Time/Walk' :
+                       formData.wing === 'Inn' || formData.wing === 'Hotel' ? 'Transit/Airport Proximity Time' : 'Business District Proximity'} <span className="text-rose-500">*</span>
+                    </label>
                     <input
                       type="text"
-                      placeholder="e.g. 5-10 Mins Walk"
+                      placeholder={formData.wing === 'Hostel' ? 'e.g. 5-10 Mins Walk' :
+                                   formData.wing === 'Inn' || formData.wing === 'Hotel' ? 'e.g. 15 Mins Drive / Taxi' : 'e.g. 20 Mins from Central Business District'}
                       value={formData.campusProximity || ''}
                       onChange={(e) => updateFormData({ campusProximity: e.target.value })}
                       className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-900 text-slate-800"
@@ -1084,10 +1127,14 @@ export default function HostelRegistration({
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700">Campus Proximity Details <span className="text-rose-500">*</span></label>
+                    <label className="text-xs font-bold text-slate-700">
+                      {formData.wing === 'Hostel' ? 'Campus Proximity Details' :
+                       formData.wing === 'Inn' || formData.wing === 'Hotel' ? 'Transit/Airport Proximity Details' : 'Business District Proximity Details'} <span className="text-rose-500">*</span>
+                    </label>
                     <input
                       type="text"
-                      placeholder="e.g. Shuttle & walking routes"
+                      placeholder={formData.wing === 'Hostel' ? 'e.g. Shuttle & walking routes' :
+                                   formData.wing === 'Inn' || formData.wing === 'Hotel' ? 'e.g. Taxi rank outside, direct airport shuttle' : 'e.g. Direct ring road highway access'}
                       value={formData.campusProximityDetails || ''}
                       onChange={(e) => updateFormData({ campusProximityDetails: e.target.value })}
                       className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-900 text-slate-800"
@@ -1104,7 +1151,7 @@ export default function HostelRegistration({
                 <div>
                   <h3 className="text-lg font-black text-slate-900 tracking-tight">Step 3: Interactive Map Location</h3>
                   <p className="text-xs text-slate-500">
-                    Pinpoint the exact physical entrance using the Leaflet OpenStreetMap view. Students will use this for real navigation.
+                    Pinpoint the exact physical entrance using the Leaflet OpenStreetMap view. {formData.wing === 'Hostel' ? 'Students' : formData.wing === 'Inn' || formData.wing === 'Hotel' ? 'Guests' : 'Residents'} will use this for real navigation.
                   </p>
                 </div>
 
@@ -1168,12 +1215,12 @@ export default function HostelRegistration({
                   <div>
                     <h3 className="text-lg font-black text-slate-900 tracking-tight">Step 5: Capacity & Block Structure</h3>
                     <p className="text-xs text-slate-500">
-                      Configure residential blocks, room counts, beds per room, and specific pricing for each block.
+                      Configure residential blocks, room counts, sleeps/beds per room, and specific pricing for each block.
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-black text-blue-950 bg-blue-50 border border-blue-200 px-3 py-1 rounded-xl">
-                      Total Calculated Capacity: {formData.maximumCapacity} Beds
+                      Total Calculated Capacity: {formData.maximumCapacity} {formData.wing === 'Hostel' ? 'Beds' : formData.wing === 'Inn' || formData.wing === 'Hotel' ? 'Sleeps/Guests' : 'Residents'}
                     </span>
                   </div>
                 </div>
@@ -1186,7 +1233,7 @@ export default function HostelRegistration({
                         Configured Residential Blocks ({formData.blocksList.length})
                       </span>
                       <span className="text-[11px] text-slate-500">
-                        Set unique bed counts and individual pricing per block/wing.
+                        Set unique {formData.wing === 'Hostel' ? 'bed' : 'room'} counts and individual pricing per block/wing.
                       </span>
                     </div>
                     <button
@@ -1219,9 +1266,9 @@ export default function HostelRegistration({
                               </div>
                             </div>
 
-                            <div className="flex items-center gap-2">
+                             <div className="flex items-center gap-2">
                               <span className="text-xs font-extrabold text-blue-900 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-lg">
-                                {blockBeds} Beds ({block.bedsPerRoom} in a room)
+                                {blockBeds} {formData.wing === 'Hostel' ? 'Beds' : 'Capacity'} ({block.bedsPerRoom} {formData.wing === 'Hostel' ? 'in a room' : 'per room'})
                               </span>
                               {formData.blocksList.length > 1 && (
                                 <button
@@ -1240,13 +1287,13 @@ export default function HostelRegistration({
                             {/* Block Name */}
                             <div className="sm:col-span-4 space-y-1">
                               <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">
-                                Block Name / Wing
+                                {formData.wing === 'Hostel' ? 'Block Name / Wing' : 'Block / Section Name'}
                               </label>
                               <input
                                 type="text"
                                 value={block.name}
                                 onChange={(e) => handleBlockChange(block.id, 'name', e.target.value)}
-                                placeholder="e.g. Block A (Alpha Wing)"
+                                placeholder={formData.wing === 'Hostel' ? 'e.g. Block A (Alpha Wing)' : 'e.g. West Wing, Floor 1'}
                                 className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-900"
                               />
                             </div>
@@ -1283,7 +1330,7 @@ export default function HostelRegistration({
                             {/* Beds per Room */}
                             <div className="sm:col-span-2 space-y-1">
                               <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">
-                                Beds / Room
+                                {formData.wing === 'Hostel' ? 'Beds / Room' : 'Sleeps / Room'}
                               </label>
                               <input
                                 type="number"
@@ -1622,7 +1669,7 @@ export default function HostelRegistration({
                           <div className="space-y-0.5">
                             <span className="text-xs font-bold text-slate-900 block">{block.name || `Block ${idx + 1}`}</span>
                             <span className="text-[10px] text-slate-500 font-semibold">
-                              {block.bedsPerRoom} Beds/Room • {block.totalRooms * block.bedsPerRoom} Total Beds
+                              {block.bedsPerRoom} {formData.wing === 'Hostel' ? 'Beds' : 'Guests'}/Room • {block.totalRooms * block.bedsPerRoom} Total {formData.wing === 'Hostel' ? 'Beds' : 'Capacity'}
                             </span>
                           </div>
                           <div className="flex items-center gap-1.5 w-36">
@@ -1642,7 +1689,7 @@ export default function HostelRegistration({
                 </div>
 
                 <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 flex items-center justify-between text-xs font-bold text-emerald-900">
-                  <span>Gross Initial Payment per Student:</span>
+                  <span>Gross Initial Payment per {formData.wing === 'Hostel' ? 'Student' : formData.wing === 'Inn' || formData.wing === 'Hotel' ? 'Guest Booking' : 'Tenant Lease'}:</span>
                   <span className="text-base font-black">
                     {formData.currency} {(formData.defaultFee + formData.securityDeposit).toLocaleString()}
                   </span>

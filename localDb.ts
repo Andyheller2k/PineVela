@@ -75,13 +75,54 @@ export async function dbGetUsers(fallbackUsers?: any[], ..._args: any[]): Promis
 }
 
 export async function dbGetUserByEmailOrUsername(identifier: string, fallbackUsers?: any[], ..._args: any[]): Promise<any | null> {
-  const users = await dbGetUsers(fallbackUsers);
-  const normalized = (identifier || '').trim().toLowerCase();
-  return users.find((u: any) => 
-    (u.email && u.email.toLowerCase() === normalized) || 
-    (u.username && u.username.toLowerCase() === normalized) ||
-    (u.id && u.id.toLowerCase() === normalized)
-  ) || null;
+  const storeUsers = await dbGetUsers(fallbackUsers);
+  const allCandidates = [...storeUsers, ...(fallbackUsers || [])];
+  
+  const raw = (identifier || '').trim();
+  if (!raw) return null;
+
+  const normalized = raw.toLowerCase();
+  const normalizedClean = raw.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  for (const u of allCandidates) {
+    if (!u) continue;
+
+    // Direct object or nested .user property
+    const userObj = u.user || u;
+    const email = (u.email || userObj.email || '').toLowerCase().trim();
+    const username = (u.username || userObj.username || '').toLowerCase().trim();
+    const id = (u.id || userObj.id || '').toLowerCase().trim();
+    const studentId = (u.studentId || userObj.studentId || u.residentId || userObj.residentId || '').toLowerCase().trim();
+    const phone = (u.phone || userObj.phone || '').toLowerCase().trim();
+    const roomKey = (u.roomKey || userObj.roomKey || '').toLowerCase().trim();
+
+    const usernameClean = username.replace(/[^a-z0-9]/g, '');
+    const studentIdClean = studentId.replace(/[^a-z0-9]/g, '');
+
+    // Exact matches
+    if (
+      (email && email === normalized) ||
+      (username && username === normalized) ||
+      (id && id === normalized) ||
+      (studentId && studentId === normalized) ||
+      (phone && phone === normalized) ||
+      (roomKey && roomKey === normalized)
+    ) {
+      return u;
+    }
+
+    // Cleaned alphanumeric matches (for student IDs with/without hyphens e.g. STU-2024-8842 vs STU20248842)
+    if (normalizedClean && normalizedClean.length > 2) {
+      if (
+        (studentIdClean && studentIdClean === normalizedClean) ||
+        (usernameClean && usernameClean === normalizedClean)
+      ) {
+        return u;
+      }
+    }
+  }
+
+  return null;
 }
 
 // 2. Hostels
@@ -1054,6 +1095,11 @@ export async function dbAssignRoomKey(roomKey: string, studentData: {
       assignedStudentName: studentData.studentName,
       assignedStudentEmail: studentData.studentEmail,
       assignedStudentPhone: studentData.studentPhone,
+      studentId: studentData.studentId,
+      residentId: studentData.studentId,
+      studentName: studentData.studentName,
+      studentEmail: studentData.studentEmail,
+      studentPhone: studentData.studentPhone,
       assignedResidentType: studentData.assignedResidentType || 'student',
       assignedProgram: studentData.assignedProgram,
       assignedDepartment: studentData.assignedDepartment,
@@ -1072,21 +1118,47 @@ export async function dbAssignRoomKey(roomKey: string, studentData: {
 
 export async function dbGetStudentMessages(filter?: {
   studentId?: string;
+  studentEmail?: string;
+  roomKey?: string;
+  userId?: string;
   managerId?: string;
   hostelId?: string;
+  exactStudentMatchOnly?: boolean;
 }): Promise<any[]> {
   const store = getStore();
   if (!store.studentMessages) store.studentMessages = [];
 
   let results = [...store.studentMessages];
-  if (filter?.studentId) {
-    results = results.filter((m: any) => m.studentId === filter.studentId);
+
+  if (filter?.exactStudentMatchOnly || filter?.studentId || filter?.studentEmail || filter?.roomKey || filter?.userId) {
+    const sId = (filter.studentId || '').toLowerCase().trim();
+    const sEmail = (filter.studentEmail || '').toLowerCase().trim();
+    const rKey = (filter.roomKey || '').toUpperCase().trim();
+    const uId = (filter.userId || '').toLowerCase().trim();
+
+    results = results.filter((m: any) => {
+      const mStudentId = (m.studentId || '').toLowerCase().trim();
+      const mStudentEmail = (m.studentEmail || '').toLowerCase().trim();
+      const mRoomKey = (m.roomKey || '').toUpperCase().trim();
+      const mUserId = (m.userId || '').toLowerCase().trim();
+
+      return (
+        (sId && mStudentId === sId) ||
+        (sEmail && mStudentEmail === sEmail) ||
+        (rKey && mRoomKey === rKey) ||
+        (uId && mUserId === uId)
+      );
+    });
   }
+
   if (filter?.managerId) {
-    results = results.filter((m: any) => m.managerId === filter.managerId);
+    const mId = filter.managerId.toLowerCase().trim();
+    results = results.filter((m: any) => (m.managerId || '').toLowerCase().trim() === mId);
   }
+
   if (filter?.hostelId) {
-    results = results.filter((m: any) => m.hostelId === filter.hostelId);
+    const hId = filter.hostelId.toLowerCase().trim();
+    results = results.filter((m: any) => (m.hostelId || '').toLowerCase().trim() === hId);
   }
 
   // Sort chronologically

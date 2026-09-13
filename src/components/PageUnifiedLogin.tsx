@@ -939,8 +939,8 @@ export default function PageUnifiedLogin() {
 
             </form>
 
-            <div className="text-center pt-3 border-t border-slate-100 space-y-2">
-              <div>
+            <div className="pt-4 border-t border-slate-100">
+              <div className="bg-blue-600/10 backdrop-blur-md border border-blue-300/80 rounded-2xl p-3.5 space-y-2.5 text-center shadow-xs">
                 <button 
                   type="button"
                   onClick={() => {
@@ -949,35 +949,34 @@ export default function PageUnifiedLogin() {
                     setVerifiedKeyDetails(null);
                     setShowStudentKeyModal(true);
                   }}
-                  className="group inline-flex items-center gap-2 text-xs font-black text-blue-900 hover:text-blue-950 bg-blue-600/10 hover:bg-blue-600/15 backdrop-blur-md px-4 py-2 rounded-full border border-blue-300/80 hover:border-blue-500 transition-all cursor-pointer shadow-xs hover:shadow-sm hover:-translate-y-0.5 w-full justify-center"
+                  className="group inline-flex items-center justify-center gap-2 text-xs font-black text-blue-900 hover:text-blue-950 bg-white/70 hover:bg-white/90 px-4 py-2.5 rounded-xl border border-blue-200 transition-all cursor-pointer shadow-xs hover:shadow-sm hover:-translate-y-0.5 w-full"
                 >
-                  <Key size={14} className="text-blue-700 group-hover:scale-110 transition-transform" />
+                  <Key size={14} className="text-blue-700 group-hover:scale-110 transition-transform shrink-0" />
                   <span>Student or Resident? Claim Digital Room Key to Onboard & Enter</span>
-                  <ArrowRight size={12} className="text-blue-600 group-hover:translate-x-0.5 transition-transform" />
+                  <ArrowRight size={12} className="text-blue-600 group-hover:translate-x-0.5 transition-transform shrink-0" />
                 </button>
-              </div>
-              <p className="text-xs sm:text-sm text-slate-500 font-semibold flex items-center justify-center gap-1.5 flex-wrap">
-                <span>New to PineVela?</span>
+
                 <button 
+                  type="button"
                   onClick={() => navigate('/register-manager')} 
-                  className="inline-flex items-center gap-1 text-blue-900 hover:underline font-black cursor-pointer"
+                  className="group inline-flex items-center justify-center gap-2 text-xs font-black text-blue-900 hover:text-blue-950 bg-white/70 hover:bg-white/90 px-4 py-2.5 rounded-xl border border-blue-200 transition-all cursor-pointer shadow-xs hover:shadow-sm hover:-translate-y-0.5 w-full"
                 >
-                  <Home size={14} className="text-blue-700" />
-                  <span>Register your resident now!!</span>
+                  <Home size={13} className="text-blue-700 group-hover:scale-110 transition-transform shrink-0" />
+                  <span>New to PineVela? Register your resident now!!</span>
+                  <ArrowRight size={12} className="text-blue-600 group-hover:translate-x-0.5 transition-transform shrink-0" />
                 </button>
-              </p>
-              <div>
+
                 <button 
                   type="button"
                   onClick={() => {
                     sessionStorage.setItem('navigated_to_staff_register', 'true');
                     navigate('/staff/register');
                   }} 
-                  className="group inline-flex items-center gap-2 text-xs font-black text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200/80 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-slate-200 hover:border-slate-300 transition-all cursor-pointer shadow-xs hover:shadow-sm hover:-translate-y-0.5"
+                  className="group inline-flex items-center justify-center gap-2 text-xs font-black text-blue-900 hover:text-blue-950 bg-white/70 hover:bg-white/90 px-4 py-2.5 rounded-xl border border-blue-200 transition-all cursor-pointer shadow-xs hover:shadow-sm hover:-translate-y-0.5 w-full"
                 >
-                  <Wrench size={13} className="text-slate-600 group-hover:scale-110 transition-transform" />
+                  <Wrench size={13} className="text-blue-700 group-hover:scale-110 transition-transform shrink-0" />
                   <span>Want to work as a staff? Find work now!!</span>
-                  <ArrowRight size={12} className="text-slate-500 group-hover:translate-x-0.5 transition-transform" />
+                  <ArrowRight size={12} className="text-blue-600 group-hover:translate-x-0.5 transition-transform shrink-0" />
                 </button>
               </div>
             </div>
@@ -1613,124 +1612,42 @@ export default function PageUnifiedLogin() {
 
       {/* MODAL: Pending Manager Approval Notice */}
       {pendingApprovalModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-3xl border border-amber-200 shadow-2xl max-w-lg w-full p-6 md:p-8 space-y-6 text-left relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-amber-100 rounded-full blur-3xl -mr-12 -mt-12 pointer-events-none" />
-
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-700 shadow-sm shrink-0">
-                  <ShieldCheck size={26} />
-                </div>
-                <div>
-                  <span className="bg-amber-100 text-amber-800 text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full border border-amber-200">
-                    Administrator Review Required
-                  </span>
-                  <h3 className="text-xl font-black text-slate-900 mt-1">
-                    Manager Account Pending Approval
-                  </h3>
-                </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-blue-950/40 backdrop-blur-md animate-fadeIn">
+          <div className="bg-white rounded-3xl border-2 border-blue-100 shadow-2xl max-w-md w-full p-6 md:p-8 space-y-6 text-center relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-blue-900 via-amber-400 to-blue-900" />
+            
+            <div className="flex flex-col items-center space-y-4 pt-3">
+              <div className="w-16 h-16 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-500 shadow-inner animate-pulse">
+                <Clock size={32} />
               </div>
+              
+              <div>
+                <span className="bg-amber-100 text-amber-800 text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full border border-amber-200">
+                  Verification Pending
+                </span>
+                <h3 className="text-xl font-black text-slate-900 mt-2 tracking-tight">
+                  Verification in Progress!
+                </h3>
+              </div>
+            </div>
+
+            <div className="space-y-3.5 text-xs text-slate-650 leading-relaxed max-w-sm mx-auto">
+              <p className="font-bold text-slate-800">
+                Registered Email: <span className="text-blue-900 font-mono underline">{pendingApprovalModal.email}</span>
+              </p>
+              <p>
+                Hello! Your manager profile is currently awaiting verification by our administrator team. Under PineVela regulations, we verify each property representative to safeguard student and resident accommodations.
+              </p>
+              <p className="p-3 bg-amber-50/70 border border-amber-100 rounded-xl text-amber-900 font-bold">
+                Please check back shortly or keep an eye on your email inbox for an activation link once review is completed.
+              </p>
+            </div>
+
+            <div className="pt-2">
               <button
                 type="button"
                 onClick={() => setPendingApprovalModal(null)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition-all cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-4 text-xs text-amber-950 space-y-2 leading-relaxed">
-              <p className="font-bold flex items-center gap-1.5">
-                <Clock size={14} className="text-amber-600" />
-                <span>Account Registered: <span className="font-mono">{pendingApprovalModal.email}</span></span>
-              </p>
-              <p className="text-slate-600">
-                To protect student accommodations, all manager accounts must be verified and approved by the Administrator before logins become active. Once approved, you will be directly redirected to the hostel registration onboarding process.
-              </p>
-            </div>
-
-            <div className="space-y-3 pt-2">
-              <button
-                type="button"
-                disabled={approvingFromModal}
-                onClick={async () => {
-                  setApprovingFromModal(true);
-                  try {
-                    // Try to approve via API
-                    const token = 'token_admin';
-                    const listRes = await fetch('/api/manager-verifications', {
-                      headers: { 'Authorization': `Bearer ${token}` }
-                    });
-                    if (listRes.ok) {
-                      const verifications = await listRes.json();
-                      const target = Array.isArray(verifications) ? verifications.find((v: any) => 
-                        (v.email && v.email.toLowerCase() === pendingApprovalModal.email.toLowerCase()) ||
-                        (v.managerEmail && v.managerEmail.toLowerCase() === pendingApprovalModal.email.toLowerCase())
-                      ) : null;
-                      if (target?.id) {
-                        await fetch(`/api/manager-verifications/${target.id}/approve`, {
-                          method: 'PUT',
-                          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
-                        });
-                      }
-                    }
-
-                    // Also approve manager request if exists
-                    const reqRes = await fetch('/api/manager-requests', {
-                      headers: { 'Authorization': `Bearer ${token}` }
-                    });
-                    if (reqRes.ok) {
-                      const reqs = await reqRes.json();
-                      const targetReq = Array.isArray(reqs) ? reqs.find((r: any) =>
-                        (r.managerEmail && r.managerEmail.toLowerCase() === pendingApprovalModal.email.toLowerCase())
-                      ) : null;
-                      if (targetReq?.id) {
-                        await fetch(`/api/manager-requests/${targetReq.id}/approve`, {
-                          method: 'PUT',
-                          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
-                        });
-                      }
-                    }
-
-                    triggerToast('Manager approved by Admin! Activating login...', 'success');
-                    const savedEmail = pendingApprovalModal.email;
-                    const savedPass = pendingApprovalModal.pass || password || 'manager123';
-                    setPendingApprovalModal(null);
-                    
-                    // Attempt quick login with newly approved credentials
-                    setTimeout(() => {
-                      handleQuickLogin(savedEmail, savedPass, '/manager/dashboard?tab=register_hostel');
-                    }, 500);
-                  } catch (e: any) {
-                    triggerToast(`Approval error: ${e.message}`, 'error');
-                  } finally {
-                    setApprovingFromModal(false);
-                  }
-                }}
-                className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-xs transition-all shadow-md cursor-pointer flex items-center justify-center gap-2"
-              >
-                <Sparkles size={16} className="text-amber-300" />
-                <span>{approvingFromModal ? 'Approving...' : '⚡ 1-Click Admin Approve & Enter Onboarding'}</span>
-                <ArrowRight size={14} />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setPendingApprovalModal(null);
-                  handleQuickLogin('admin@pinevela.com', 'admin123', '/admin/dashboard?tab=verifications');
-                }}
-                className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-amber-300 font-extrabold rounded-xl text-xs transition-all border border-slate-700 cursor-pointer flex items-center justify-center gap-2"
-              >
-                <ShieldCheck size={14} className="text-amber-400" />
-                <span>Open Admin Portal to Review & Approve</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setPendingApprovalModal(null)}
-                className="w-full py-2 text-slate-500 hover:text-slate-700 text-xs font-bold text-center cursor-pointer transition-all"
+                className="w-full py-3.5 bg-blue-900 hover:bg-blue-800 text-white font-black rounded-xl text-xs transition-all shadow-md cursor-pointer tracking-wider uppercase"
               >
                 Close & Return to Login
               </button>
@@ -1884,7 +1801,7 @@ export default function PageUnifiedLogin() {
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') handleVerifyStudentKey();
                       }}
-                      placeholder="e.g. MAZE-A-749201"
+                      placeholder="Enter digital room key code"
                       className="w-full pl-10 pr-24 py-3 bg-white border border-slate-200 rounded-2xl font-mono text-sm font-black uppercase text-slate-900 tracking-wider focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-400/20 shadow-inner"
                     />
                     <button
@@ -1900,24 +1817,6 @@ export default function PageUnifiedLogin() {
                       )}
                       <span>Verify</span>
                     </button>
-                  </div>
-
-                  {/* Sample Keys Quick-picker */}
-                  <div className="pt-1 flex items-center gap-1.5 flex-wrap text-[11px] text-slate-500">
-                    <span className="font-semibold">Sample Demo Keys:</span>
-                    {['MAZE-A-749201', 'EMERALD-A-849201', 'STAR-A-910248'].map((sampleKey) => (
-                      <button
-                        key={sampleKey}
-                        type="button"
-                        onClick={() => {
-                          setStudentKeyInput(sampleKey);
-                          handleVerifyStudentKey(sampleKey);
-                        }}
-                        className="px-2 py-0.5 bg-slate-100 hover:bg-blue-100 hover:text-blue-900 rounded font-mono text-[10px] font-bold text-slate-700 transition-colors cursor-pointer"
-                      >
-                        {sampleKey}
-                      </button>
-                    ))}
                   </div>
                 </div>
 
@@ -2319,27 +2218,22 @@ export default function PageUnifiedLogin() {
                   </p>
                 </div>
 
-                {/* Minimalistic Notification confirmation card */}
-                <div className="p-4 bg-blue-50/90 border border-blue-200/90 rounded-2xl text-left space-y-2 text-xs text-blue-950 max-w-md mx-auto">
-                  <div className="flex items-center gap-2 font-black text-blue-900">
-                    <Bell size={15} className="text-blue-600" />
-                    <span>Manager Alert Delivered</span>
-                  </div>
-                  <p className="text-[11px] text-blue-800 leading-relaxed">
-                    A check-in notice containing your name (<strong>{stuName}</strong>), ID (<strong>{stuId}</strong>), program (<strong>{stuProgram || 'General Studies'}</strong>), and room assignment (<strong>{verifiedKeyDetails?.blockName} - Room {verifiedKeyDetails?.roomNumber}</strong>) has been pushed to your manager's dashboard.
-                  </p>
-                </div>
-
                 <button
                   type="button"
                   onClick={() => {
                     setShowStudentKeyModal(false);
-                    navigate('/student/dashboard', { replace: true });
+                    if (stuId) {
+                      setUsernameOrEmail(stuId);
+                    } else if (stuEmail) {
+                      setUsernameOrEmail(stuEmail);
+                    }
+                    setStudentKeyStep(1);
+                    triggerToast('Registration complete! Please log in with your credentials.', 'success');
                   }}
                   className="w-full max-w-md mx-auto py-3.5 bg-gradient-to-r from-blue-900 to-indigo-900 hover:from-blue-850 hover:to-indigo-850 text-white font-black text-sm rounded-2xl shadow-xl shadow-blue-900/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <LogIn size={18} />
-                  <span>Enter Student & Resident Console Now</span>
+                  <span>Return to Login to Sign In</span>
                 </button>
               </div>
             )}

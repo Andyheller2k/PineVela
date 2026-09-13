@@ -10,7 +10,7 @@ import {
   Phone, Mail, User, Building2, FileText, UploadCloud, ChevronRight,
   ShieldCheck, ArrowRight, RefreshCw, Sparkles, MapPin, Eye, ExternalLink,
   Camera, Check, Lock, Send, X, MessageSquare, LogOut as LogOutIcon, DollarSign,
-  Scale, Handshake, HelpCircle, ThumbsUp, ThumbsDown
+  Scale, Handshake, HelpCircle, ThumbsUp, ThumbsDown, Wrench
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -83,8 +83,8 @@ export default function PageStaffDashboard() {
     user?.verificationStatus === 'approved'
   );
 
-  // Active Tab: notifications, apply, settings, chat, or offers
-  const [activeTab, setActiveTab] = useState<'notifications' | 'apply' | 'settings' | 'chat' | 'offers'>('apply');
+  // Active Tab: notifications, apply, settings, chat, offers, or maintenance
+  const [activeTab, setActiveTab] = useState<'notifications' | 'apply' | 'settings' | 'chat' | 'offers' | 'maintenance'>('maintenance');
   const [loading, setLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -97,6 +97,18 @@ export default function PageStaffDashboard() {
   const [staffRecord, setStaffRecord] = useState<any | null>(null);
   const [viewingOfferMap, setViewingOfferMap] = useState<any | null>(null);
   const mapInstanceRef = React.useRef<any>(null);
+
+  // Maintenance Workflow States
+  const [assignedIssues, setAssignedIssues] = useState<any[]>([]);
+  const [showDeclineModal, setShowDeclineModal] = useState<any | null>(null);
+  const [declineReason, setDeclineReason] = useState("");
+  const [showRescheduleModal, setShowRescheduleModal] = useState<any | null>(null);
+  const [rescheduleReason, setRescheduleReason] = useState("");
+  const [rescheduleTimeframe, setRescheduleTimeframe] = useState("24h");
+  const [showCompleteModal, setShowCompleteModal] = useState<any | null>(null);
+  const [completionNotes, setCompletionNotes] = useState("");
+  const [completionPhoto, setCompletionPhoto] = useState("");
+  const [zoomedImage, setZoomedImage] = useState<string | null>(null);
 
   useEffect(() => {
     if (viewingOfferMap) {
@@ -168,7 +180,7 @@ export default function PageStaffDashboard() {
 
   const triggerToast = (text: string, type: 'success' | 'error' | 'info' = 'info') => {
     setToastMessage({ text, type });
-    setTimeout(() => setToastMessage(null), 4000);
+    setTimeout(() => setToastMessage(null), 1500);
   };
 
   const loadData = async () => {
@@ -298,6 +310,124 @@ export default function PageStaffDashboard() {
       return () => clearInterval(interval);
     }
   }, [activeTab, selectedRoomId]);
+
+  const fetchAssignedIssues = async () => {
+    try {
+      const res = await apiFetch('/api/issue-reports').catch(() => []);
+      if (Array.isArray(res)) {
+        const cleanEmail = (user?.email || '').toLowerCase().trim();
+        const userId = user?.id;
+        const myIssues = res.filter((issue: any) => 
+          (issue.assignedStaffId && (issue.assignedStaffId === userId || issue.assignedStaffId === user?.id)) ||
+          (issue.assignedStaffEmail && issue.assignedStaffEmail.toLowerCase().trim() === cleanEmail) ||
+          (issue.assignedStaffName && user?.name && issue.assignedStaffName.toLowerCase().trim() === user.name.toLowerCase().trim()) ||
+          (approvedApp && (issue.hostelId === approvedApp.hostelId || (issue.hostelName && approvedApp.hostelName && issue.hostelName.toLowerCase().trim() === approvedApp.hostelName.toLowerCase().trim())))
+        );
+        setAssignedIssues(myIssues);
+      }
+    } catch (err) {
+      console.error("Error fetching assigned issues:", err);
+    }
+  };
+
+  const handleAcceptAssignment = async (issueId: string) => {
+    try {
+      await apiFetch(`/api/issue-reports/${issueId}/accept-assignment`, {
+        method: 'POST'
+      });
+      triggerToast("Work order accepted! Marked as In Progress.", "success");
+      fetchAssignedIssues();
+    } catch (err: any) {
+      triggerToast(err.message || "Failed to accept work order.", "error");
+    }
+  };
+
+  const handleDeclineAssignment = async () => {
+    if (!showDeclineModal) return;
+    if (!declineReason.trim()) {
+      triggerToast("Please provide a reason for declining.", "error");
+      return;
+    }
+    try {
+      await apiFetch(`/api/issue-reports/${showDeclineModal.id}/staff-decline`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: declineReason })
+      });
+      triggerToast("Assignment decline submitted to manager.", "success");
+      setShowDeclineModal(null);
+      setDeclineReason("");
+      fetchAssignedIssues();
+    } catch (err: any) {
+      triggerToast(err.message || "Failed to decline.", "error");
+    }
+  };
+
+  const handleReschedule = async () => {
+    if (!showRescheduleModal) return;
+    if (!rescheduleReason.trim()) {
+      triggerToast("Please provide a reason for rescheduling.", "error");
+      return;
+    }
+    try {
+      await apiFetch(`/api/issue-reports/${showRescheduleModal.id}/staff-reschedule`, {
+        method: 'POST',
+        body: JSON.stringify({
+          reason: rescheduleReason,
+          requestedTimeframe: rescheduleTimeframe
+        })
+      });
+      triggerToast("SLA extension request sent to manager.", "success");
+      setShowRescheduleModal(null);
+      setRescheduleReason("");
+      fetchAssignedIssues();
+    } catch (err: any) {
+      triggerToast(err.message || "Failed to submit request.", "error");
+    }
+  };
+
+  const handleCompleteWorkOrder = async () => {
+    if (!showCompleteModal) return;
+    try {
+      await apiFetch(`/api/issue-reports/${showCompleteModal.id}/staff-complete`, {
+        method: 'POST',
+        body: JSON.stringify({
+          completionNotes: completionNotes || "Resolved successfully",
+          completionPhoto: completionPhoto || undefined
+        })
+      });
+      triggerToast("Work order marked completed!", "success");
+      setShowCompleteModal(null);
+      setCompletionNotes("");
+      setCompletionPhoto("");
+      fetchAssignedIssues();
+    } catch (err: any) {
+      triggerToast(err.message || "Failed to mark complete.", "error");
+    }
+  };
+
+  const handleStaffCompletionPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      triggerToast("Photo size exceeds 2MB limit.", "error");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setCompletionPhoto(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  useEffect(() => {
+    if (activeTab === 'maintenance') {
+      fetchAssignedIssues();
+      const interval = setInterval(() => {
+        fetchAssignedIssues();
+      }, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     loadData();
@@ -597,17 +727,11 @@ export default function PageStaffDashboard() {
     <div className="min-h-screen bg-slate-100 flex flex-col lg:flex-row relative text-slate-900">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-5 right-5 z-50 animate-bounce">
-          <div className={`px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border text-xs font-bold ${
-            toastMessage.type === 'success' 
-              ? 'bg-emerald-600 text-white border-emerald-500 shadow-emerald-600/30' 
-              : toastMessage.type === 'error'
-              ? 'bg-rose-600 text-white border-rose-500 shadow-rose-600/30'
-              : 'bg-blue-600 text-white border-blue-500 shadow-blue-600/30'
-          }`}>
-            {toastMessage.type === 'success' && <CheckCircle2 className="w-4 h-4 shrink-0" />}
-            {toastMessage.type === 'error' && <XCircle className="w-4 h-4 shrink-0" />}
-            {toastMessage.type === 'info' && <Sparkles className="w-4 h-4 shrink-0" />}
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50">
+          <div className="bg-slate-950/95 text-white border border-slate-800/80 px-4 py-2 rounded-full shadow-lg flex items-center gap-2 text-xs font-semibold backdrop-blur-md">
+            <div className={`w-1.5 h-1.5 rounded-full ${
+              toastMessage.type === 'success' ? 'bg-emerald-400' : toastMessage.type === 'error' ? 'bg-rose-400' : 'bg-blue-400'
+            }`} />
             <span>{toastMessage.text}</span>
           </div>
         </div>
@@ -678,7 +802,10 @@ export default function PageStaffDashboard() {
             { id: 'offers', icon: Briefcase, label: 'Offers', badge: jobOffers.filter(o => o.status === 'Pending').length },
             { id: 'notifications', icon: Bell, label: 'Alerts', badge: notifications.length },
             { id: 'settings', icon: Settings, label: 'Settings' },
-            ...(approvedApp ? [{ id: 'chat', icon: MessageSquare, label: 'Chat', dot: true }] : [])
+            ...(approvedApp ? [
+              { id: 'chat', icon: MessageSquare, label: 'Chat', dot: true },
+              { id: 'maintenance', icon: Wrench, label: 'Orders', badge: assignedIssues.filter(i => i.status !== 'Resolved' && !i.staffCompleted).length }
+            ] : [])
           ].map(tab => (
             <button
               key={tab.id}
@@ -773,7 +900,37 @@ export default function PageStaffDashboard() {
           <nav className="space-y-2">
             <p className="px-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Staff Portal</p>
             
-            {/* Tab 1: Apply (Job Board & Active Application) */}
+            {/* Tab TOP: Assigned Maintenance Work Orders (Highlighted First) */}
+            <button
+              onClick={() => setActiveTab('maintenance')}
+              className={`w-full flex items-center justify-between px-3.5 py-3.5 rounded-2xl text-xs font-bold transition-all cursor-pointer shadow-md ${
+                activeTab === 'maintenance'
+                  ? 'bg-gradient-to-r from-blue-700 to-sky-800 text-white shadow-blue-900/30 border border-blue-400'
+                  : 'bg-gradient-to-r from-emerald-600 to-teal-700 text-white hover:from-emerald-700 hover:to-teal-800 border border-emerald-400/60'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Wrench className={`w-4 h-4 ${activeTab === 'maintenance' ? 'text-amber-300' : 'text-amber-200'} animate-bounce`} />
+                <div className="text-left">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-black">Assigned Work Orders</span>
+                    {assignedIssues.filter(i => i.status !== 'Resolved' && !i.staffCompleted).length > 0 && (
+                      <span className="px-1.5 py-0.5 bg-rose-500 text-white rounded text-[9px] font-black uppercase animate-pulse">
+                        {assignedIssues.filter(i => i.status !== 'Resolved' && !i.staffCompleted).length} NEW
+                      </span>
+                    )}
+                  </div>
+                  <div className={`text-[10px] font-medium ${activeTab === 'maintenance' ? 'text-blue-200' : 'text-emerald-100'}`}>
+                    Priority maintenance & repair tasks
+                  </div>
+                </div>
+              </div>
+              {assignedIssues.filter(i => i.status !== 'Resolved' && !i.staffCompleted).length > 0 && (
+                <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-rose-500 text-white shadow-sm animate-ping">
+                  !
+                </span>
+              )}
+            </button>
             <button
               onClick={() => setActiveTab('apply')}
               className={`w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
@@ -902,6 +1059,7 @@ export default function PageStaffDashboard() {
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping shrink-0" />
               </button>
             )}
+
           </nav>
         </div>
 
@@ -930,17 +1088,22 @@ export default function PageStaffDashboard() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-200/60">
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 bg-blue-100 text-blue-900 rounded-md border border-blue-200">
-                Staff Console
+              <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 bg-emerald-100 text-emerald-900 rounded-md border border-emerald-200">
+                {approvedApp ? 'Active Duty Dispatch' : 'Staff Console'}
               </span>
-              <span className="text-xs text-slate-500 font-semibold">Academic Year 2026/2027</span>
+              <span className="text-xs text-slate-500 font-semibold">{approvedApp ? `• Hostel: ${approvedApp.hostelName}` : 'Academic Year 2026/2027'}</span>
             </div>
             <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight mt-1">
-              {activeTab === 'apply' && 'Staff Applications & Job Board'}
-              {activeTab === 'notifications' && 'Operational Notifications'}
-              {activeTab === 'offers' && 'Job Offers & Hiring Proposals'}
-              {activeTab === 'settings' && 'Staff Account & Profile Settings'}
-              {activeTab === 'chat' && 'Secure Encrypted Communication'}
+              {approvedApp && activeTab === 'maintenance' ? 'Vocational Repair Desk' : (
+                <>
+                  {activeTab === 'apply' && 'Staff Applications & Job Board'}
+                  {activeTab === 'notifications' && 'Operational Notifications'}
+                  {activeTab === 'offers' && 'Job Offers & Hiring Proposals'}
+                  {activeTab === 'settings' && 'Staff Account & Profile Settings'}
+                  {activeTab === 'chat' && 'Secure Encrypted Communication'}
+                  {activeTab === 'maintenance' && 'Vocational Work Orders & Repairs'}
+                </>
+              )}
             </h2>
           </div>
 
@@ -2221,7 +2384,7 @@ export default function PageStaffDashboard() {
               <div id="staff-offer-map-view" className="w-full h-72 rounded-2xl border border-slate-300 shadow-inner z-0"></div>
             </div>
 
-            <div className="flex justify-end pt-2">
+             <div className="flex justify-end pt-2">
               <button
                 type="button"
                 onClick={() => setViewingOfferMap(null)}
@@ -2233,6 +2396,403 @@ export default function PageStaffDashboard() {
           </div>
         </div>
       )}
+
+      {/* ========================================================================= */}
+      {/* TAB 6: ASSIGNED MAINTENANCE WORK ORDERS (VOCATIONAL STAFF WORKFLOW) */}
+      {/* ========================================================================= */}
+      {activeTab === 'maintenance' && approvedApp && (
+        <div className="space-y-6 pt-3">
+          <div className="p-6 bg-gradient-to-r from-blue-900 via-indigo-900 to-sky-950 text-white rounded-3xl shadow-xl border border-blue-700 relative overflow-hidden mt-2">
+            <div className="absolute -right-10 -bottom-10 w-48 h-48 bg-white/5 rounded-full blur-2xl pointer-events-none" />
+            <div className="relative z-10 space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/30 text-emerald-300 text-[10px] font-black uppercase tracking-wider border border-emerald-400/30">
+                  Active Duty Dispatch
+                </span>
+                <span className="text-xs text-sky-200 font-semibold">• Hostel: {approvedApp.hostelName}</span>
+              </div>
+              <h3 className="text-xl font-black text-white tracking-tight">Vocational Repair Desk</h3>
+              <p className="text-xs text-slate-200 max-w-2xl leading-relaxed font-medium">
+                Manage, diagnose, and resolve repair requests assigned to you by the hostel manager. Maintain strict SLA timeframes to avoid delay penalties.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {assignedIssues.length === 0 ? (
+              <div className="text-center py-16 bg-white border border-dashed border-slate-200 rounded-3xl p-8 space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 mx-auto border border-slate-200 shadow-sm">
+                  <Wrench className="w-6 h-6" />
+                </div>
+                <div className="space-y-1">
+                  <h4 className="text-sm font-black text-slate-800">No repair tickets on your desk</h4>
+                  <p className="text-xs text-slate-500 max-w-xs mx-auto">Whenever the hostel manager assigns a work order, it will appear here for your immediate diagnostics.</p>
+                </div>
+              </div>
+            ) : (
+              assignedIssues.map(issue => {
+                const isOverdue = issue.deadline && new Date() > new Date(issue.deadline) && issue.status !== 'Resolved' && !issue.staffCompleted;
+                
+                // Calculate countdown
+                let countdownText = 'No strict deadline';
+                if (issue.deadline) {
+                  const diff = new Date(issue.deadline).getTime() - Date.now();
+                  if (diff <= 0) {
+                    countdownText = '⚠️ SLA TIME EXCEEDED';
+                  } else {
+                    const hours = Math.floor(diff / (1000 * 60 * 60));
+                    const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                    if (hours > 24) {
+                      const days = Math.floor(hours / 24);
+                      countdownText = `${days}d ${hours % 24}h remaining`;
+                    } else {
+                      countdownText = `${hours}h ${mins}m remaining`;
+                    }
+                  }
+                }
+
+                return (
+                  <div key={issue.id} className="p-5 sm:p-6 bg-white border border-slate-200 rounded-3xl shadow-xs hover:shadow-md transition-all space-y-4">
+                    
+                    {/* Urgencies, High-Contrast Status Badge & Deadline Countdown */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {/* High-Contrast Visual Status Badge */}
+                        <span className={`text-xs font-black px-3 py-1 rounded-xl shadow-sm ${
+                          issue.status === 'Resolved' ? 'bg-emerald-600 text-white' :
+                          issue.status === 'In Progress' ? 'bg-blue-600 text-white' :
+                          'bg-amber-600 text-white'
+                        }`}>
+                          ● {issue.status}
+                        </span>
+                        <span className={`text-[10px] font-black px-2.5 py-1 rounded-lg ${
+                          issue.urgency === 'Emergency' ? 'bg-rose-600 text-white' :
+                          issue.urgency === 'High' ? 'bg-orange-600 text-white' :
+                          'bg-slate-700 text-white'
+                        }`}>
+                          {issue.urgency} Urgency
+                        </span>
+                        <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
+                          {issue.category}
+                        </span>
+                        <span className="text-[10px] font-bold text-blue-900 bg-blue-100 px-2.5 py-1 rounded-lg border border-blue-200">
+                          Room {issue.roomNumber}
+                        </span>
+                      </div>
+                      
+                      {/* Clear Deadline Countdown Timer Badge */}
+                      <div className="flex items-center gap-2 bg-slate-900 text-white px-3.5 py-1.5 rounded-xl shadow-sm border border-slate-700">
+                        <Clock className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+                        <div className="text-right">
+                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Deadline Countdown:</span>
+                          <span className={`text-xs font-black ${isOverdue ? 'text-rose-400 animate-pulse' : 'text-amber-300'}`}>
+                            {countdownText}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Main content info */}
+                    <div className="space-y-1.5">
+                      <h4 className="text-sm font-black text-slate-900">{issue.title}</h4>
+                      <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-3 rounded-2xl border border-slate-100">{issue.description}</p>
+                    </div>
+
+                    {/* Photos attached by Student */}
+                    {issue.photos && issue.photos.length > 0 && (
+                      <div className="space-y-1.5">
+                        <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Student Proof Attachments ({issue.photos.length}):</span>
+                        <div className="flex gap-2 flex-wrap">
+                          {issue.photos.map((photo: string, index: number) => (
+                            <img 
+                              key={index}
+                              src={photo}
+                              alt="Student proof"
+                              className="w-16 h-16 object-cover rounded-xl border border-slate-200 cursor-zoom-in hover:opacity-85 transition-all"
+                              onClick={() => setZoomedImage(photo)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* SLA Penalty Tracker */}
+                    {issue.deadline && (
+                      <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex flex-wrap items-center justify-between gap-3">
+                        <div className="text-xs">
+                          <span className="text-slate-400 font-bold block uppercase text-[9px] tracking-wider">Assigned SLA Deadline:</span>
+                          <span className="font-bold text-slate-800">{new Date(issue.deadline).toLocaleString()}</span>
+                        </div>
+                        {isOverdue ? (
+                          <span className="text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-200 px-3 py-1 rounded-full animate-pulse">
+                            ⚠️ SLA EXCEEDED (DELAY PENALTY ACTIVE)
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
+                            ✓ SLA Safe Limit active
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Pending Request Badges */}
+                    <div className="flex flex-wrap gap-2">
+                      {issue.staffDeclineRequested && (
+                        <span className="text-[10px] bg-rose-50 text-rose-800 border border-rose-200 px-3 py-1 rounded-full font-bold">
+                          🕒 Decline requested - awaiting manager reassignment
+                        </span>
+                      )}
+                      {issue.rescheduleRequested && (
+                        <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200 px-3 py-1 rounded-full font-bold">
+                          🕒 SLA Timeframe Extension pending manager approval
+                        </span>
+                      )}
+                    </div>
+
+                    {/* ACTIVE FLOW BUTTONS */}
+                    <div className="pt-2 border-t border-slate-100 flex flex-wrap gap-3">
+                      {/* Case A: Dispatch Not Acknowledged yet */}
+                      {(issue.status === 'Open' || issue.status === 'Pending') && !issue.staffDeclineRequested && (
+                        <div className="w-full flex flex-col sm:flex-row gap-3">
+                          <button
+                            onClick={() => handleAcceptAssignment(issue.id)}
+                            className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5"
+                          >
+                            <Check className="w-4 h-4" />
+                            <span>Acknowledge & Set In Progress</span>
+                          </button>
+                          <button
+                            onClick={() => setShowDeclineModal(issue)}
+                            className="py-3 px-4 bg-slate-100 hover:bg-rose-50 hover:text-rose-700 text-slate-700 font-bold text-xs rounded-xl transition-all"
+                          >
+                            Decline Work Order
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Case B: Work In Progress */}
+                      {issue.status === 'In Progress' && !issue.staffCompleted && (
+                        <div className="w-full flex flex-col sm:flex-row gap-3">
+                          <button
+                            onClick={() => setShowCompleteModal(issue)}
+                            className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5"
+                          >
+                            <CheckCircle2 className="w-4.5 h-4.5" />
+                            <span>Mark Resolved (Awaiting Sign-off)</span>
+                          </button>
+                          {!issue.rescheduleRequested && (
+                            <button
+                              onClick={() => setShowRescheduleModal(issue)}
+                              className="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all"
+                            >
+                              Request SLA Extension
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Case C: Completed awaiting signature */}
+                      {issue.staffCompleted && !issue.closedByManager && (
+                        <div className="w-full p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs font-medium text-emerald-800 leading-relaxed">
+                          ✓ Repair completion remarks submitted. Awaiting resident student verification or manager closure.
+                        </div>
+                      )}
+                    </div>
+
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Decline Dialog Modal */}
+      {showDeclineModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-55 animate-fadeIn">
+          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl border border-slate-200/80 space-y-5">
+            <div className="flex justify-between items-center border-b pb-3 border-slate-100">
+              <h3 className="text-sm font-black text-slate-900">Decline Work Order Assignment</h3>
+              <button onClick={() => setShowDeclineModal(null)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <p className="text-xs text-slate-500 leading-relaxed">
+                State why you cannot attend to this issue at this time. The manager will be instantly notified to reassign the repair.
+              </p>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-600 mb-1">REASON FOR DECLINING <span className="text-rose-500">*</span></label>
+                <textarea
+                  value={declineReason}
+                  onChange={(e) => setDeclineReason(e.target.value)}
+                  placeholder="e.g. Schedule conflicts, missing diagnostic tools, or lack of components..."
+                  rows={3}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-blue-600"
+                  required
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end pt-2">
+              <button onClick={() => setShowDeclineModal(null)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl">
+                Cancel
+              </button>
+              <button onClick={handleDeclineAssignment} className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-md">
+                Decline & Send
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reschedule/SLA Extension Modal */}
+      {showRescheduleModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-55 animate-fadeIn">
+          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl border border-slate-200/80 space-y-5">
+            <div className="flex justify-between items-center border-b pb-3 border-slate-100">
+              <h3 className="text-sm font-black text-slate-900">Request SLA Timeframe Extension</h3>
+              <button onClick={() => setShowRescheduleModal(null)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <p className="text-xs text-slate-500 leading-relaxed">
+                If the repair requires more time due to diagnostics, delivery delay of replacement components, or external technician support, ask for an SLA extension.
+              </p>
+              <div className="grid grid-cols-1 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-600 mb-1">REQUESTED TIME LIMIT</label>
+                  <select
+                    value={rescheduleTimeframe}
+                    onChange={(e) => setRescheduleTimeframe(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-600"
+                  >
+                    <option value="12h">12 Hours Extension</option>
+                    <option value="24h">24 Hours (1 Day)</option>
+                    <option value="48h">48 Hours (2 Days)</option>
+                    <option value="3d">3 Days Extension</option>
+                    <option value="5d">5 Days Extension</option>
+                    <option value="7d">7 Days Extension</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-600 mb-1">REASON FOR EXTENSION <span className="text-rose-500">*</span></label>
+                  <textarea
+                    value={rescheduleReason}
+                    onChange={(e) => setRescheduleReason(e.target.value)}
+                    placeholder="Provide details about the diagnostic complexity, lack of spare parts, or class schedules..."
+                    rows={3}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-blue-600"
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end pt-2">
+              <button onClick={() => setShowRescheduleModal(null)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl">
+                Cancel
+              </button>
+              <button onClick={handleReschedule} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md">
+                Send Request
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Completion Signoff Modal with Image attachment upload */}
+      {showCompleteModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-55 animate-fadeIn">
+          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl border border-slate-200/80 space-y-5">
+            <div className="flex justify-between items-center border-b pb-3 border-slate-100">
+              <h3 className="text-sm font-black text-slate-900">Submit Repair Resolution Details</h3>
+              <button onClick={() => setShowCompleteModal(null)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Provide comprehensive remarks about what repairs were carried out, along with a picture proof if applicable, to allow resident verification.
+              </p>
+              
+              <div>
+                <label className="block text-[10px] font-bold text-slate-600 mb-1">COMPLETION REMARKS <span className="text-rose-500">*</span></label>
+                <textarea
+                  value={completionNotes}
+                  onChange={(e) => setCompletionNotes(e.target.value)}
+                  placeholder="Describe the diagnostics and corrective actions (e.g., Replaced sink trap pipe, verified seals)..."
+                  rows={3}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-blue-600"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-600 mb-1">RESOLUTION PICTURE PROOF (OPTIONAL)</label>
+                <div className="flex items-center gap-3">
+                  <label className="flex-1 flex flex-col items-center justify-center px-4 py-4 bg-slate-50 border border-dashed border-slate-300 rounded-2xl cursor-pointer hover:bg-slate-100/70 transition-all">
+                    <Camera className="w-5 h-5 text-slate-400 mb-1" />
+                    <span className="text-[10px] font-bold text-slate-500">Upload Action Proof</span>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      className="hidden" 
+                      onChange={handleStaffCompletionPhotoUpload} 
+                    />
+                  </label>
+                  {completionPhoto && (
+                    <div className="relative">
+                      <img src={completionPhoto} alt="Upload Preview" className="w-16 h-16 object-cover rounded-xl border border-slate-200" />
+                      <button 
+                        onClick={() => setCompletionPhoto('')}
+                        className="absolute -top-1.5 -right-1.5 bg-rose-600 text-white rounded-full p-0.5 shadow-md"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end pt-2">
+              <button onClick={() => setShowCompleteModal(null)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl">
+                Cancel
+              </button>
+              <button onClick={handleCompleteWorkOrder} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md">
+                Confirm Completed
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ZOOMED IMAGE OVERLAY */}
+      <AnimatePresence>
+        {zoomedImage && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setZoomedImage(null)}
+            className="fixed inset-0 bg-black/90 z-60 flex items-center justify-center p-4 cursor-zoom-out"
+          >
+            <motion.img
+              initial={{ scale: 0.95 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0.95 }}
+              src={zoomedImage}
+              alt="Zoomed preview"
+              className="max-w-full max-h-[90vh] object-contain rounded-xl shadow-2xl"
+            />
+            <button
+              onClick={() => setZoomedImage(null)}
+              className="absolute top-6 right-6 p-2 bg-white/10 hover:bg-white/20 text-white rounded-full transition-all"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* QUIT / RESIGN FROM JOB & BARGAIN MODAL — CRYSTAL FROSTY BLUE PINEVELA THEME */}
       {showResignModal && approvedApp && (

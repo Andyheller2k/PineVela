@@ -737,8 +737,20 @@ managerRequests = (persistentData.managerRegistrationRequests || []).filter(r =>
   return true;
 });
 verificationAuditLogs = persistentData.verificationAuditLogs;
-// Filter out any legacy placeholder staff account
-MOCK_USERS = (persistentData.users || []).filter(u => u.email !== 'staff@pinevela.com' && u.username !== 'staff');
+// Filter out any legacy placeholder staff account and allow dynamic registrations to persist
+MOCK_USERS = (persistentData.users || []).filter(u => {
+  const email = (u.email || u.user?.email || '').toLowerCase().trim();
+  return email !== 'staff@pinevela.com' && u.username !== 'staff';
+});
+
+// Also clean up store.users in getStoreInstance()
+const initStore = getStoreInstance();
+if (initStore && initStore.users && Array.isArray(initStore.users)) {
+  initStore.users = initStore.users.filter((u: any) => {
+    return true;
+  });
+  savePersistentStore(initStore);
+}
 notifications = persistentData.notifications;
 chatMessages = persistentData.chatMessages;
 dmRooms = persistentData.dmRooms;
@@ -923,17 +935,63 @@ async function startServer() {
     }
 
     const userRole = matched.user?.role || matched.role || 'student';
-    const userObj = matched.user ? { ...matched.user } : {
-      id: matched.id,
-      name: matched.name || matched.full_name || matched.username || 'User',
+    const rawUser = matched.user ? { ...matched.user } : { ...matched };
+
+    const userObj = {
+      ...rawUser,
+      id: rawUser.id || matched.id,
+      name: rawUser.name || matched.name || matched.full_name || matched.username || 'User',
       role: userRole,
-      email: matched.email,
-      phone: matched.phone,
-      avatar: matched.avatar,
-      isVerified: matched.isVerified ?? false,
-      verificationStatus: matched.verificationStatus || 'pending',
-      token: matched.token || `token_${matched.id || matched.email}`
+      email: rawUser.email || matched.email || '',
+      phone: rawUser.phone || matched.phone || '',
+      studentId: rawUser.studentId || matched.studentId || rawUser.residentId || matched.residentId || '',
+      residentType: rawUser.residentType || matched.residentType || 'student',
+      programOfStudy: rawUser.programOfStudy || matched.programOfStudy || '',
+      department: rawUser.department || matched.department || '',
+      institution: rawUser.institution || matched.institution || '',
+      roomKey: rawUser.roomKey || matched.roomKey || '',
+      hostelId: rawUser.hostelId || matched.hostelId || '',
+      hostelName: rawUser.hostelName || matched.hostelName || '',
+      blockName: rawUser.blockName || matched.blockName || '',
+      roomNumber: rawUser.roomNumber || matched.roomNumber || '',
+      managerId: rawUser.managerId || matched.managerId || '',
+      managerName: rawUser.managerName || matched.managerName || '',
+      managerPhone: rawUser.managerPhone || matched.managerPhone || '',
+      managerEmail: rawUser.managerEmail || matched.managerEmail || '',
+      avatar: rawUser.avatar || matched.avatar || '',
+      isVerified: rawUser.isVerified ?? matched.isVerified ?? true,
+      verificationStatus: rawUser.verificationStatus || matched.verificationStatus || 'approved',
+      token: rawUser.token || matched.token || `token_${rawUser.id || matched.id || rawUser.email}`
     };
+
+    if (userRole === 'student') {
+      const store = getStoreInstance();
+      const cleanEmail = (userObj.email || '').toLowerCase().trim();
+      const cleanStuId = (userObj.studentId || userObj.id || '').toLowerCase().trim();
+      const cleanKey = (userObj.roomKey || '').trim().toUpperCase();
+
+      const rk = store.roomKeys?.find((rk: any) => {
+        const rkKey = (rk.roomKey || '').trim().toUpperCase();
+        const rkStudentId = (rk.assignedStudentId || rk.studentId || rk.residentId || '').toLowerCase().trim();
+        const rkEmail = (rk.assignedStudentEmail || rk.studentEmail || '').toLowerCase().trim();
+
+        return (cleanKey && rkKey === cleanKey) ||
+               (cleanStuId && rkStudentId === cleanStuId) ||
+               (cleanEmail && rkEmail === cleanEmail);
+      });
+
+      if (rk) {
+        userObj.roomKey = rk.roomKey || userObj.roomKey;
+        userObj.hostelId = rk.hostelId || userObj.hostelId;
+        userObj.hostelName = rk.hostelName || userObj.hostelName;
+        userObj.blockName = rk.blockName || userObj.blockName;
+        userObj.roomNumber = rk.roomNumber || userObj.roomNumber;
+        userObj.managerId = rk.managerId || userObj.managerId;
+        userObj.managerName = rk.managerName || userObj.managerName;
+        userObj.managerPhone = rk.managerPhone || rk.phone || userObj.managerPhone;
+        userObj.managerEmail = rk.managerEmail || rk.email || userObj.managerEmail;
+      }
+    }
 
     // Check manager approval status
     if (userRole === 'manager') {
@@ -1393,20 +1451,64 @@ async function startServer() {
       const isStaffMatch = token.includes('staff') || foundEntry.username?.includes('staff') || foundEntry.email?.includes('staff') || foundEntry.id?.includes('staff') || foundEntry.staffRole || foundEntry.user?.staffRole || foundEntry.user?.role === 'staff' || foundEntry.role === 'staff';
       const isManagerMatch = token.includes('manager') || foundEntry.username?.includes('manager') || foundEntry.email?.includes('manager') || foundEntry.user?.role === 'manager' || foundEntry.role === 'manager';
 
-      const user = foundEntry.user ? {
-        ...foundEntry.user,
-        role: foundEntry.user.role || foundEntry.role || (isStaffMatch ? 'staff' : isManagerMatch ? 'manager' : 'student')
-      } : {
-        id: foundEntry.id,
-        name: foundEntry.name || foundEntry.full_name || 'Authenticated User',
-        role: foundEntry.role || (isStaffMatch ? 'staff' : isManagerMatch ? 'manager' : 'student'),
-        token: foundEntry.token || token,
-        email: foundEntry.email,
-        phone: foundEntry.phone,
-        avatar: foundEntry.avatar,
-        isVerified: foundEntry.isVerified ?? false,
-        verificationStatus: foundEntry.verificationStatus || 'pending'
+      const rawUser = foundEntry.user ? { ...foundEntry.user } : { ...foundEntry };
+      const resolvedRole = rawUser.role || foundEntry.role || (isStaffMatch ? 'staff' : isManagerMatch ? 'manager' : 'student');
+
+      const user = {
+        ...rawUser,
+        id: rawUser.id || foundEntry.id,
+        name: rawUser.name || foundEntry.name || foundEntry.full_name || 'Authenticated User',
+        role: resolvedRole,
+        token: rawUser.token || foundEntry.token || token,
+        email: rawUser.email || foundEntry.email || '',
+        phone: rawUser.phone || foundEntry.phone || '',
+        studentId: rawUser.studentId || foundEntry.studentId || rawUser.residentId || foundEntry.residentId || '',
+        residentType: rawUser.residentType || foundEntry.residentType || 'student',
+        programOfStudy: rawUser.programOfStudy || foundEntry.programOfStudy || '',
+        department: rawUser.department || foundEntry.department || '',
+        institution: rawUser.institution || foundEntry.institution || '',
+        roomKey: rawUser.roomKey || foundEntry.roomKey || '',
+        hostelId: rawUser.hostelId || foundEntry.hostelId || '',
+        hostelName: rawUser.hostelName || foundEntry.hostelName || '',
+        blockName: rawUser.blockName || foundEntry.blockName || '',
+        roomNumber: rawUser.roomNumber || foundEntry.roomNumber || '',
+        managerId: rawUser.managerId || foundEntry.managerId || '',
+        managerName: rawUser.managerName || foundEntry.managerName || '',
+        managerPhone: rawUser.managerPhone || foundEntry.managerPhone || '',
+        managerEmail: rawUser.managerEmail || foundEntry.managerEmail || '',
+        avatar: rawUser.avatar || foundEntry.avatar || '',
+        isVerified: rawUser.isVerified ?? foundEntry.isVerified ?? true,
+        verificationStatus: rawUser.verificationStatus || foundEntry.verificationStatus || 'approved'
       };
+
+      if (user.role === 'student') {
+        const store = getStoreInstance();
+        const cleanEmail = (user.email || '').toLowerCase().trim();
+        const cleanStuId = (user.studentId || user.id || '').toLowerCase().trim();
+        const cleanKey = (user.roomKey || '').trim().toUpperCase();
+
+        const rk = store.roomKeys?.find((rk: any) => {
+          const rkKey = (rk.roomKey || '').trim().toUpperCase();
+          const rkStudentId = (rk.assignedStudentId || rk.studentId || rk.residentId || '').toLowerCase().trim();
+          const rkEmail = (rk.assignedStudentEmail || rk.studentEmail || '').toLowerCase().trim();
+
+          return (cleanKey && rkKey === cleanKey) ||
+                 (cleanStuId && rkStudentId === cleanStuId) ||
+                 (cleanEmail && rkEmail === cleanEmail);
+        });
+
+        if (rk) {
+          user.roomKey = rk.roomKey || user.roomKey;
+          user.hostelId = rk.hostelId || user.hostelId;
+          user.hostelName = rk.hostelName || user.hostelName;
+          user.blockName = rk.blockName || user.blockName;
+          user.roomNumber = rk.roomNumber || user.roomNumber;
+          user.managerId = rk.managerId || user.managerId;
+          user.managerName = rk.managerName || user.managerName;
+          user.managerPhone = rk.managerPhone || rk.phone || user.managerPhone;
+          user.managerEmail = rk.managerEmail || rk.email || user.managerEmail;
+        }
+      }
 
       console.log(`[AUTH DEBUG] Resolved User: ID="${user.id}" | Role="${user.role}" | Email="${user.email}"`);
       
@@ -3076,8 +3178,13 @@ async function startServer() {
 
   // --- Public/Protected Hostels Endpoints ---
   app.get("/api/hostels", async (req, res) => {
-    const list = await dbGetHostels(hostels);
-    res.json(list);
+    try {
+      const list = await dbGetHostels(hostels);
+      return res.json(list || hostels || []);
+    } catch (err) {
+      console.error("Error retrieving hostels from db:", err);
+      return res.json(hostels || []);
+    }
   });
 
   // Get currently logged-in manager's assigned hostel dynamically from the database
@@ -3918,18 +4025,42 @@ async function startServer() {
   app.post("/api/issue-reports/:id/assign", requireAuth(["manager", "admin"]), async (req: any, res) => {
     try {
       const { id } = req.params;
-      const { staffId, staffName, staffRole } = req.body;
+      const { staffId, staffName, staffRole, timeframe } = req.body;
 
       const list = await dbGetIssueReports(issueReports);
       const existing = list.find((i: any) => i.id === id);
       if (!existing) return res.status(404).json({ error: "Issue report not found" });
+
+      const assignedAt = new Date().toISOString();
+      let deadline = null;
+      if (timeframe) {
+        const now = new Date();
+        if (timeframe === '12h') {
+          deadline = new Date(now.getTime() + 12 * 60 * 60 * 1000).toISOString();
+        } else if (timeframe === '24h') {
+          deadline = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+        } else if (timeframe === '48h') {
+          deadline = new Date(now.getTime() + 48 * 60 * 60 * 1000).toISOString();
+        } else if (timeframe === '3d') {
+          deadline = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString();
+        } else if (timeframe === '5d') {
+          deadline = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000).toISOString();
+        } else if (timeframe === '7d') {
+          deadline = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+        }
+      }
+
+      if (!deadline) {
+        // Default to 24h
+        deadline = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      }
 
       const logs = existing.historyLogs || [];
       logs.push({
         action: 'Staff Assigned',
         actor: req.user.name || 'Manager',
         timestamp: new Date().toISOString(),
-        note: `Assigned to ${staffName || staffId} (${staffRole || 'Staff'})`
+        note: `Assigned to ${staffName || staffId} (${staffRole || 'Staff'}) with a ${timeframe || '24h'} timeframe.`
       });
 
       const updated = await dbUpdateIssueReport(
@@ -3938,10 +4069,16 @@ async function startServer() {
           assignedStaffId: staffId,
           assignedStaffName: staffName,
           assignedStaffRole: staffRole,
-          assignedAt: new Date().toISOString(),
+          assignedAt,
+          timeframe: timeframe || '24h',
+          deadline,
           status: 'In Progress',
           staffAccepted: false,
           staffCompleted: false,
+          staffDeclined: false,
+          staffDeclineReason: '',
+          staffRescheduleRequested: false,
+          staffRescheduleReason: '',
           historyLogs: logs
         },
         issueReports
@@ -3955,7 +4092,7 @@ async function startServer() {
           userId: staffId,
           type: 'task_assigned',
           title: `New Maintenance Task Assigned`,
-          message: `Manager assigned you to repair "${existing.title}" at ${existing.blockFloor}, ${existing.roomBed}.`,
+          message: `Manager assigned you to repair "${existing.title}" at ${existing.blockFloor || ''}, ${existing.roomBed || existing.roomNumber || ''}. Timeframe: ${timeframe || '24h'}.`,
           timestamp: new Date().toISOString(),
           read: false,
           link: '/staff/dashboard'
@@ -3990,6 +4127,8 @@ async function startServer() {
         {
           staffAccepted: true,
           staffAcceptedAt: new Date().toISOString(),
+          staffDeclined: false,
+          staffRescheduleRequested: false,
           status: 'In Progress',
           historyLogs: logs
         },
@@ -4000,6 +4139,77 @@ async function startServer() {
     } catch (err: any) {
       console.error("Error accepting task:", err);
       res.status(500).json({ error: "Failed to accept task" });
+    }
+  });
+
+  // Staff declines task assignment and gives reason why they cannot attend to it
+  app.post("/api/issue-reports/:id/staff-decline", requireAuth(["staff"]), async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+      const list = await dbGetIssueReports(issueReports);
+      const existing = list.find((i: any) => i.id === id);
+      if (!existing) return res.status(404).json({ error: "Issue report not found" });
+
+      const logs = existing.historyLogs || [];
+      logs.push({
+        action: 'Task Declined by Staff',
+        actor: req.user.name || 'Staff Member',
+        timestamp: new Date().toISOString(),
+        note: `Staff stated they cannot attend at the moment. Reason: ${reason || 'No reason specified'}`
+      });
+
+      const updated = await dbUpdateIssueReport(
+        id,
+        {
+          staffAccepted: false,
+          staffCompleted: false,
+          staffDeclined: true,
+          staffDeclineReason: reason || 'Not specified',
+          historyLogs: logs
+        },
+        issueReports
+      );
+
+      res.json(updated);
+    } catch (err: any) {
+      console.error("Error declining task:", err);
+      res.status(500).json({ error: "Failed to decline task" });
+    }
+  });
+
+  // Staff requests rescheduling with explanation/reasons
+  app.post("/api/issue-reports/:id/staff-reschedule", requireAuth(["staff"]), async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { reason, requestedTimeframe } = req.body;
+      const list = await dbGetIssueReports(issueReports);
+      const existing = list.find((i: any) => i.id === id);
+      if (!existing) return res.status(404).json({ error: "Issue report not found" });
+
+      const logs = existing.historyLogs || [];
+      logs.push({
+        action: 'Reschedule Requested by Staff',
+        actor: req.user.name || 'Staff Member',
+        timestamp: new Date().toISOString(),
+        note: `Requested reschedule to timeframe: ${requestedTimeframe || 'extended'}. Reason: ${reason || 'Not specified'}`
+      });
+
+      const updated = await dbUpdateIssueReport(
+        id,
+        {
+          staffRescheduleRequested: true,
+          staffRescheduleReason: reason || 'Not specified',
+          staffRequestedTimeframe: requestedTimeframe || '24h',
+          historyLogs: logs
+        },
+        issueReports
+      );
+
+      res.json(updated);
+    } catch (err: any) {
+      console.error("Error requesting reschedule:", err);
+      res.status(500).json({ error: "Failed to request reschedule" });
     }
   });
 
@@ -4044,7 +4254,9 @@ async function startServer() {
   app.post("/api/issue-reports/:id/student-confirm", requireAuth(["student"]), async (req: any, res) => {
     try {
       const { id } = req.params;
-      const { isResolved, feedback } = req.body;
+      const { isResolved, feedback, studentAcceptedResolved, studentFeedback } = req.body;
+      const resolvedFlag = isResolved !== undefined ? isResolved : (studentAcceptedResolved !== undefined ? studentAcceptedResolved : true);
+      const feedbackText = feedback !== undefined ? feedback : (studentFeedback || '');
 
       const list = await dbGetIssueReports(issueReports);
       const existing = list.find((i: any) => i.id === id);
@@ -4052,18 +4264,20 @@ async function startServer() {
 
       const logs = existing.historyLogs || [];
       logs.push({
-        action: isResolved ? 'Student Confirmed Resolution' : 'Student Requested Follow-up',
+        action: resolvedFlag ? 'Student Confirmed Resolution' : 'Student Requested Follow-up',
         actor: req.user.name || 'Student Resident',
         timestamp: new Date().toISOString(),
-        note: feedback || (isResolved ? 'Student inspected and confirmed issue is fully resolved.' : 'Student reported issue still persists.')
+        note: feedbackText || (resolvedFlag ? 'Student inspected and confirmed issue is fully resolved.' : 'Student reported issue still persists.')
       });
 
       const updated = await dbUpdateIssueReport(
         id,
         {
-          studentAcceptedResolved: isResolved === true,
+          studentAcceptedResolved: resolvedFlag === true,
+          studentConfirmed: resolvedFlag === true,
           studentResolvedAt: new Date().toISOString(),
-          studentFeedback: feedback || '',
+          studentFeedback: feedbackText,
+          status: resolvedFlag === true ? 'Resolved' : existing.status,
           historyLogs: logs
         },
         issueReports
@@ -4278,6 +4492,53 @@ async function startServer() {
     }
   });
 
+  // Get authenticated student's full profile and room key details
+  app.get("/api/student/my-profile", requireAuth(["student", "admin", "manager"]), async (req: any, res) => {
+    try {
+      const store = getStoreInstance();
+      const currentUser = req.user;
+      
+      const cleanEmail = (currentUser.email || '').toLowerCase().trim();
+      const studentId = (currentUser.studentId || currentUser.id || '').toLowerCase().trim();
+
+      const storeUser = store.users?.find((u: any) => 
+        (u.id && u.id === currentUser.id) ||
+        (u.studentId && u.studentId.toLowerCase().trim() === studentId) ||
+        (u.email && cleanEmail && u.email.toLowerCase().trim() === cleanEmail)
+      );
+
+      const mockUserObj = MOCK_USERS.find((u: any) => 
+        (u.user?.id && u.user.id === currentUser.id) ||
+        (u.user?.studentId && u.user.studentId.toLowerCase().trim() === studentId) ||
+        (u.email && cleanEmail && u.email.toLowerCase().trim() === cleanEmail)
+      )?.user;
+
+      const fullUser = storeUser || mockUserObj || currentUser;
+      const keyToSearch = fullUser.roomKey || currentUser.roomKey;
+
+      let keyRecord = null;
+      if (keyToSearch) {
+        keyRecord = store.roomKeys?.find((rk: any) => rk.roomKey?.trim().toUpperCase() === keyToSearch.trim().toUpperCase());
+      }
+
+      const responseUser = {
+        ...fullUser,
+        hostelName: fullUser.hostelName || keyRecord?.hostelName || currentUser.hostelName || '',
+        blockName: fullUser.blockName || keyRecord?.blockName || currentUser.blockName || '',
+        roomNumber: fullUser.roomNumber || keyRecord?.roomNumber || currentUser.roomNumber || '',
+        roomKey: fullUser.roomKey || keyRecord?.roomKey || keyToSearch || currentUser.roomKey || '',
+        studentId: fullUser.studentId || currentUser.studentId || currentUser.id
+      };
+
+      res.json({
+        user: responseUser,
+        roomKeyDetails: keyRecord || null
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to load student profile" });
+    }
+  });
+
   // Verify a Digital Room Key (Public or during signup)
   app.post("/api/room-keys/verify", async (req: any, res) => {
     try {
@@ -4399,6 +4660,11 @@ async function startServer() {
           blockName: keyRecord.blockName,
           roomNumber: keyRecord.roomNumber,
           roomKey: keyRecord.roomKey,
+          token: `token_stu_${Date.now()}`,
+          managerId: hostel?.managerId || '',
+          managerName: hostel?.managerName || 'Hostel Operations Manager',
+          managerPhone: hostel?.phone || hostel?.managerPhone || '+233 24 000 0000',
+          managerEmail: hostel?.managerEmail || hostel?.email || 'manager@pinevela.com',
           createdAt: new Date().toISOString()
         };
         store.users.push(user);
@@ -4415,6 +4681,11 @@ async function startServer() {
         if (resolvedName) user.name = resolvedName;
         if (resolvedPhone) user.phone = resolvedPhone;
         if (password) user.password = password;
+        if (!user.token) user.token = `token_stu_${Date.now()}`;
+        user.managerId = hostel?.managerId || user.managerId || '';
+        user.managerName = hostel?.managerName || user.managerName || 'Hostel Operations Manager';
+        user.managerPhone = hostel?.phone || hostel?.managerPhone || user.managerPhone || '+233 24 000 0000';
+        user.managerEmail = hostel?.managerEmail || hostel?.email || user.managerEmail || 'manager@pinevela.com';
       }
       savePersistentStore(store);
 
@@ -4541,22 +4812,45 @@ async function startServer() {
   app.get("/api/student-messages", requireAuth(["student", "manager", "admin"]), async (req: any, res) => {
     try {
       const userRole = req.user.role;
-      const userId = req.user.id;
-      const studentId = req.query.studentId as string;
-      const hostelId = req.query.hostelId as string;
+      const userEmail = (req.user.email || '').toLowerCase().trim();
+      const studentIdQuery = req.query.studentId as string;
+      const hostelIdQuery = req.query.hostelId as string;
 
       if (userRole === 'student') {
-        const myStudentId = req.user.studentId || req.user.id;
-        const msgs = await dbGetStudentMessages({ studentId: myStudentId });
+        const myStudentId = (req.user.studentId || req.user.id || '').trim();
+        const myEmail = userEmail;
+        const myRoomKey = (req.user.roomKey || '').trim();
+
+        const msgs = await dbGetStudentMessages({
+          studentId: myStudentId,
+          studentEmail: myEmail,
+          roomKey: myRoomKey,
+          userId: req.user.id,
+          exactStudentMatchOnly: true
+        });
         return res.json(msgs);
       }
 
       if (userRole === 'manager') {
-        const msgs = await dbGetStudentMessages({
-          studentId: studentId || undefined,
-          hostelId: hostelId || req.user.hostelId || undefined
+        const allMsgs = await dbGetStudentMessages();
+        const managerHostels = hostels.filter(h => 
+          h.managerId === req.user.id || 
+          (h.managerEmail && h.managerEmail.toLowerCase().trim() === userEmail)
+        );
+        const managerHostelIds = new Set(managerHostels.map(h => h.id));
+
+        const filteredMsgs = allMsgs.filter((m: any) => {
+          if (studentIdQuery && (m.studentId === studentIdQuery || m.studentEmail?.toLowerCase() === studentIdQuery.toLowerCase())) {
+            return true;
+          }
+          if (hostelIdQuery && m.hostelId === hostelIdQuery) return true;
+          if (m.managerId && m.managerId === req.user.id) return true;
+          if (m.hostelId && managerHostelIds.has(m.hostelId)) return true;
+          if (!studentIdQuery && !hostelIdQuery) return true; // return all manager-relevant messages
+          return false;
         });
-        return res.json(msgs);
+
+        return res.json(filteredMsgs);
       }
 
       const allMsgs = await dbGetStudentMessages();
@@ -4571,20 +4865,20 @@ async function startServer() {
   app.post("/api/student-messages", requireAuth(["student", "manager"]), async (req: any, res) => {
     try {
       const userRole = req.user.role;
-      const { message, attachmentUrl, studentId, studentName, hostelId, hostelName, managerId, managerName } = req.body;
+      const { message, attachmentUrl, studentId, studentName, studentEmail, hostelId, hostelName, managerId, managerName } = req.body;
 
       if (!message || typeof message !== 'string' || !message.trim()) {
         return res.status(400).json({ error: "Message content cannot be empty" });
       }
 
       const newMsg = await dbCreateStudentMessage({
-        studentId: userRole === 'student' ? (req.user.studentId || req.user.id) : studentId,
-        studentName: userRole === 'student' ? req.user.name : studentName,
-        studentEmail: req.user.email || '',
+        studentId: userRole === 'student' ? (req.user.studentId || req.user.id) : (studentId || 'STUDENT'),
+        studentName: userRole === 'student' ? req.user.name : (studentName || 'Student Resident'),
+        studentEmail: userRole === 'student' ? (req.user.email || '') : (studentEmail || ''),
         hostelId: hostelId || req.user.hostelId || '',
-        hostelName: hostelName || req.user.hostelName || '',
-        managerId: managerId || (userRole === 'manager' ? req.user.id : ''),
-        managerName: managerName || (userRole === 'manager' ? req.user.name : 'Hostel Manager'),
+        hostelName: hostelName || req.user.hostelName || 'PineVela Residence',
+        managerId: managerId || (userRole === 'manager' ? req.user.id : (req.user.managerId || '')),
+        managerName: managerName || (userRole === 'manager' ? req.user.name : (req.user.managerName || 'Hostel Operations Manager')),
         senderRole: userRole,
         message: message.trim(),
         attachmentUrl: attachmentUrl || ''
@@ -5403,29 +5697,45 @@ async function startServer() {
   // --- Accredited Staff & Job Offers Endpoints ---
   app.get("/api/accredited-staff", async (req, res) => {
     try {
-      const dbUsers = await dbGetUsers(MOCK_USERS);
-      const combinedUsers = [...MOCK_USERS, ...dbUsers, ...(persistentData.users || [])];
+      const dbUsers = await dbGetUsers(MOCK_USERS).catch(() => []);
+      const store = getStoreInstance();
+      const combinedUsers = [...MOCK_USERS, ...(dbUsers || []), ...(persistentData.users || []), ...(store?.users || [])];
       
-      const verifiedStaff = combinedUsers.filter(u => {
+      const allStaffCandidates = [
+        ...(staff || []),
+        ...(persistentData.staff || []),
+        ...combinedUsers
+      ];
+
+      const verifiedStaff = allStaffCandidates.filter(u => {
+        if (!u) return false;
         const usr = u.user || u;
-        const vStatus = (usr.verificationStatus || '').toLowerCase();
-        const isStaff = usr.role === 'staff' || usr.staffRole || usr.username?.toLowerCase().includes('staff') || usr.email?.toLowerCase().includes('staff');
-        return isStaff && (usr.isVerified === true || usr.isVerified === 'true' || vStatus === 'approved' || vStatus === 'verified' || usr.accountStatus === 'Active');
+        if (!usr || typeof usr !== 'object') return false;
+        const vStatus = String(usr.verificationStatus || '').toLowerCase();
+        const username = String(usr.username || '').toLowerCase();
+        const email = String(usr.email || '').toLowerCase();
+        const role = String(usr.role || '').toLowerCase();
+        const staffRole = String(usr.staffRole || '').toLowerCase();
+
+        const isStaff = role === 'staff' || Boolean(staffRole) || username.includes('staff') || email.includes('staff') || usr.isStaff === true;
+        const isVerified = usr.isVerified === true || usr.isVerified === 'true' || vStatus === 'approved' || vStatus === 'verified' || usr.accountStatus === 'Active';
+        
+        return isStaff && isVerified;
       }).map(u => {
         const usr = u.user || u;
-        const staffId = usr.id || usr.userId;
-        const reviews = (staffReviews || []).filter((r: any) => r.staffId === staffId);
+        const staffId = usr.id || usr.userId || `staff-${usr.email || Math.random().toString(36).substr(2, 6)}`;
+        const reviews = (staffReviews || []).filter((r: any) => r && (r.staffId === staffId || r.staffEmail === usr.email));
         const avgRating = reviews.length > 0 
-          ? Number((reviews.reduce((acc: number, r: any) => acc + (Number(r.rating) || 5), 0) / reviews.length).toFixed(1))
+          ? Number((reviews.reduce((acc: number, r: any) => acc + (Number(r?.rating) || 5), 0) / reviews.length).toFixed(1))
           : 5.0;
 
         return {
           id: staffId,
-          name: usr.name || usr.managerName || 'Accredited Staff',
+          name: usr.name || usr.full_name || usr.managerName || 'Accredited Staff',
           email: usr.email || usr.managerEmail || '',
           phone: usr.phone || usr.managerPhone || '',
           whatsapp: usr.whatsapp || usr.phone || usr.managerPhone || '',
-          specialization: usr.specialization || usr.staffRole || 'General Property Operations',
+          specialization: usr.specialization || usr.roleTitle || usr.staffRole || 'General Property Operations',
           yearsExperience: usr.yearsExperience || '2+ Years',
           avatar: usr.avatar || usr.profilePicture || usr.photo || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
           isVerified: true,
@@ -5437,15 +5747,17 @@ async function startServer() {
 
       const uniqueStaffMap = new Map();
       verifiedStaff.forEach(s => {
-        if (s.id && !uniqueStaffMap.has(s.id)) {
-          uniqueStaffMap.set(s.id, s);
+        const cleanEmail = String(s.email || '').toLowerCase().trim();
+        const key = cleanEmail || s.id;
+        if (key && !uniqueStaffMap.has(key)) {
+          uniqueStaffMap.set(key, s);
         }
       });
 
       res.json(Array.from(uniqueStaffMap.values()));
     } catch (err: any) {
-      console.error("Error fetching accredited staff:", err);
-      res.status(500).json({ error: "Failed to fetch accredited staff" });
+      console.warn("Notice fetching accredited staff:", err);
+      res.json([]);
     }
   });
 
@@ -5989,6 +6301,7 @@ ${400 + streamLength}
       // If not, then they remain in their job only and the option to apply is locked.
       const activeStaffRoster = staff.find((s: any) => 
         (s.userId === userId || (s.email && s.email.toLowerCase() === userEmail)) &&
+        s.hostelId &&
         (s.status === 'Active' || s.status === 'Approved' || !s.status || (s.status !== 'Dismissed' && s.status !== 'Removed' && s.status !== 'Resigned' && s.status !== 'Terminated'))
       );
 

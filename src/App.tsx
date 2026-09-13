@@ -64,78 +64,86 @@ function AppContent() {
   const [selectedPublicHostel, setSelectedPublicHostel] = useState<Hostel | null>(null);
 
   // Refetch hostels on every route change (e.g., when returning to landing page after admin approval)
-  useEffect(() => {
-    const refreshHostels = async () => {
+  const fetchHostelsSafely = async (retries = 2): Promise<Hostel[]> => {
+    for (let attempt = 0; attempt <= retries; attempt++) {
       try {
         const response = await fetch('/api/hostels');
         if (response.ok) {
           const text = await response.text();
           try {
-            const hostelsList = JSON.parse(text);
-            if (Array.isArray(hostelsList)) {
-              setHostels(hostelsList);
+            const data = JSON.parse(text);
+            if (Array.isArray(data)) {
+              return data;
             }
           } catch (e) {
-            console.error("Failed to parse hostels JSON:", e, "Raw response:", text.substring(0, 100));
+            console.warn("Retrying hostel JSON parse...", e);
           }
         }
       } catch (err) {
-        console.warn("Notice refreshing hostels on route change:", err);
+        if (attempt < retries) {
+          await new Promise(r => setTimeout(r, 800));
+        }
+      }
+    }
+    return [];
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+    const refreshHostels = async () => {
+      const hostelsList = await fetchHostelsSafely();
+      if (isMounted && hostelsList && hostelsList.length > 0) {
+        setHostels(hostelsList);
       }
     };
     refreshHostels();
+    return () => { isMounted = false; };
   }, [location.pathname]);
 
   // Synchronize data from the backend
   useEffect(() => {
+    let isMounted = true;
     const fetchData = async () => {
       setLoadingData(true);
       try {
-        // Fetch hostels (publicly accessible now)
-        const response = await fetch('/api/hostels');
-        if (response.ok) {
-          const text = await response.text();
-          try {
-            const hostelsList = JSON.parse(text);
-            setHostels(hostelsList);
-          } catch (e) {
-            console.error("Failed to parse public hostels JSON:", e, "Raw response:", text.substring(0, 100));
-          }
-        } else {
-          console.error("Failed to fetch public hostels, status:", response.status);
+        // Fetch hostels (publicly accessible)
+        const hostelsList = await fetchHostelsSafely();
+        if (isMounted && hostelsList && hostelsList.length > 0) {
+          setHostels(hostelsList);
         }
       } catch (err) {
-        console.error("Failed to fetch public hostels:", err);
+        console.warn("Could not retrieve initial public hostels:", err);
       }
 
       if (!user) {
-        setLoadingData(false);
+        if (isMounted) setLoadingData(false);
         return;
       }
 
       try {
         // Fetch issues reports (available to all authenticated roles)
-        const issuesList = await apiFetch('/api/issue-reports');
-        setIssueReports(issuesList);
+        const issuesList = await apiFetch('/api/issue-reports').catch(() => []);
+        if (isMounted) setIssueReports(issuesList || []);
 
         // Role specific data fetches
         if (user.role === 'admin' || user.role === 'manager') {
-          const bookingsList = await apiFetch('/api/booking-requests');
-          setBookingRequests(bookingsList);
+          const bookingsList = await apiFetch('/api/booking-requests').catch(() => []);
+          if (isMounted) setBookingRequests(bookingsList || []);
         }
 
         if (user.role === 'admin') {
-          const actsList = await apiFetch('/api/activities');
-          setActivities(actsList);
+          const actsList = await apiFetch('/api/activities').catch(() => []);
+          if (isMounted) setActivities(actsList || []);
         }
       } catch (err) {
-        console.error("Failed to sync backend data on app mount:", err);
+        console.warn("Notice syncing backend data on app mount:", err);
       } finally {
-        setLoadingData(false);
+        if (isMounted) setLoadingData(false);
       }
     };
 
     fetchData();
+    return () => { isMounted = false; };
   }, [user]);
 
   // Actions connecting frontend interactions to secure backend routes
