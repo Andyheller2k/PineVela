@@ -222,6 +222,63 @@ export interface ManagerRegistrationRequest {
   approvedAt?: string;
 }
 
+export interface HostelRoomKey {
+  id: string;
+  hostelId: string;
+  hostelName: string;
+  managerId?: string;
+  managerName?: string;
+  managerPhone?: string;
+  managerEmail?: string;
+  blockName: string;
+  blockInitial: string;
+  roomNumber: string;
+  floor?: number;
+  roomKey: string; // e.g. "MAZE-A-729104"
+  isAssigned: boolean;
+  assignedStudentId?: string;
+  assignedStudentName?: string;
+  assignedStudentEmail?: string;
+  assignedStudentPhone?: string;
+  assignedResidentType?: string;
+  assignedProgram?: string;
+  assignedDepartment?: string;
+  assignedInstitution?: string;
+  assignedAt?: string;
+  status: 'Available' | 'Occupied' | 'Reserved';
+  createdAt: string;
+}
+
+export interface ResidentOnboardingData {
+  residentType: 'student' | 'resident' | 'other';
+  customResidentType?: string;
+  name: string;
+  studentId: string;
+  email: string;
+  phone: string;
+  programOfStudy: string;
+  department: string;
+  institution: string;
+  roomKey: string;
+  password?: string;
+}
+
+export interface StudentDirectMessage {
+  id: string;
+  studentId: string;
+  studentName: string;
+  studentEmail?: string;
+  hostelId: string;
+  hostelName: string;
+  managerId: string;
+  managerName?: string;
+  senderRole: 'student' | 'manager';
+  message: string;
+  attachmentUrl?: string;
+  timestamp: string;
+  read: boolean;
+}
+
 export interface IssueReport {
   id: string;
   title: string;
@@ -232,14 +289,38 @@ export interface IssueReport {
   contactMethod: 'In-app Notification' | 'Phone Call' | 'Email';
   studentName: string;
   studentId: string;
+  studentEmail?: string;
+  studentPhone?: string;
+  hostelId?: string;
   hostelName: string;
+  managerId?: string;
   blockFloor: string;
+  blockName?: string;
   roomBed: string;
+  roomNumber?: string;
   status: 'Pending' | 'In Progress' | 'Resolved';
   date: string;
-  studentAcceptedResolved?: boolean;
   assignedStaffId?: string;
+  assignedStaffName?: string;
+  assignedStaffRole?: string;
+  assignedAt?: string;
+  staffAccepted?: boolean;
+  staffAcceptedAt?: string;
   staffCompleted?: boolean;
+  staffCompletionNotes?: string;
+  staffCompletionPhoto?: string;
+  staffCompletedAt?: string;
+  studentAcceptedResolved?: boolean;
+  studentResolvedAt?: string;
+  studentFeedback?: string;
+  closedByManager?: boolean;
+  closedAt?: string;
+  historyLogs?: Array<{
+    action: string;
+    actor: string;
+    timestamp: string;
+    note?: string;
+  }>;
 }
 
 export interface MeetingRequest {

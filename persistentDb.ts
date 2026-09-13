@@ -24,6 +24,10 @@ export interface PersistentStore {
   staffChatMessages?: any[];
   staffReviews?: any[];
   jobOffers?: any[];
+  staffBargains?: any[];
+  roomKeys?: any[];
+  keyDispatches?: any[];
+  studentMessages?: any[];
   platformSettings: {
     registrationFee: number;
     commission: number;
@@ -85,6 +89,8 @@ export function loadPersistentStore(defaultStore: PersistentStore): PersistentSt
       staffChatMessages: Array.isArray(parsed.staffChatMessages) ? parsed.staffChatMessages : (defaultStore.staffChatMessages || []),
       staffReviews: Array.isArray(parsed.staffReviews) ? parsed.staffReviews : (defaultStore.staffReviews || []),
       jobOffers: Array.isArray(parsed.jobOffers) ? parsed.jobOffers : (defaultStore.jobOffers || []),
+      roomKeys: Array.isArray(parsed.roomKeys) ? parsed.roomKeys : (defaultStore.roomKeys || []),
+      studentMessages: Array.isArray(parsed.studentMessages) ? parsed.studentMessages : (defaultStore.studentMessages || []),
       platformSettings: parsed.platformSettings || defaultStore.platformSettings,
     };
 

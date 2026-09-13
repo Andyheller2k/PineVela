@@ -13,7 +13,8 @@ import {
   ShieldCheck, LogOut as LogOutIcon, Search, Home, Hotel, Coffee, UserPlus, 
   AlertCircle, Check, Sparkles, ArrowRight, Layers, Wrench, Settings, Bell,
   Send, MessageSquare, Phone, Mail, Shield, Trash2, Edit3, Eye, FileText, CheckCircle, Lock, Calendar, CalendarCheck,
-  Briefcase, Sliders, ExternalLink, Download, RefreshCw
+  Briefcase, Sliders, ExternalLink, Download, RefreshCw, Scale, Handshake, HelpCircle, ThumbsUp, ThumbsDown,
+  Key, Copy, Smartphone, Share2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -68,10 +69,19 @@ export default function PageManagerDashboard() {
   // Staff state
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
   const [staffApplications, setStaffApplications] = useState<any[]>([]);
-  const [staffSubTab, setStaffSubTab] = useState<'roster' | 'applications' | 'recruitment'>('roster');
+  const [staffSubTab, setStaffSubTab] = useState<'roster' | 'applications' | 'bargains' | 'recruitment'>('roster');
   const [selectedCvApp, setSelectedCvApp] = useState<any | null>(null);
   const [docPreviewModal, setDocPreviewModal] = useState<{ title: string; type: 'cv' | 'id'; data: string; fileName?: string; name?: string; endpoint?: string } | null>(null);
   const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
+
+  // Staff quit & bargain negotiation state
+  const [staffBargains, setStaffBargains] = useState<any[]>([]);
+  const [selectedBargainToReview, setSelectedBargainToReview] = useState<any | null>(null);
+  const [managerResponseAction, setManagerResponseAction] = useState<'accept' | 'reject'>('accept');
+  const [managerResponseNote, setManagerResponseNote] = useState('');
+  const [managerUpdatedShift, setManagerUpdatedShift] = useState('');
+  const [managerUpdatedBlock, setManagerUpdatedBlock] = useState('');
+  const [submittingManagerResponse, setSubmittingManagerResponse] = useState(false);
 
   useEffect(() => {
     if (docPreviewModal && docPreviewModal.type === 'cv' && docPreviewModal.data) {
@@ -132,6 +142,24 @@ export default function PageManagerDashboard() {
   const [newRequestPriority, setNewRequestPriority] = useState<'Normal' | 'High' | 'Urgent'>('Normal');
   const [newRequestMessage, setNewRequestMessage] = useState('');
   const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
+
+  // Digital Room Keys & Dispatch state
+  const [roomKeysList, setRoomKeysList] = useState<any[]>([]);
+  const [loadingRoomKeys, setLoadingRoomKeys] = useState(false);
+  const [roomSearchQuery, setRoomSearchQuery] = useState('');
+  const [roomStatusFilter, setRoomStatusFilter] = useState<'all' | 'available' | 'occupied'>('all');
+  const [copiedKeyId, setCopiedKeyId] = useState<string | null>(null);
+
+  // Digital Dispatch Modal
+  const [dispatchModalOpen, setDispatchModalOpen] = useState(false);
+  const [selectedKeyForDispatch, setSelectedKeyForDispatch] = useState<any | null>(null);
+  const [dispatchRecipientEmail, setDispatchRecipientEmail] = useState('');
+  const [dispatchRecipientPhone, setDispatchRecipientPhone] = useState('');
+  const [dispatchRecipientName, setDispatchRecipientName] = useState('');
+  const [dispatchCustomNote, setDispatchCustomNote] = useState('');
+  const [dispatchSending, setDispatchSending] = useState(false);
+  const [dispatchSuccessMsg, setDispatchSuccessMsg] = useState<string | null>(null);
+  const [dispatchErrorMsg, setDispatchErrorMsg] = useState<string | null>(null);
 
   // Check if manager has approved properties
   const isPropertyApproved = (p: any) => 
@@ -240,6 +268,14 @@ export default function PageManagerDashboard() {
         setStaffApplications([]);
       }
 
+      // 4c. Fetch staff quit & retention bargain submissions
+      const resBargains = await apiFetch('/api/staff-bargains').catch(() => []);
+      if (Array.isArray(resBargains)) {
+        setStaffBargains(resBargains);
+      } else {
+        setStaffBargains([]);
+      }
+
       // Load recruitment settings from primary property if present
       if (managerProperties[0]) {
         if (managerProperties[0].staffHiringOpen !== undefined) {
@@ -268,6 +304,12 @@ export default function PageManagerDashboard() {
           }
         ]);
       }
+
+      // 7. Fetch Digital Room Keys
+      const resRoomKeys = await apiFetch('/api/room-keys').catch(() => []);
+      if (Array.isArray(resRoomKeys)) {
+        setRoomKeysList(resRoomKeys);
+      }
       
       // Determine initial tab and popup after fetching properties
       if (managerProperties.some(isPropertyApproved)) {
@@ -287,6 +329,93 @@ export default function PageManagerDashboard() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchRoomKeys = async () => {
+    try {
+      setLoadingRoomKeys(true);
+      const resKeys = await apiFetch('/api/room-keys').catch(() => []);
+      if (Array.isArray(resKeys)) {
+        setRoomKeysList(resKeys);
+      }
+    } catch (err) {
+      console.error("Error fetching room keys:", err);
+    } finally {
+      setLoadingRoomKeys(false);
+    }
+  };
+
+  const handleSendDigitalKey = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!selectedKeyForDispatch) return;
+    if (!dispatchRecipientEmail && !dispatchRecipientPhone) {
+      setDispatchErrorMsg('Please provide either an email address or a phone number.');
+      return;
+    }
+
+    try {
+      setDispatchSending(true);
+      setDispatchErrorMsg(null);
+      setDispatchSuccessMsg(null);
+
+      const payload = {
+        roomKey: selectedKeyForDispatch.roomKey,
+        roomNumber: selectedKeyForDispatch.roomNumber,
+        blockName: selectedKeyForDispatch.blockName,
+        hostelName: selectedKeyForDispatch.hostelName || primaryProperty?.name || 'Hostel',
+        recipientEmail: dispatchRecipientEmail.trim(),
+        recipientPhone: dispatchRecipientPhone.trim(),
+        recipientName: dispatchRecipientName.trim() || 'Resident / Student',
+        customNote: dispatchCustomNote.trim()
+      };
+
+      const res = await apiFetch('/api/room-keys/send-digital', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+
+      if (res.error) {
+        setDispatchErrorMsg(res.error);
+        return;
+      }
+
+      setDispatchSuccessMsg(res.message || `Digital Room Key successfully sent!`);
+      setToastMessage(`Digital key for Room ${selectedKeyForDispatch.roomNumber} dispatched successfully!`);
+
+      // Update in roomKeysList locally
+      setRoomKeysList(prev => prev.map(k => {
+        if (k.roomKey === selectedKeyForDispatch.roomKey) {
+          return {
+            ...k,
+            lastDispatchedAt: new Date().toISOString(),
+            lastDispatchedTo: dispatchRecipientEmail || dispatchRecipientPhone || dispatchRecipientName
+          };
+        }
+        return k;
+      }));
+
+      setTimeout(() => {
+        setDispatchModalOpen(false);
+        setDispatchSuccessMsg(null);
+        setDispatchRecipientEmail('');
+        setDispatchRecipientPhone('');
+        setDispatchRecipientName('');
+        setDispatchCustomNote('');
+      }, 1600);
+    } catch (err: any) {
+      setDispatchErrorMsg(err.message || 'Failed to dispatch room key.');
+    } finally {
+      setDispatchSending(false);
+    }
+  };
+
+  const handleCopyKey = (keyString: string, keyId: string) => {
+    navigator.clipboard.writeText(keyString);
+    setCopiedKeyId(keyId);
+    setToastMessage(`Key "${keyString}" copied to clipboard!`);
+    setTimeout(() => {
+      setCopiedKeyId(null);
+    }, 2200);
   };
 
   // Helper to extract normalized blocks from registered hostel
@@ -503,6 +632,46 @@ export default function PageManagerDashboard() {
       triggerToast(`Application ${status.toLowerCase()} successfully!`);
     } catch (err: any) {
       triggerToast(err.message || 'Failed to update application decision.');
+    }
+  };
+
+  const handleManagerBargainResponse = async () => {
+    if (!selectedBargainToReview) return;
+    if (managerResponseAction === 'reject' && !managerResponseNote.trim()) {
+      triggerToast('Please provide an explanatory note to the staff member as to why the requested terms cannot be approved.');
+      return;
+    }
+
+    setSubmittingManagerResponse(true);
+    try {
+      const res = await apiFetch(`/api/staff-bargains/${selectedBargainToReview.id}/manager-response`, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: managerResponseAction,
+          responseNote: managerResponseNote.trim(),
+          updatedShift: managerUpdatedShift.trim() || undefined,
+          updatedBlock: managerUpdatedBlock.trim() || undefined
+        })
+      });
+
+      if (res.success) {
+        if (managerResponseAction === 'accept') {
+          triggerToast('Bargain deal accepted! The staff member has been retained and their records updated.');
+        } else {
+          triggerToast('Bargain proposal declined. The staff member has been notified and can now decide whether to quit or stay.');
+        }
+        setSelectedBargainToReview(null);
+        setManagerResponseNote('');
+        setManagerUpdatedShift('');
+        setManagerUpdatedBlock('');
+        await fetchManagerData();
+      } else {
+        triggerToast(res.error || 'Failed to submit response');
+      }
+    } catch (err: any) {
+      triggerToast(err.message || 'Failed to submit response');
+    } finally {
+      setSubmittingManagerResponse(false);
     }
   };
 
@@ -1281,22 +1450,33 @@ export default function PageManagerDashboard() {
               </div>
             )}
 
-            {/* TAB 3: BLOCKS & ROOMS (GLASSMORPHIC MODEL) */}
+            {/* TAB 3: BLOCKS & ROOMS (GLASSMORPHIC MODEL & DIGITAL KEYS) */}
             {activeTab === 'blocks' && (
               <div className="animate-fadeIn relative z-10 space-y-6">
-                <div className="bg-sky-50/20 border border-sky-200/50 p-6 rounded-3xl backdrop-blur-2xl shadow-xl flex items-center justify-between">
+                <div className="bg-sky-50/20 border border-sky-200/50 p-6 rounded-3xl backdrop-blur-2xl shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-500/30">
-                      <Layers className="w-6 h-6" />
+                    <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-500/30 shrink-0">
+                      <Key className="w-6 h-6" />
                     </div>
                     <div>
-                      <h2 className="text-xl font-bold text-slate-800">Physical Property Structure & Blocks</h2>
-                      <p className="text-xs text-slate-600">Interactive 3D model of your approved residence wings and room capacity.</p>
+                      <h2 className="text-xl font-bold text-slate-800">Physical Property Wings & Digital Room Keys</h2>
+                      <p className="text-xs text-slate-600">Select any block to inspect all rooms, view their unique digital access keys, search room numbers, and dispatch keys to students.</p>
                     </div>
                   </div>
-                  <span className="text-xs font-bold bg-white text-blue-900 px-3 py-1.5 rounded-xl border border-blue-200 shadow-sm">
-                    {propertyBlocks.length} Verified Wings
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={fetchRoomKeys}
+                      disabled={loadingRoomKeys}
+                      className="px-3.5 py-2 bg-white hover:bg-slate-50 text-blue-900 border border-blue-200 text-xs font-bold rounded-xl shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+                      title="Sync and refresh room keys"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${loadingRoomKeys ? 'animate-spin' : ''}`} />
+                      <span>{loadingRoomKeys ? 'Refreshing...' : 'Refresh Keys'}</span>
+                    </button>
+                    <span className="text-xs font-bold bg-white text-blue-900 px-3.5 py-2 rounded-xl border border-blue-200 shadow-sm shrink-0">
+                      {propertyBlocks.length} Wings • {roomKeysList.length || '30+'} Digital Keys
+                    </span>
+                  </div>
                 </div>
 
                 {/* Approved Residence Integrity Protection Banner */}
@@ -1306,9 +1486,9 @@ export default function PageManagerDashboard() {
                       <Lock className="w-4 h-4" />
                     </div>
                     <div>
-                      <p className="font-bold text-amber-950">Block Architecture Locked</p>
+                      <p className="font-bold text-amber-950">Manager Digital Access Security</p>
                       <p className="text-amber-800 mt-0.5">
-                        Room numbers and bed counts are verified for active student bookings. Submit a request to the Admin Board to adjust wings or capacity.
+                        Each room is assigned an automated, secure 6-digit cryptographic key (e.g. <span className="font-mono font-bold bg-amber-200/80 px-1 py-0.5 rounded text-amber-950">PINECREST-A-XXXXXX</span>). Students require this key during registration to link their room console.
                       </p>
                     </div>
                   </div>
@@ -1325,107 +1505,369 @@ export default function PageManagerDashboard() {
                   </button>
                 </div>
 
-                <div className="flex flex-col lg:flex-row gap-6">
-                  {/* Blocks Grid */}
-                  <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-6">
-                    {propertyBlocks.map((block: any, idx: number) => (
-                      <div 
-                        key={idx}
-                        onClick={() => setSelectedBlock(block)}
-                        className="relative cursor-pointer group"
+                {/* Blocks Grid Selector */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">Select Residence Block</h3>
+                    {selectedBlock && (
+                      <button
+                        onClick={() => setSelectedBlock(null)}
+                        className="text-xs font-bold text-blue-600 hover:text-blue-800 cursor-pointer"
                       >
-                        {/* Glassmorphic 3D-ish Block Representation */}
-                        <div className="absolute inset-0 bg-gradient-to-br from-blue-300/30 to-indigo-400/10 rounded-[2rem] transform translate-y-3 translate-x-2 group-hover:translate-y-5 group-hover:translate-x-3 transition-transform duration-300 blur-sm"></div>
-                        <div className={`relative p-6 rounded-[2rem] border backdrop-blur-3xl shadow-xl transition-all duration-300 flex flex-col justify-between space-y-6 ${
-                          selectedBlock?.blockName === block.blockName 
-                            ? 'bg-blue-500/20 border-blue-400/60 scale-[1.02]' 
-                            : 'bg-white/60 border-white/80 hover:bg-white/80'
-                        }`}>
-                          <div className="flex justify-between items-start">
-                            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white shadow-md flex items-center justify-center">
-                              <Building2 className="w-6 h-6" />
-                            </div>
-                            <span className="text-[10px] font-black uppercase tracking-widest text-blue-900 bg-white/80 px-3 py-1 rounded-full border border-blue-100 shadow-sm">
-                              {block.genderCategory}
-                            </span>
-                          </div>
-                          
-                          <div>
-                            <h3 className="text-2xl font-black text-slate-900 tracking-tight">{block.blockName}</h3>
-                            <p className="text-xs font-semibold text-slate-500 mt-1">
-                              {block.floors} Floors • {block.totalRooms} Rooms • {block.bedsPerRoom} Beds/Room
-                            </p>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-200/60 text-xs">
-                            <div className="p-3 bg-white/70 rounded-xl border border-slate-100">
-                              <span className="block text-[10px] text-slate-400 font-bold uppercase">Total Beds</span>
-                              <span className="text-lg font-black text-blue-600">{block.totalBeds}</span>
-                            </div>
-                            <div className="p-3 bg-white/70 rounded-xl border border-slate-100">
-                              <span className="block text-[10px] text-slate-400 font-bold uppercase">Room Prefix</span>
-                              <span className="text-lg font-black text-slate-800">Rooms {block.roomPrefix}{block.startNum}+</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                        Show All Blocks Overview
+                      </button>
+                    )}
                   </div>
 
-                  {/* Selected Block Details Pane */}
-                  {selectedBlock ? (
-                    <div className="w-full lg:w-96 shrink-0 bg-white/80 border border-blue-200/60 rounded-[2rem] p-6 backdrop-blur-2xl shadow-xl h-fit animate-fadeIn space-y-6">
-                      <div className="flex justify-between items-center border-b border-slate-200 pb-4">
-                        <div>
-                          <h4 className="text-lg font-bold text-slate-900">{selectedBlock.blockName}</h4>
-                          <span className="text-[10px] font-semibold text-blue-600 uppercase">{selectedBlock.genderCategory}</span>
-                        </div>
-                        <button onClick={() => setSelectedBlock(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
-                          <XCircle className="w-5 h-5" />
-                        </button>
-                      </div>
-                      
-                      <div className="space-y-4">
-                        <div className="bg-blue-50/60 p-4 rounded-2xl border border-blue-100">
-                          <p className="text-[10px] uppercase font-bold text-slate-500 mb-1">Total Block Capacity</p>
-                          <p className="text-3xl font-black text-blue-900">{selectedBlock.totalBeds} Beds</p>
-                          <p className="text-xs text-slate-600 font-medium mt-0.5">{selectedBlock.floors} Floors ({selectedBlock.roomsPerFloor} rooms per floor)</p>
-                        </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {propertyBlocks.map((block: any, idx: number) => {
+                      const isSelected = selectedBlock?.blockName === block.blockName || (!selectedBlock && idx === 0);
+                      const blockKeys = roomKeysList.filter((rk: any) => 
+                        rk.blockName === block.blockName || 
+                        rk.blockName?.toLowerCase() === block.blockName?.toLowerCase() ||
+                        rk.blockInitial === block.roomPrefix ||
+                        (rk.roomNumber && block.roomPrefix && rk.roomNumber.startsWith(block.roomPrefix))
+                      );
 
-                        <div className="bg-sky-50/60 p-4 rounded-2xl border border-sky-100 space-y-3">
-                          <p className="text-[10px] uppercase font-bold text-slate-500">Room Tier Pricing</p>
-                          <div className="space-y-2">
-                            {selectedBlock.roomTypes?.map((rt: any, i: number) => (
-                              <div key={i} className="flex justify-between items-center text-xs font-semibold text-slate-700 bg-white p-2.5 rounded-xl border border-slate-100">
-                                <div>
-                                  <span className="block text-slate-900">{rt.type}</span>
-                                  <span className="text-[10px] text-slate-400">{rt.spaces} spaces total</span>
-                                </div>
-                                <span className="font-bold text-blue-600">GHS {rt.priceGHS.toLocaleString()}</span>
+                      return (
+                        <div 
+                          key={idx}
+                          onClick={() => setSelectedBlock(block)}
+                          className="relative cursor-pointer group"
+                        >
+                          <div className={`absolute inset-0 rounded-[2rem] transform transition-transform duration-300 blur-sm ${
+                            isSelected 
+                              ? 'bg-gradient-to-br from-blue-400/40 to-indigo-500/30 translate-y-3 translate-x-2' 
+                              : 'bg-gradient-to-br from-blue-300/20 to-indigo-400/10 group-hover:translate-y-2'
+                          }`}></div>
+                          <div className={`relative p-6 rounded-[2rem] border backdrop-blur-3xl shadow-xl transition-all duration-300 flex flex-col justify-between space-y-5 ${
+                            isSelected
+                              ? 'bg-blue-600/10 border-blue-500/60 ring-2 ring-blue-500/40 scale-[1.02]' 
+                              : 'bg-white/70 border-white/80 hover:bg-white/90'
+                          }`}>
+                            <div className="flex justify-between items-start">
+                              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-md ${
+                                isSelected ? 'bg-blue-600 text-white shadow-blue-500/30' : 'bg-gradient-to-br from-blue-600 to-indigo-700 text-white'
+                              }`}>
+                                <Building2 className="w-6 h-6" />
                               </div>
-                            ))}
+                              <div className="flex flex-col items-end gap-1">
+                                <span className="text-[10px] font-black uppercase tracking-widest text-blue-900 bg-white/90 px-3 py-1 rounded-full border border-blue-100 shadow-sm">
+                                  {block.genderCategory}
+                                </span>
+                                {isSelected && (
+                                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                    <Check className="w-3 h-3" /> Active View
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            
+                            <div>
+                              <h3 className="text-xl font-black text-slate-900 tracking-tight">{block.blockName}</h3>
+                              <p className="text-xs font-semibold text-slate-500 mt-1">
+                                {block.floors} Floors • {block.totalRooms} Rooms • {block.bedsPerRoom} Beds/Room
+                              </p>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2.5 pt-3 border-t border-slate-200/60 text-xs">
+                              <div className="p-2.5 bg-white/80 rounded-xl border border-slate-100">
+                                <span className="block text-[10px] text-slate-400 font-bold uppercase">Digital Keys</span>
+                                <span className="text-base font-black text-blue-600 flex items-center gap-1">
+                                  <Key className="w-3.5 h-3.5" />
+                                  <span>{blockKeys.length || block.totalRooms || 20} Keys</span>
+                                </span>
+                              </div>
+                              <div className="p-2.5 bg-white/80 rounded-xl border border-slate-100">
+                                <span className="block text-[10px] text-slate-400 font-bold uppercase">Prefix / Series</span>
+                                <span className="text-base font-black text-slate-800">{block.roomPrefix}{block.startNum}+</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Selected Block Rooms & Digital Keys Section */}
+                {(() => {
+                  const activeBlock = selectedBlock || propertyBlocks[0];
+                  if (!activeBlock) return null;
+
+                  // Filter keys for this block
+                  let blockKeys = roomKeysList.filter((rk: any) => 
+                    rk.blockName === activeBlock.blockName || 
+                    rk.blockName?.toLowerCase() === activeBlock.blockName?.toLowerCase() ||
+                    rk.blockInitial === activeBlock.roomPrefix ||
+                    (rk.roomNumber && activeBlock.roomPrefix && rk.roomNumber.startsWith(activeBlock.roomPrefix))
+                  );
+
+                  // If no specific block keys loaded yet, show all or synthesized list
+                  if (blockKeys.length === 0 && roomKeysList.length > 0) {
+                    blockKeys = roomKeysList;
+                  }
+
+                  // Apply status filter
+                  if (roomStatusFilter === 'available') {
+                    blockKeys = blockKeys.filter(k => !k.isAssigned);
+                  } else if (roomStatusFilter === 'occupied') {
+                    blockKeys = blockKeys.filter(k => k.isAssigned);
+                  }
+
+                  // Apply room search filter
+                  if (roomSearchQuery.trim()) {
+                    const q = roomSearchQuery.toLowerCase().trim();
+                    blockKeys = blockKeys.filter(k => 
+                      k.roomNumber?.toLowerCase().includes(q) ||
+                      k.roomKey?.toLowerCase().includes(q) ||
+                      k.blockName?.toLowerCase().includes(q) ||
+                      `floor ${k.floor}`.includes(q) ||
+                      `${k.floor}` === q ||
+                      k.lastDispatchedTo?.toLowerCase().includes(q) ||
+                      k.assignedStudentName?.toLowerCase().includes(q)
+                    );
+                  }
+
+                  const totalInBlock = activeBlock.totalRooms || 20;
+                  const availableCount = blockKeys.filter(k => !k.isAssigned).length;
+                  const occupiedCount = blockKeys.filter(k => k.isAssigned).length;
+
+                  return (
+                    <div className="bg-white/80 border border-blue-200/60 rounded-[2.5rem] p-6 md:p-8 backdrop-blur-2xl shadow-xl space-y-6 animate-fadeIn">
+                      
+                      {/* Block Detail Header */}
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+                        <div className="flex items-center gap-3.5">
+                          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white flex items-center justify-center shadow-lg shadow-blue-600/20 shrink-0">
+                            <Building2 className="w-6 h-6" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-xl font-black text-slate-900 tracking-tight">{activeBlock.blockName}</h3>
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-800 bg-blue-100 px-2.5 py-0.5 rounded-full">
+                                {activeBlock.genderCategory}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                              {activeBlock.floors} Floors • {activeBlock.roomsPerFloor || Math.ceil(totalInBlock / activeBlock.floors)} Rooms/Floor • {activeBlock.totalBeds} Total Beds
+                            </p>
                           </div>
                         </div>
 
-                        <div className="bg-indigo-50/60 p-4 rounded-2xl border border-indigo-100 space-y-2">
-                          <p className="text-[10px] uppercase font-bold text-slate-500">Block Specific Amenities</p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {selectedBlock.amenities?.map((amenity: string, i: number) => (
-                              <span key={i} className="px-2.5 py-1 bg-white text-[10px] font-bold text-indigo-900 rounded-lg shadow-sm border border-indigo-100">
-                                {amenity}
-                              </span>
-                            ))}
+                        {/* Quick Block Stats */}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="px-3 py-1.5 bg-blue-50 border border-blue-100 rounded-xl text-xs font-bold text-blue-900">
+                            Rooms: <span className="font-black text-blue-700">{blockKeys.length}</span>
+                          </div>
+                          <div className="px-3 py-1.5 bg-emerald-50 border border-emerald-100 rounded-xl text-xs font-bold text-emerald-900">
+                            Available: <span className="font-black text-emerald-700">{availableCount}</span>
+                          </div>
+                          <div className="px-3 py-1.5 bg-purple-50 border border-purple-100 rounded-xl text-xs font-bold text-purple-900">
+                            Rate: <span className="font-black text-purple-700">GH₵ {activeBlock.pricePerBlock?.toLocaleString() || '3,800'}</span>/yr
                           </div>
                         </div>
                       </div>
+
+                      {/* Search & Filter Toolbar */}
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                        {/* Search Input */}
+                        <div className="relative flex-1">
+                          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                          <input
+                            type="text"
+                            value={roomSearchQuery}
+                            onChange={(e) => setRoomSearchQuery(e.target.value)}
+                            placeholder={`Search room number (e.g. ${activeBlock.roomPrefix || 'A'}-101), key code, or floor...`}
+                            className="w-full pl-10 pr-10 py-2.5 bg-slate-50/90 border border-slate-200 rounded-2xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all shadow-inner"
+                          />
+                          {roomSearchQuery && (
+                            <button 
+                              onClick={() => setRoomSearchQuery('')}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                            >
+                              <XCircle className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Filter Status Buttons */}
+                        <div className="flex items-center gap-1.5 bg-slate-100/90 p-1 rounded-2xl border border-slate-200 self-start sm:self-auto">
+                          <button
+                            onClick={() => setRoomStatusFilter('all')}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                              roomStatusFilter === 'all'
+                                ? 'bg-white text-blue-900 shadow-sm'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            All ({roomKeysList.length > 0 ? roomKeysList.length : 'All'})
+                          </button>
+                          <button
+                            onClick={() => setRoomStatusFilter('available')}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                              roomStatusFilter === 'available'
+                                ? 'bg-white text-emerald-900 shadow-sm'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            Available
+                          </button>
+                          <button
+                            onClick={() => setRoomStatusFilter('occupied')}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                              roomStatusFilter === 'occupied'
+                                ? 'bg-white text-blue-900 shadow-sm'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            Occupied
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Scrollable Room Keys Grid */}
+                      {blockKeys.length > 0 ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[600px] overflow-y-auto pr-1 py-1 custom-scrollbar">
+                          {blockKeys.map((rk: any, index: number) => {
+                            const isCopied = copiedKeyId === rk.id || copiedKeyId === rk.roomKey;
+                            const isAssigned = rk.isAssigned || rk.status === 'Assigned' || rk.status === 'Occupied';
+
+                            return (
+                              <div
+                                key={rk.id || index}
+                                className={`p-4 rounded-2xl border transition-all duration-200 flex flex-col justify-between space-y-3.5 ${
+                                  isAssigned
+                                    ? 'bg-blue-50/50 border-blue-200/80 shadow-sm'
+                                    : 'bg-white border-slate-200/80 hover:border-blue-300 hover:shadow-md'
+                                }`}
+                              >
+                                {/* Room Card Header */}
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-base font-black text-slate-900">
+                                      Room {rk.roomNumber}
+                                    </span>
+                                    <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                                      Floor {rk.floor || 1}
+                                    </span>
+                                  </div>
+
+                                  <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border ${
+                                    isAssigned
+                                      ? 'bg-blue-100 text-blue-900 border-blue-200'
+                                      : 'bg-emerald-100 text-emerald-900 border-emerald-200'
+                                  }`}>
+                                    {isAssigned ? 'Occupied' : 'Available'}
+                                  </span>
+                                </div>
+
+                                {/* Digital Key Monospace Display */}
+                                <div className="p-3 bg-slate-900 text-cyan-300 rounded-xl font-mono text-xs font-black tracking-wider flex items-center justify-between border border-slate-800 shadow-inner group">
+                                  <div className="flex items-center gap-2 overflow-hidden">
+                                    <Key className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                                    <span className="truncate select-all">{rk.roomKey}</span>
+                                  </div>
+                                  <button
+                                    onClick={() => handleCopyKey(rk.roomKey, rk.id || rk.roomKey)}
+                                    className="p-1 text-slate-400 hover:text-white rounded transition-colors cursor-pointer shrink-0 ml-2"
+                                    title="Copy key code"
+                                  >
+                                    {isCopied ? (
+                                      <span className="text-[10px] text-emerald-400 font-sans font-bold flex items-center gap-0.5">
+                                        <Check className="w-3 h-3" /> Copied
+                                      </span>
+                                    ) : (
+                                      <Copy className="w-3.5 h-3.5" />
+                                    )}
+                                  </button>
+                                </div>
+
+                                {/* Dispatched / Assignment Info */}
+                                {rk.lastDispatchedTo && (
+                                  <div className="text-[11px] text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100 flex items-center gap-1.5 truncate">
+                                    <Mail className="w-3 h-3 text-slate-400 shrink-0" />
+                                    <span className="truncate">Sent to: <strong className="text-slate-700">{rk.lastDispatchedTo}</strong></span>
+                                  </div>
+                                )}
+
+                                {isAssigned && rk.assignedStudentName && (
+                                  <div className="text-[11px] text-blue-900 bg-blue-100/60 p-2 rounded-lg border border-blue-200/50 flex items-center gap-1.5">
+                                    <Users className="w-3 h-3 text-blue-600 shrink-0" />
+                                    <span className="truncate">Resident: <strong>{rk.assignedStudentName}</strong></span>
+                                  </div>
+                                )}
+
+                                {/* Action Buttons */}
+                                <div className="grid grid-cols-2 gap-2 pt-1">
+                                  <button
+                                    onClick={() => {
+                                      setSelectedKeyForDispatch({
+                                        ...rk,
+                                        hostelName: primaryProperty?.name || 'PineVela Residence'
+                                      });
+                                      setDispatchRecipientEmail('');
+                                      setDispatchRecipientPhone('');
+                                      setDispatchRecipientName('');
+                                      setDispatchCustomNote(`Welcome! Here is your official PineVela digital room key for room ${rk.roomNumber} (${rk.blockName}).`);
+                                      setDispatchErrorMsg(null);
+                                      setDispatchSuccessMsg(null);
+                                      setDispatchModalOpen(true);
+                                    }}
+                                    className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
+                                  >
+                                    <Send className="w-3 h-3" />
+                                    <span>Send Key</span>
+                                  </button>
+
+                                  <button
+                                    onClick={() => {
+                                      const shareText = `*PineVela Room Key Access*\nResidence: ${primaryProperty?.name || 'Hostel'}\nBlock: ${rk.blockName}\nRoom: ${rk.roomNumber}\n*Digital Key Code:* ${rk.roomKey}\n\nUse this digital key on the student signup/login portal to link your room.`;
+                                      navigator.clipboard.writeText(shareText);
+                                      setToastMessage(`Full access details for Room ${rk.roomNumber} copied!`);
+                                    }}
+                                    className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                                    title="Copy formatted share message"
+                                  >
+                                    <Share2 className="w-3 h-3" />
+                                    <span>Share</span>
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="p-12 text-center border-2 border-dashed border-slate-200 rounded-3xl space-y-3">
+                          <Key className="w-10 h-10 text-slate-300 mx-auto" />
+                          <p className="text-sm font-bold text-slate-700">
+                            {roomSearchQuery ? `No rooms match search "${roomSearchQuery}"` : 'No room keys available in this view'}
+                          </p>
+                          <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                            {roomSearchQuery ? 'Try searching for a different room number or clear your filter query.' : 'Click below to generate and synchronize all room keys for this accredited property.'}
+                          </p>
+                          {roomSearchQuery ? (
+                            <button
+                              onClick={() => setRoomSearchQuery('')}
+                              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl cursor-pointer"
+                            >
+                              Clear Search Filter
+                            </button>
+                          ) : (
+                            <button
+                              onClick={fetchRoomKeys}
+                              disabled={loadingRoomKeys}
+                              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl cursor-pointer inline-flex items-center gap-1.5"
+                            >
+                              <RefreshCw className={`w-3.5 h-3.5 ${loadingRoomKeys ? 'animate-spin' : ''}`} />
+                              <span>{loadingRoomKeys ? 'Generating...' : 'Generate / Load Room Keys'}</span>
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  ) : (
-                    <div className="w-full lg:w-96 shrink-0 bg-white/40 border border-dashed border-slate-300 rounded-[2rem] p-8 text-center flex flex-col items-center justify-center space-y-3 text-slate-400">
-                      <Layers className="w-10 h-10 text-slate-300" />
-                      <p className="text-xs font-semibold">Select any block card to inspect room numbering, floor configurations, and pricing.</p>
-                    </div>
-                  )}
-                </div>
+                  );
+                })()}
               </div>
             )}
 
@@ -1475,6 +1917,24 @@ export default function PageManagerDashboard() {
                         {staffApplications.filter(a => a.status === 'pending').length > 0 && (
                           <span className="w-5 h-5 bg-amber-500 text-slate-950 font-black text-[10px] rounded-full flex items-center justify-center">
                             {staffApplications.filter(a => a.status === 'pending').length}
+                          </span>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setStaffSubTab('bargains')}
+                        className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 relative ${
+                          staffSubTab === 'bargains'
+                            ? 'bg-white text-blue-900 shadow-sm'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        <Scale className="w-3.5 h-3.5 text-purple-600" />
+                        <span>Quit & Bargains</span>
+                        {staffBargains.filter(b => b.status === 'pending').length > 0 && (
+                          <span className="w-5 h-5 bg-purple-600 text-white font-black text-[10px] rounded-full flex items-center justify-center animate-pulse">
+                            {staffBargains.filter(b => b.status === 'pending').length}
                           </span>
                         )}
                       </button>
@@ -1558,6 +2018,30 @@ export default function PageManagerDashboard() {
                                   <div className="col-span-2"><span className="text-slate-400 font-medium">ID / Ghana Card:</span> <span className="font-semibold text-slate-800">{(staff as any).nationalId}</span></div>
                                 )}
                               </div>
+
+                              {/* Pending Bargain Alert for this Staff */}
+                              {staffBargains.some(b => (b.staffId === staff.id || (b.staffEmail && b.staffEmail.toLowerCase() === staff.email.toLowerCase())) && b.status === 'pending') && (
+                                <button
+                                  type="button"
+                                  onClick={() => setStaffSubTab('bargains')}
+                                  className="w-full py-2 px-3 bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 rounded-xl text-xs font-bold flex items-center justify-between transition-all cursor-pointer shadow-xs"
+                                >
+                                  <span className="flex items-center gap-1.5">
+                                    <Scale className="w-3.5 h-3.5 text-purple-600 animate-pulse" />
+                                    <span>Retention Deal Pending</span>
+                                  </span>
+                                  <span className="text-purple-700 font-black flex items-center gap-1">
+                                    Review Deal <ArrowRight className="w-3 h-3" />
+                                  </span>
+                                </button>
+                              )}
+
+                              {staffBargains.some(b => (b.staffId === staff.id || (b.staffEmail && b.staffEmail.toLowerCase() === staff.email.toLowerCase())) && (b.status === 'quit_confirmed' || b.status === 'resigned')) && (
+                                <div className="w-full py-1.5 px-3 bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-[11px] font-bold flex items-center gap-1.5">
+                                  <LogOutIcon className="w-3.5 h-3.5 text-slate-500" />
+                                  <span>Staff Has Resigned / Position Vacated</span>
+                                </div>
+                              )}
 
                               <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
                                 <div className="flex gap-2">
@@ -1745,7 +2229,243 @@ export default function PageManagerDashboard() {
                   )}
 
                   {/* ======================================================== */}
-                  {/* SUBTAB 3: RECRUITMENT SETTINGS                            */}
+                  {/* SUBTAB 3: QUIT REASONS & BARGAIN NEGOTIATIONS             */}
+                  {/* ======================================================== */}
+                  {staffSubTab === 'bargains' && (
+                    <div className="space-y-6">
+                      <div className="p-5 bg-gradient-to-r from-purple-900 to-indigo-950 rounded-2xl text-white space-y-2">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <h4 className="text-sm font-black flex items-center gap-2">
+                            <Scale className="w-5 h-5 text-purple-300" />
+                            <span>Staff Resignations & Retention Bargain Center</span>
+                          </h4>
+                          <div className="flex items-center gap-2">
+                            <span className="px-3 py-1 rounded-full text-xs font-black bg-purple-500/30 text-purple-200 border border-purple-400/40">
+                              {staffBargains.filter(b => b.status === 'pending').length} Pending Deals
+                            </span>
+                            <span className="px-3 py-1 rounded-full text-xs font-black bg-emerald-500/30 text-emerald-200 border border-emerald-400/40">
+                              {staffBargains.filter(b => b.status === 'accepted').length} Retained
+                            </span>
+                          </div>
+                        </div>
+                        <p className="text-xs text-purple-100 max-w-3xl leading-relaxed">
+                          When verified staff members wish to quit, they must submit a mandatory reason or propose bargain terms (such as shift adjustments or wage terms). You can review and accept their deal to retain them, or decline. If declined, the staff member chooses whether to proceed to quit or remain in service.
+                        </p>
+                      </div>
+
+                      {staffBargains.length === 0 ? (
+                        <div className="text-center py-16 bg-white border border-slate-200/80 rounded-2xl p-8 space-y-3">
+                          <div className="w-14 h-14 bg-purple-50 text-purple-600 rounded-2xl flex items-center justify-center mx-auto">
+                            <Handshake className="w-7 h-7" />
+                          </div>
+                          <h4 className="text-base font-bold text-slate-900">No Resignations or Bargain Proposals</h4>
+                          <p className="text-xs text-slate-500 max-w-md mx-auto">
+                            All currently employed staff members are actively on duty in their assigned roles. Any pending quit notices or bargaining proposals will appear here immediately.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 gap-5">
+                          {staffBargains.map((bargain: any) => {
+                            const isPending = bargain.status === 'pending';
+                            const isAccepted = bargain.status === 'accepted';
+                            const isRejected = bargain.status === 'rejected';
+                            const isStayed = bargain.status === 'stay_confirmed';
+                            const isQuitted = bargain.status === 'quit_confirmed' || bargain.status === 'resigned';
+
+                            return (
+                              <div 
+                                key={bargain.id} 
+                                className={`p-6 bg-white border rounded-2xl shadow-sm transition-all space-y-5 ${
+                                  isPending 
+                                    ? 'border-purple-300 ring-2 ring-purple-100' 
+                                    : isAccepted 
+                                    ? 'border-emerald-200 bg-emerald-50/10' 
+                                    : isQuitted
+                                    ? 'border-slate-200 bg-slate-50/40 opacity-90'
+                                    : 'border-slate-200'
+                                }`}
+                              >
+                                {/* Header */}
+                                <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-4">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-purple-700 to-indigo-800 text-white flex items-center justify-center font-bold text-sm shadow-xs">
+                                      {(bargain.staffName || 'Staff').split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
+                                    </div>
+                                    <div>
+                                      <div className="flex items-center gap-2">
+                                        <h4 className="text-sm font-black text-slate-900">{bargain.staffName}</h4>
+                                        {bargain.isBargain ? (
+                                          <span className="px-2 py-0.5 bg-purple-100 text-purple-800 text-[10px] font-black uppercase rounded-md tracking-wider border border-purple-200">
+                                            Bargaining Deal
+                                          </span>
+                                        ) : (
+                                          <span className="px-2 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-black uppercase rounded-md tracking-wider border border-slate-200">
+                                            Direct Resignation
+                                          </span>
+                                        )}
+                                      </div>
+                                      <p className="text-xs text-slate-500 font-medium mt-0.5">
+                                        Role: <span className="font-bold text-slate-700">{bargain.role || 'Staff Member'}</span> &bull; {bargain.hostelName}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
+                                    <span className="text-[11px] font-semibold text-slate-400">
+                                      {bargain.submittedAt ? new Date(bargain.submittedAt).toLocaleDateString(undefined, { dateStyle: 'medium' }) : 'Recent'}
+                                    </span>
+                                    {isPending && (
+                                      <span className="px-3 py-1 rounded-full text-xs font-black bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1.5 animate-pulse">
+                                        <Clock className="w-3.5 h-3.5 text-amber-700" />
+                                        <span>Pending Your Decision</span>
+                                      </span>
+                                    )}
+                                    {isAccepted && (
+                                      <span className="px-3 py-1 rounded-full text-xs font-black bg-emerald-100 text-emerald-900 border border-emerald-300 flex items-center gap-1.5">
+                                        <CheckCircle className="w-3.5 h-3.5 text-emerald-700" />
+                                        <span>Deal Accepted (Staff Retained)</span>
+                                      </span>
+                                    )}
+                                    {isRejected && (
+                                      <span className="px-3 py-1 rounded-full text-xs font-black bg-rose-100 text-rose-900 border border-rose-300 flex items-center gap-1.5">
+                                        <XCircle className="w-3.5 h-3.5 text-rose-700" />
+                                        <span>Deal Declined (Awaiting Staff Choice)</span>
+                                      </span>
+                                    )}
+                                    {isStayed && (
+                                      <span className="px-3 py-1 rounded-full text-xs font-black bg-teal-100 text-teal-900 border border-teal-300 flex items-center gap-1.5">
+                                        <Check className="w-3.5 h-3.5 text-teal-700" />
+                                        <span>Staff Chose to Stay in Job</span>
+                                      </span>
+                                    )}
+                                    {isQuitted && (
+                                      <span className="px-3 py-1 rounded-full text-xs font-black bg-slate-200 text-slate-800 border border-slate-300 flex items-center gap-1.5">
+                                        <LogOutIcon className="w-3.5 h-3.5 text-slate-600" />
+                                        <span>Resigned & Role Vacated</span>
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Grid content */}
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 text-xs">
+                                  {/* Reason to quit */}
+                                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5">
+                                    <div className="flex items-center gap-1.5 text-slate-700 font-bold text-[11px] uppercase tracking-wider">
+                                      <AlertCircle className="w-3.5 h-3.5 text-slate-500" />
+                                      <span>Mandatory Reason Given for Wanting to Quit</span>
+                                    </div>
+                                    <p className="text-slate-800 italic bg-white p-3 rounded-lg border border-slate-100 leading-relaxed font-medium">
+                                      "{bargain.reasonToQuit}"
+                                    </p>
+                                    <div className="flex flex-wrap items-center gap-4 text-slate-500 pt-1 text-[11px]">
+                                      {bargain.staffEmail && <span>Email: <strong className="text-slate-700">{bargain.staffEmail}</strong></span>}
+                                      {bargain.staffPhone && <span>Phone: <strong className="text-slate-700">{bargain.staffPhone}</strong></span>}
+                                      {bargain.currentShift && <span>Current Shift: <strong className="text-slate-700">{bargain.currentShift}</strong></span>}
+                                    </div>
+                                  </div>
+
+                                  {/* Proposed bargain terms */}
+                                  {bargain.isBargain ? (
+                                    <div className="p-4 bg-purple-50/70 border border-purple-200 rounded-xl space-y-1.5">
+                                      <div className="flex items-center justify-between text-purple-900 font-bold text-[11px] uppercase tracking-wider">
+                                        <span className="flex items-center gap-1.5">
+                                          <Handshake className="w-3.5 h-3.5 text-purple-600" />
+                                          <span>Proposed Retention Deal to Stay</span>
+                                        </span>
+                                        {bargain.bargainProposal?.proposedCategory && (
+                                          <span className="px-2 py-0.5 bg-purple-200 text-purple-900 rounded font-black text-[10px]">
+                                            {bargain.bargainProposal.proposedCategory}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="bg-white p-3 rounded-lg border border-purple-100 space-y-1">
+                                        <p className="text-purple-950 font-bold">
+                                          {bargain.bargainProposal?.proposedTerms || 'No specific terms entered.'}
+                                        </p>
+                                        {bargain.bargainProposal?.notes && (
+                                          <p className="text-slate-600 italic text-[11px] pt-1 border-t border-purple-50">
+                                            Note: "{bargain.bargainProposal.notes}"
+                                          </p>
+                                        )}
+                                      </div>
+                                      <p className="text-[11px] text-purple-700 font-medium">
+                                        If you accept, this staff member is retained and their schedule/terms are officially updated.
+                                      </p>
+                                    </div>
+                                  ) : (
+                                    <div className="p-4 bg-rose-50/50 border border-rose-200 rounded-xl space-y-1.5 flex flex-col justify-center">
+                                      <div className="flex items-center gap-1.5 text-rose-900 font-bold text-[11px] uppercase tracking-wider">
+                                        <LogOutIcon className="w-3.5 h-3.5 text-rose-600" />
+                                        <span>Direct Resignation</span>
+                                      </div>
+                                      <p className="text-slate-700 font-medium text-xs">
+                                        The staff member chose not to submit any bargain deal and has officially initiated resignation.
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Manager Response Note (if already responded) */}
+                                {bargain.managerResponseNote && (
+                                  <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-xl text-xs space-y-1">
+                                    <div className="flex items-center gap-1.5 font-bold text-blue-900 text-[11px] uppercase tracking-wider">
+                                      <MessageSquare className="w-3.5 h-3.5 text-blue-600" />
+                                      <span>Manager's Recorded Response Note</span>
+                                      {bargain.resolvedAt && (
+                                        <span className="text-slate-400 font-normal ml-auto text-[10px]">
+                                          {new Date(bargain.resolvedAt).toLocaleString()}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-slate-800 font-medium italic">
+                                      "{bargain.managerResponseNote}"
+                                    </p>
+                                  </div>
+                                )}
+
+                                {/* Actions for pending bargains */}
+                                {isPending && (
+                                  <div className="flex flex-wrap items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedBargainToReview(bargain);
+                                        setManagerResponseAction('reject');
+                                        setManagerResponseNote('');
+                                      }}
+                                      className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+                                    >
+                                      <ThumbsDown className="w-3.5 h-3.5" />
+                                      <span>Decline Deal</span>
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedBargainToReview(bargain);
+                                        setManagerResponseAction('accept');
+                                        setManagerResponseNote('We accept your proposed retention terms and appreciate your service to our hostel.');
+                                        setManagerUpdatedShift(bargain.currentShift || 'Day Shift (8 AM - 5 PM)');
+                                        setManagerUpdatedBlock(bargain.currentBlock || 'All Blocks');
+                                      }}
+                                      className="px-5 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-xl text-xs font-black shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+                                    >
+                                      <ThumbsUp className="w-3.5 h-3.5" />
+                                      <span>Accept Deal & Retain Staff</span>
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ======================================================== */}
+                  {/* SUBTAB 4: RECRUITMENT SETTINGS                            */}
                   {/* ======================================================== */}
                   {staffSubTab === 'recruitment' && (
                     <div className="space-y-6">
@@ -2853,6 +3573,202 @@ export default function PageManagerDashboard() {
         )}
       </main>
 
+      {/* ======================================================== */}
+      {/* MODAL: MANAGER BARGAIN RESPONSE MODAL                     */}
+      {/* ======================================================== */}
+      {selectedBargainToReview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 md:p-8 shadow-2xl border border-slate-200 space-y-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
+                  <Scale className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">
+                    Staff Retention & Bargain Review
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Responding to {selectedBargainToReview.staffName} ({selectedBargainToReview.role})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedBargainToReview(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 cursor-pointer"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Overview of Staff's Request */}
+            <div className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs">
+              <div>
+                <span className="font-bold text-slate-500 uppercase text-[10px] tracking-wider">Reason For Wanting to Quit:</span>
+                <p className="text-slate-800 font-semibold italic mt-0.5">"{selectedBargainToReview.reasonToQuit}"</p>
+              </div>
+              {selectedBargainToReview.isBargain && (
+                <div className="pt-2 border-t border-slate-200">
+                  <span className="font-bold text-purple-700 uppercase text-[10px] tracking-wider">Proposed Deal Terms to Stay:</span>
+                  <p className="text-purple-950 font-bold mt-0.5 bg-purple-50 p-2.5 rounded-xl border border-purple-100">
+                    "{selectedBargainToReview.bargainProposal?.proposedTerms || 'No specific terms'}"
+                  </p>
+                  {selectedBargainToReview.bargainProposal?.notes && (
+                    <p className="text-slate-500 text-[11px] italic mt-1">
+                      Staff Note: "{selectedBargainToReview.bargainProposal.notes}"
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Decision Selector */}
+            <div className="space-y-3">
+              <label className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                Choose Your Response Decision:
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setManagerResponseAction('accept')}
+                  className={`p-3.5 rounded-2xl border text-left cursor-pointer transition-all flex items-start gap-2.5 ${
+                    managerResponseAction === 'accept'
+                      ? 'border-emerald-500 bg-emerald-50/70 text-emerald-950 ring-2 ring-emerald-200'
+                      : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                  }`}
+                >
+                  <ThumbsUp className={`w-4 h-4 mt-0.5 ${managerResponseAction === 'accept' ? 'text-emerald-600' : 'text-slate-400'}`} />
+                  <div>
+                    <div className="text-xs font-black">Accept Deal</div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">Retain staff on agreed terms</div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setManagerResponseAction('reject')}
+                  className={`p-3.5 rounded-2xl border text-left cursor-pointer transition-all flex items-start gap-2.5 ${
+                    managerResponseAction === 'reject'
+                      ? 'border-rose-500 bg-rose-50/70 text-rose-950 ring-2 ring-rose-200'
+                      : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                  }`}
+                >
+                  <ThumbsDown className={`w-4 h-4 mt-0.5 ${managerResponseAction === 'reject' ? 'text-rose-600' : 'text-slate-400'}`} />
+                  <div>
+                    <div className="text-xs font-black">Decline Deal</div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">Staff will then choose to quit or stay</div>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Fields based on action */}
+            {managerResponseAction === 'accept' ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Updated Shift Schedule
+                    </label>
+                    <select
+                      value={managerUpdatedShift}
+                      onChange={e => setManagerUpdatedShift(e.target.value)}
+                      className="w-full text-xs font-medium p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-blue-500"
+                    >
+                      <option value="">(Keep current schedule)</option>
+                      <option value="Day Shift (8 AM - 5 PM)">Day Shift (8 AM - 5 PM)</option>
+                      <option value="Night Shift (8 PM - 6 AM)">Night Shift (8 PM - 6 AM)</option>
+                      <option value="Flexible / Split Shift">Flexible / Split Shift</option>
+                      <option value="Weekend Shift Only">Weekend Shift Only</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Updated Assigned Block/Wing
+                    </label>
+                    <select
+                      value={managerUpdatedBlock}
+                      onChange={e => setManagerUpdatedBlock(e.target.value)}
+                      className="w-full text-xs font-medium p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-blue-500"
+                    >
+                      <option value="">(Keep current block)</option>
+                      <option value="All Blocks">All Blocks</option>
+                      <option value="Block A (East Wing)">Block A (East Wing)</option>
+                      <option value="Block B (West Wing)">Block B (West Wing)</option>
+                      <option value="Executive Suites & Annex">Executive Suites & Annex</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Acceptance Response Note to Staff
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={managerResponseNote}
+                    onChange={e => setManagerResponseNote(e.target.value)}
+                    placeholder="e.g. We have agreed to adjust your shift hours and wage as requested. Glad to have you continue on our team!"
+                    className="w-full text-xs p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-blue-500 font-medium"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 font-medium">
+                  When you decline this deal, {selectedBargainToReview.staffName} will receive your explanation and will be prompted on their dashboard to make their final choice: <strong>either proceed to quit or decide to stay in their job</strong>.
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Explanatory Reason to Staff (Required) *
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={managerResponseNote}
+                    onChange={e => setManagerResponseNote(e.target.value)}
+                    placeholder="e.g. Due to current payroll constraints we are unable to meet the requested wage increase at this time, but would value retaining you on current terms."
+                    className="w-full text-xs p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-blue-500 font-medium"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Modal Buttons */}
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setSelectedBargainToReview(null)}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={submittingManagerResponse}
+                onClick={handleManagerBargainResponse}
+                className={`px-5 py-2.5 text-white font-black text-xs rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-md ${
+                  managerResponseAction === 'accept'
+                    ? 'bg-emerald-600 hover:bg-emerald-700'
+                    : 'bg-rose-600 hover:bg-rose-700'
+                }`}
+              >
+                {submittingManagerResponse ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : managerResponseAction === 'accept' ? (
+                  <Check className="w-4 h-4" />
+                ) : (
+                  <XCircle className="w-4 h-4" />
+                )}
+                <span>
+                  {submittingManagerResponse ? 'Submitting...' : managerResponseAction === 'accept' ? 'Confirm & Accept Deal' : 'Confirm & Decline Deal'}
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MANAGER PROFILE EDIT MODAL */}
       <ManagerProfileModal
         isOpen={showEditProfileModal}
@@ -2867,6 +3783,162 @@ export default function PageManagerDashboard() {
         onClose={() => setShowAccountSettingsModal(false)}
         currentUser={user}
       />
+
+      {/* ======================================================== */}
+      {/* MODAL: DIGITAL ROOM KEY DISPATCH MODAL                    */}
+      {/* ======================================================== */}
+      {dispatchModalOpen && selectedKeyForDispatch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fadeIn">
+          <div className="bg-white/95 rounded-[2rem] max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-blue-100 backdrop-blur-2xl space-y-5 animate-scaleUp">
+            
+            {/* Modal Header */}
+            <div className="flex items-start justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-blue-500/20">
+                  <Key className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-900">Dispatch Digital Room Key</h3>
+                  <p className="text-xs text-slate-500">Transmitting official resident room access credentials</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDispatchModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 cursor-pointer transition-colors"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Room & Key Badge Container */}
+            <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50/60 border border-blue-100 rounded-2xl space-y-2.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-slate-600">
+                  {selectedKeyForDispatch.hostelName || primaryProperty?.name || 'Residence'} • {selectedKeyForDispatch.blockName}
+                </span>
+                <span className="font-black text-blue-800 bg-white px-2.5 py-0.5 rounded-md border border-blue-200/60">
+                  Room {selectedKeyForDispatch.roomNumber}
+                </span>
+              </div>
+              
+              <div className="p-3 bg-slate-900 text-cyan-300 rounded-xl font-mono text-sm font-black tracking-widest flex items-center justify-between shadow-inner">
+                <span className="select-all">{selectedKeyForDispatch.roomKey}</span>
+                <button
+                  type="button"
+                  onClick={() => handleCopyKey(selectedKeyForDispatch.roomKey, 'modal-key')}
+                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-sans font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Copy</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Alerts */}
+            {dispatchErrorMsg && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 font-semibold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{dispatchErrorMsg}</span>
+              </div>
+            )}
+
+            {dispatchSuccessMsg && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-bold flex items-center gap-2 animate-fadeIn">
+                <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{dispatchSuccessMsg}</span>
+              </div>
+            )}
+
+            {/* Dispatch Form */}
+            <form onSubmit={handleSendDigitalKey} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Recipient Name
+                </label>
+                <input
+                  type="text"
+                  value={dispatchRecipientName}
+                  onChange={(e) => setDispatchRecipientName(e.target.value)}
+                  placeholder="e.g. Kwame Mensah / Student Name"
+                  className="w-full text-xs font-semibold p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-blue-500 transition-all"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
+                    <Mail className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Recipient Email</span>
+                  </label>
+                  <input
+                    type="email"
+                    value={dispatchRecipientEmail}
+                    onChange={(e) => setDispatchRecipientEmail(e.target.value)}
+                    placeholder="student@university.edu.gh"
+                    className="w-full text-xs font-semibold p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-blue-500 transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
+                    <Phone className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Phone / WhatsApp</span>
+                  </label>
+                  <input
+                    type="tel"
+                    value={dispatchRecipientPhone}
+                    onChange={(e) => setDispatchRecipientPhone(e.target.value)}
+                    placeholder="+233 24 000 0000"
+                    className="w-full text-xs font-semibold p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-blue-500 transition-all"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Custom Welcome & Access Note
+                </label>
+                <textarea
+                  rows={2}
+                  value={dispatchCustomNote}
+                  onChange={(e) => setDispatchCustomNote(e.target.value)}
+                  placeholder="e.g. Welcome to PineVela! Use this key to sign into your student room console."
+                  className="w-full text-xs font-medium p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-blue-500 transition-all"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setDispatchModalOpen(false)}
+                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={dispatchSending || Boolean(dispatchSuccessMsg)}
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-black text-xs rounded-xl shadow-lg shadow-blue-500/20 transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  {dispatchSending ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Sending Digital Key...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      <span>Transmit Key Digitally</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* LOGOUT CONFIRMATION MODAL */}
       <LogoutConfirmationModal

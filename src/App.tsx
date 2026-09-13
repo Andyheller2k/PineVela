@@ -13,6 +13,7 @@ import PageAdminDashboard from './components/PageAdminDashboard';
 import PageManagerDashboard from './components/PageManagerDashboard';
 import PageStaffDashboard from './components/PageStaffDashboard';
 import PageStaffRegister from './components/PageStaffRegister';
+import PageStudentDashboard from './components/PageStudentDashboard';
 
 // Elegant wrapper for transition animations
 function PageWrapper({ children, noAnimation = false }: { children: React.ReactNode; noAnimation?: boolean }) {
@@ -335,6 +336,23 @@ function AppContent() {
           element={
             <Navigate to="/staff/dashboard" replace />
           }
+        />
+
+        {/* 2H. STUDENT CONSOLE ROUTE */}
+        <Route
+          path="/student/dashboard"
+          element={
+            <ProtectedRoute allowedRoles={['student', 'admin', 'manager']}>
+              <PageWrapper>
+                <PageStudentDashboard />
+              </PageWrapper>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/student"
+          element={<Navigate to="/student/dashboard" replace />}
         />
 
         {/* FALLBACK REDIRECT */}

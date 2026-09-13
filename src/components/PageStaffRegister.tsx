@@ -34,6 +34,15 @@ import {
 import PineLogo from './PineLogo';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../lib/api';
+import {
+  validateEmail,
+  cleanPhoneNumber,
+  validatePhone,
+  validateAddress,
+  formatDigitalAddress,
+  validateDigitalAddress,
+  resolveIdConfig
+} from '../utils/formValidation';
 
 export default function PageStaffRegister() {
   const navigate = useNavigate();
@@ -211,26 +220,42 @@ export default function PageStaffRegister() {
   // Navigation Validation
   const handleNextPhase = () => {
     if (phase === 1) {
-      if (!fullName.trim()) {
-        triggerToast('Please enter your full legal name.', 'error');
+      if (!fullName.trim() || fullName.trim().length < 3) {
+        triggerToast('Please enter your full legal name (minimum 3 characters).', 'error');
         return;
       }
       if (!username.trim() || username.trim().length < 3) {
         triggerToast('Please choose a staff username (min 3 characters).', 'error');
         return;
       }
-      if (!phone.trim() || phone.trim().length < 6) {
-        triggerToast('Please enter a valid primary contact phone number.', 'error');
+      const phoneCheck = validatePhone(phone, 'Primary contact phone');
+      if (!phoneCheck.isValid) {
+        triggerToast(phoneCheck.error!, 'error');
         return;
+      }
+      if (altPhone.trim()) {
+        const altCheck = validatePhone(altPhone, 'Alternative contact phone');
+        if (!altCheck.isValid) {
+          triggerToast(altCheck.error!, 'error');
+          return;
+        }
       }
     } else if (phase === 2) {
-      if (!address.trim()) {
-        triggerToast('Please enter your residential address or locality.', 'error');
+      const addrCheck = validateAddress(address, 'Residential address');
+      if (!addrCheck.isValid) {
+        triggerToast(addrCheck.error!, 'error');
         return;
       }
-      if (!city.trim()) {
-        triggerToast('Please enter your city/town.', 'error');
+      if (!city.trim() || city.trim().length < 2) {
+        triggerToast('Please enter your city/town (min 2 characters).', 'error');
         return;
+      }
+      if (digitalAddress.trim()) {
+        const gpsCheck = validateDigitalAddress(digitalAddress);
+        if (!gpsCheck.isValid) {
+          triggerToast(gpsCheck.error!, 'error');
+          return;
+        }
       }
     } else if (phase === 3) {
       if (!role) {
@@ -238,13 +263,20 @@ export default function PageStaffRegister() {
         return;
       }
     } else if (phase === 4) {
-      if (!idNumber.trim()) {
-        triggerToast('Please enter your National Identification Number.', 'error');
+      const idCfg = resolveIdConfig(idType);
+      const idCheck = idCfg.validate(idNumber);
+      if (!idCheck.isValid) {
+        triggerToast(idCheck.error!, 'error');
+        return;
+      }
+      if (!cvFileName) {
+        triggerToast('Please upload your Curriculum Vitae (CV) in compulsory PDF format.', 'error');
         return;
       }
     } else if (phase === 5) {
-      if (!email.trim() || !email.includes('@')) {
-        triggerToast('Please enter a valid email address.', 'error');
+      const emailCheck = validateEmail(email, 'Staff login email');
+      if (!emailCheck.isValid) {
+        triggerToast(emailCheck.error!, 'error');
         return;
       }
       if (!password || password.length < 6) {
@@ -252,7 +284,7 @@ export default function PageStaffRegister() {
         return;
       }
       if (password !== confirmPassword) {
-        triggerToast('Passwords do not match. Please verify.', 'error');
+        triggerToast('Passwords do not match. Please verify your entries.', 'error');
         return;
       }
     }
@@ -267,6 +299,29 @@ export default function PageStaffRegister() {
   // Submit Staff Registration
   const handleSubmitStaffRegistration = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const emailCheck = validateEmail(email, 'Staff login email');
+    if (!emailCheck.isValid) {
+      triggerToast(emailCheck.error!, 'error');
+      return;
+    }
+    const phoneCheck = validatePhone(phone, 'Primary contact phone');
+    if (!phoneCheck.isValid) {
+      triggerToast(phoneCheck.error!, 'error');
+      return;
+    }
+    const addrCheck = validateAddress(address, 'Residential address');
+    if (!addrCheck.isValid) {
+      triggerToast(addrCheck.error!, 'error');
+      return;
+    }
+    const idCfg = resolveIdConfig(idType);
+    const idCheck = idCfg.validate(idNumber);
+    if (!idCheck.isValid) {
+      triggerToast(idCheck.error!, 'error');
+      return;
+    }
+
     if (!declarationAccepted) {
       triggerToast('Please agree to the safeguarding and code of conduct declaration.', 'error');
       return;
@@ -601,12 +656,13 @@ export default function PageStaffRegister() {
                           <input
                             type="tel"
                             required
-                            placeholder="+233 24 000 0000"
+                            placeholder="024 000 0000 or +233 24 000 0000"
                             value={phone}
-                            onChange={(e) => setPhone(e.target.value)}
+                            onChange={(e) => setPhone(cleanPhoneNumber(e.target.value))}
                             className="w-full pl-11 pr-4 py-3 border border-slate-200 rounded-2xl bg-slate-50 text-slate-800 text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-900"
                           />
                         </div>
+                        <p className="text-[10px] text-slate-400 font-medium">Numbers only (10 digits starting with 0, or international +233)</p>
                       </div>
 
                       <div className="space-y-1.5">
@@ -619,12 +675,13 @@ export default function PageStaffRegister() {
                           </span>
                           <input
                             type="tel"
-                            placeholder="+233 50 000 0000"
+                            placeholder="050 000 0000 or +233 50 000 0000"
                             value={altPhone}
-                            onChange={(e) => setAltPhone(e.target.value)}
+                            onChange={(e) => setAltPhone(cleanPhoneNumber(e.target.value))}
                             className="w-full pl-11 pr-4 py-3 border border-slate-200 rounded-2xl bg-slate-50 text-slate-800 text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-900"
                           />
                         </div>
+                        <p className="text-[10px] text-slate-400 font-medium">Numbers only (optional)</p>
                       </div>
 
                     </div>
@@ -726,10 +783,11 @@ export default function PageStaffRegister() {
                             type="text"
                             placeholder="e.g. GA-492-8102"
                             value={digitalAddress}
-                            onChange={(e) => setDigitalAddress(e.target.value)}
-                            className="w-full pl-11 pr-4 py-3 border border-slate-200 rounded-2xl bg-slate-50 text-slate-800 text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-900"
+                            onChange={(e) => setDigitalAddress(formatDigitalAddress(e.target.value))}
+                            className="w-full pl-11 pr-4 py-3 border border-slate-200 rounded-2xl bg-slate-50 text-slate-800 text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-900 uppercase"
                           />
                         </div>
+                        <p className="text-[10px] text-slate-400 font-medium">Format: XX-XXX-XXXX (GhanaPost GPS)</p>
                       </div>
 
                       <div className="space-y-1.5">
@@ -869,34 +927,57 @@ export default function PageStaffRegister() {
                         </label>
                         <select
                           value={idType}
-                          onChange={(e) => setIdType(e.target.value)}
+                          onChange={(e) => {
+                            const newType = e.target.value;
+                            setIdType(newType);
+                            const cfg = resolveIdConfig(newType);
+                            setIdNumber(prev => cfg.formatInput(prev));
+                          }}
                           className="w-full px-4 py-3 border border-slate-200 rounded-2xl bg-slate-50 text-slate-800 text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-900"
                         >
-                          <option value="Ghana Card (National ID)">Ghana Card (National ID)</option>
-                          <option value="Voter ID Card">Voter ID Card</option>
-                          <option value="International Passport">International Passport</option>
-                          <option value="Driver's License">Driver's License</option>
+                          <option value="Ghana Card (National ID)">Ghana Card (GHA-XXXXXXXXX-X)</option>
+                          <option value="Voter ID Card">Voter ID Card (10 Digits — Numbers Only)</option>
+                          <option value="NHIS Card (Health Insurance)">NHIS Card (8 Digits — Numbers Only)</option>
+                          <option value="International Passport">International Passport (e.g. G1234567)</option>
+                          <option value="Driver's License">Driver's License (DVLA Alphanumeric)</option>
                         </select>
                       </div>
 
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-bold text-slate-700 block">
-                          National ID Number <span className="text-rose-500">*</span>
-                        </label>
-                        <div className="relative">
-                          <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400 pointer-events-none">
-                            <ShieldCheck size={18} />
-                          </span>
-                          <input
-                            type="text"
-                            required
-                            placeholder="e.g. GHA-729103982-1"
-                            value={idNumber}
-                            onChange={(e) => setIdNumber(e.target.value)}
-                            className="w-full pl-11 pr-4 py-3 border border-slate-200 rounded-2xl bg-slate-50 text-slate-800 text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-900"
-                          />
-                        </div>
-                      </div>
+                      {(() => {
+                        const cfg = resolveIdConfig(idType);
+                        return (
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <label className="text-xs font-bold text-slate-700 block">
+                                {cfg.name} Number <span className="text-rose-500">*</span>
+                              </label>
+                              {cfg.numericOnly && (
+                                <span className="text-[10px] px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 font-black tracking-wide uppercase">
+                                  Numbers Only (No Alphabets)
+                                </span>
+                              )}
+                            </div>
+                            <div className="relative">
+                              <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400 pointer-events-none">
+                                <ShieldCheck size={18} />
+                              </span>
+                              <input
+                                type={cfg.numericOnly ? "tel" : "text"}
+                                required
+                                inputMode={cfg.numericOnly ? "numeric" : "text"}
+                                maxLength={cfg.maxLength}
+                                placeholder={cfg.placeholder}
+                                value={idNumber}
+                                onChange={(e) => setIdNumber(cfg.formatInput(e.target.value))}
+                                className="w-full pl-11 pr-4 py-3 border border-slate-200 rounded-2xl bg-slate-50 text-slate-800 text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-900 font-mono tracking-wide"
+                              />
+                            </div>
+                            <p className="text-[11px] text-slate-500 font-medium">
+                              {cfg.helperText}
+                            </p>
+                          </div>
+                        );
+                      })()}
 
                     </div>
 

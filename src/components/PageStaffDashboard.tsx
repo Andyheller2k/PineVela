@@ -9,7 +9,8 @@ import {
   Bell, Settings, Briefcase, CheckCircle2, Clock, XCircle, AlertCircle,
   Phone, Mail, User, Building2, FileText, UploadCloud, ChevronRight,
   ShieldCheck, ArrowRight, RefreshCw, Sparkles, MapPin, Eye, ExternalLink,
-  Camera, Check, Lock, Send, X, MessageSquare, LogOut as LogOutIcon
+  Camera, Check, Lock, Send, X, MessageSquare, LogOut as LogOutIcon, DollarSign,
+  Scale, Handshake, HelpCircle, ThumbsUp, ThumbsDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -29,12 +30,37 @@ interface StaffApplication {
   cvData?: string;
   cvFileName?: string;
   coverLetter?: string;
-  status: 'pending' | 'Approved' | 'Rejected';
+  status: 'pending' | 'Approved' | 'Rejected' | 'Dismissed' | 'Removed' | 'Resigned' | string;
   shift?: string;
   assignedBlock?: string;
   appliedAt: string;
   reviewedAt?: string;
   reviewNotes?: string;
+}
+
+interface StaffBargain {
+  id: string;
+  staffId: string;
+  staffName: string;
+  staffEmail: string;
+  hostelId: string;
+  hostelName: string;
+  managerId?: string;
+  role: string;
+  currentShift?: string;
+  currentBlock?: string;
+  reasonToQuit: string;
+  isBargain: boolean;
+  bargainProposal?: {
+    type: string;
+    title: string;
+    proposedTerms: string;
+    notes?: string;
+  };
+  status: 'pending' | 'accepted' | 'rejected' | 'quit_confirmed' | 'stay_confirmed' | string;
+  managerResponseNote?: string;
+  createdAt: string;
+  resolvedAt?: string;
 }
 
 interface NotificationItem {
@@ -170,6 +196,10 @@ export default function PageStaffDashboard() {
       const offersData = await apiFetch('/api/staff-job-offers').catch(() => []);
       setJobOffers(Array.isArray(offersData) ? offersData : []);
 
+      // 3c. Fetch resignation & retention bargains
+      const bargainsData = await apiFetch('/api/staff-bargains').catch(() => []);
+      setStaffBargains(Array.isArray(bargainsData) ? bargainsData : []);
+
       // 4. Fetch staff record to see if user has already been approved
       const allStaff = await apiFetch('/api/staff').catch(() => []);
       const myStaff = Array.isArray(allStaff)
@@ -290,8 +320,8 @@ export default function PageStaffDashboard() {
 
   // Find active pending application
   const activePendingApp = applications.find(a => a.status === 'pending');
-  // Find approved application (ONLY if job application approved or staff explicitly appointed to hostel)
-  const approvedApp = applications.find(a => (a.status as string) === 'Approved' || (a.status as string) === 'approved') || (staffRecord && staffRecord.hostelId && (staffRecord.isApproved === true || staffRecord.status === 'Approved') ? {
+  // Find approved application (ONLY if actively employed, not dismissed or resigned)
+  const approvedApp = (staffRecord && staffRecord.hostelId && (staffRecord.status === 'Active' || staffRecord.status === 'Approved' || !staffRecord.status) ? {
     id: staffRecord.id,
     role: staffRecord.role,
     hostelName: staffRecord.hostelName || 'Accredited Residence',
@@ -299,7 +329,109 @@ export default function PageStaffDashboard() {
     assignedBlock: staffRecord.assignedBlock || 'All Wings',
     status: 'Approved',
     appliedAt: staffRecord.createdAt || new Date().toISOString()
-  } as any : null);
+  } as any : null) || applications.find(a => (a.status as string) === 'Approved' || (a.status as string) === 'approved');
+
+  // Dismissed and resigned applications (to provide clear feedback when lock is lifted)
+  const dismissedApp = applications.find(a => ((a.status as string) === 'Dismissed' || (a.status as string) === 'Removed') && !approvedApp);
+  const resignedApp = applications.find(a => (a.status as string) === 'Resigned' && !approvedApp);
+
+  // Staff Bargains & Resignation State
+  const [staffBargains, setStaffBargains] = useState<StaffBargain[]>([]);
+  const [showResignModal, setShowResignModal] = useState(false);
+  const [quitReason, setQuitReason] = useState('');
+  const [quitMode, setQuitMode] = useState<'bargain' | 'direct'>('bargain');
+  const [bargainType, setBargainType] = useState<string>('salary');
+  const [bargainTerms, setBargainTerms] = useState('');
+  const [bargainNotes, setBargainNotes] = useState('');
+  const [submittingQuitOrBargain, setSubmittingQuitOrBargain] = useState(false);
+  const [processingDecision, setProcessingDecision] = useState(false);
+
+  // Active / latest bargain proposal
+  const activeBargain = staffBargains.length > 0 ? staffBargains[0] : null;
+
+  // Staff voluntary quit / bargain proposal submit handler
+  const handleSubmitQuitOrBargain = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!quitReason.trim() || quitReason.trim().length < 5) {
+      triggerToast('A mandatory reason for wanting to quit is required (minimum 5 characters).', 'error');
+      return;
+    }
+
+    if (quitMode === 'bargain' && (!bargainTerms.trim() || bargainTerms.trim().length < 3)) {
+      triggerToast('Please provide your proposed deal or terms that would convince you to stay.', 'error');
+      return;
+    }
+
+    setSubmittingQuitOrBargain(true);
+    try {
+      const payload: any = {
+        reasonToQuit: quitReason.trim(),
+        isBargain: quitMode === 'bargain'
+      };
+
+      if (quitMode === 'bargain') {
+        payload.bargainProposal = {
+          type: bargainType,
+          title: bargainType === 'salary' ? 'Salary & Wage Adjustment' :
+                 bargainType === 'shift' ? 'Shift Schedule Modification' :
+                 bargainType === 'wing' ? 'Block & Wing Reassignment' :
+                 bargainType === 'workload' ? 'Workload & Scope Balancing' : 'Custom Deal Terms',
+          proposedTerms: bargainTerms.trim(),
+          notes: bargainNotes.trim()
+        };
+      }
+
+      const res = await apiFetch('/api/staff-bargains', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+
+      if (res.success) {
+        if (res.directQuit) {
+          triggerToast('Resignation processed with reason. Application lock has been lifted!', 'success');
+        } else {
+          triggerToast('Retention proposal sent to manager! Awaiting their response.', 'success');
+        }
+        setShowResignModal(false);
+        setQuitReason('');
+        setBargainTerms('');
+        setBargainNotes('');
+        await loadData();
+      } else {
+        triggerToast(res.error || 'Failed to submit proposal', 'error');
+      }
+    } catch (err: any) {
+      triggerToast(err.message || 'Failed to submit proposal', 'error');
+    } finally {
+      setSubmittingQuitOrBargain(false);
+    }
+  };
+
+  // Staff post-bargain decision handler (quit or stay after manager rejection)
+  const handlePostBargainDecision = async (bargainId: string, decision: 'quit' | 'stay') => {
+    setProcessingDecision(true);
+    try {
+      const res = await apiFetch(`/api/staff-bargains/${bargainId}/staff-decision`, {
+        method: 'POST',
+        body: JSON.stringify({ decision })
+      });
+
+      if (res.success) {
+        if (decision === 'quit') {
+          triggerToast('Resignation finalized. Your application lock is now lifted!', 'success');
+        } else {
+          triggerToast('Decision recorded: You have decided to remain in your position on duty.', 'success');
+        }
+        await loadData();
+      } else {
+        triggerToast(res.error || 'Failed to record decision', 'error');
+      }
+    } catch (err: any) {
+      triggerToast(err.message || 'Failed to record decision', 'error');
+    } finally {
+      setProcessingDecision(false);
+    }
+  };
 
   // File Upload Handlers (CV & ID)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'cv' | 'id') => {
@@ -356,6 +488,11 @@ export default function PageStaffDashboard() {
   // Submit Application
   const handleSubmitApplication = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (approvedApp) {
+      triggerToast(`Application Locked: You are already actively employed as ${approvedApp.role} at ${approvedApp.hostelName}. Staff members who are hired and verified cannot apply for other hostel jobs unless you quit your job or are removed by management.`, 'error');
+      return;
+    }
 
     if (activePendingApp) {
       triggerToast("You already have an active application under review. You cannot enroll into other roles until a decision is finalized.", 'error');
@@ -910,22 +1047,210 @@ export default function PageStaffDashboard() {
 
             {/* ACTIVE APPOINTMENT OR PENDING STATUS BANNER */}
             {approvedApp ? (
-              <div className="p-6 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-100/50 border-2 border-emerald-300 rounded-3xl shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-                <div className="space-y-2">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-600 text-white rounded-full text-xs font-black uppercase tracking-wider">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Appointed & Enrolled Staff Member</span>
+              <div className="space-y-4">
+                {/* ACTIVE BARGAIN STATUS BANNER IF PRESENT */}
+                {activeBargain && activeBargain.status === 'pending' && (
+                  <div className="p-5 bg-gradient-to-r from-purple-50 via-indigo-50 to-purple-100/70 border-2 border-purple-300 rounded-3xl shadow-sm space-y-3">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-10 h-10 rounded-2xl bg-purple-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                          <Scale className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="px-2.5 py-0.5 rounded-full bg-purple-200 text-purple-950 text-[10px] font-black uppercase">
+                              Retention Bargain Pending
+                            </span>
+                            <span className="text-[11px] text-purple-700 font-bold">• Under Manager Review</span>
+                          </div>
+                          <h4 className="text-sm font-black text-slate-900 mt-0.5">
+                            Proposed Terms Sent to {activeBargain.hostelName} Manager
+                          </h4>
+                        </div>
+                      </div>
+                      <span className="px-3 py-1 bg-purple-100 border border-purple-300 text-purple-900 font-black text-xs rounded-xl shrink-0">
+                        Awaiting Decision
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1 text-xs">
+                      <div className="p-3 bg-white/90 border border-purple-200 rounded-2xl space-y-1">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Your Reason for Seeking to Quit:</span>
+                        <p className="text-slate-800 font-medium italic">"{activeBargain.reasonToQuit}"</p>
+                      </div>
+                      <div className="p-3 bg-white/90 border border-purple-200 rounded-2xl space-y-1">
+                        <span className="text-[10px] font-bold text-purple-600 uppercase tracking-wider block">Your Proposed Deal to Stay:</span>
+                        <p className="text-purple-950 font-bold">"{activeBargain.bargainProposal?.proposedTerms}"</p>
+                        {activeBargain.bargainProposal?.notes && (
+                          <p className="text-[11px] text-slate-500 font-medium mt-0.5">{activeBargain.bargainProposal.notes}</p>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-purple-800 font-medium">
+                      You remain on duty with your current schedule while your manager reviews the proposal. If they accept your deal, you're good! If they decline, you can decide whether to quit or stay.
+                    </p>
                   </div>
-                  <h3 className="text-xl font-black text-slate-900">
-                    Official Appointment: {approvedApp.role}
-                  </h3>
-                  <p className="text-xs text-slate-700 font-medium">
-                    Property: <strong className="text-slate-950 font-bold">{approvedApp.hostelName}</strong> | Assigned Shift: <strong className="text-slate-950 font-bold">{approvedApp.shift || 'Day Shift'}</strong> | Wing: <strong className="text-slate-950 font-bold">{approvedApp.assignedBlock || 'All Blocks'}</strong>
-                  </p>
+                )}
+
+                {activeBargain && activeBargain.status === 'accepted' && (
+                  <div className="p-5 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-100 border-2 border-emerald-300 rounded-3xl shadow-sm space-y-2.5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                          <Sparkles className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="px-2.5 py-0.5 rounded-full bg-emerald-200 text-emerald-950 text-[10px] font-black uppercase">
+                              Deal Accepted! 🎉
+                            </span>
+                            <span className="text-[11px] text-emerald-700 font-bold">• Position Maintained</span>
+                          </div>
+                          <h4 className="text-sm font-black text-emerald-950 mt-0.5">
+                            Management Accepted Your Terms at {activeBargain.hostelName}
+                          </h4>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="p-3 bg-white/90 border border-emerald-200 rounded-2xl text-xs space-y-1">
+                      <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block">Manager's Confirmation Note:</span>
+                      <p className="text-slate-800 font-medium">{activeBargain.managerResponseNote || 'Terms approved and accepted by property manager.'}</p>
+                    </div>
+                    <p className="text-[11px] text-emerald-800 font-medium">
+                      You're good! Your deal was accepted by your manager and you continue your employment under these agreed terms.
+                    </p>
+                  </div>
+                )}
+
+                {activeBargain && activeBargain.status === 'rejected' && (
+                  <div className="p-6 bg-gradient-to-r from-rose-50 via-amber-50 to-orange-50 border-2 border-rose-300 rounded-3xl shadow-md space-y-4 animate-in fade-in">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-11 h-11 rounded-2xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                          <AlertCircle className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="px-2.5 py-0.5 rounded-full bg-rose-200 text-rose-950 text-[10px] font-black uppercase">
+                              Bargain Deal Declined
+                            </span>
+                            <span className="text-[11px] text-rose-700 font-bold">• Action Required: Quit or Stay</span>
+                          </div>
+                          <h4 className="text-base font-black text-rose-950 mt-0.5">
+                            Your Manager Declined the Proposed Terms
+                          </h4>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-4 bg-white/95 border border-rose-200 rounded-2xl space-y-2 text-xs">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Manager's Note:</span>
+                        <span className="text-[10px] text-slate-400 font-medium">Proposal terms were not approved</span>
+                      </div>
+                      <p className="text-slate-800 font-medium italic">"{activeBargain.managerResponseNote || 'Management was unable to meet the requested terms.'}"</p>
+                      <div className="pt-1 border-t border-slate-100 flex flex-wrap gap-4 text-[11px] text-slate-600">
+                        <span>Original Reason: <strong className="text-slate-900">{activeBargain.reasonToQuit}</strong></span>
+                        <span>Requested Deal: <strong className="text-slate-900">{activeBargain.bargainProposal?.proposedTerms}</strong></span>
+                      </div>
+                    </div>
+
+                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-950 space-y-1">
+                      <span className="font-bold flex items-center gap-1.5 text-amber-900">
+                        <HelpCircle className="w-4 h-4 text-amber-600" />
+                        What would you like to do now?
+                      </span>
+                      <p className="text-slate-700 text-[11px] leading-relaxed">
+                        Since the manager did not accept your terms, you have full authority to make your final choice:
+                        either <strong>Proceed to Quit</strong> (your employment ends immediately and your application lock is lifted so you can apply elsewhere), or <strong>Decide to Stay</strong> (remain in your current job on your existing terms).
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-end gap-3 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => handlePostBargainDecision(activeBargain.id, 'stay')}
+                        disabled={processingDecision}
+                        className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs transition-all shadow-sm flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>Decide to Stay in Job</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handlePostBargainDecision(activeBargain.id, 'quit')}
+                        disabled={processingDecision}
+                        className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs transition-all shadow-sm flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                      >
+                        <LogOutIcon className="w-4 h-4" />
+                        <span>Proceed to Quit Job</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="p-6 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-100/60 border-2 border-emerald-300 rounded-3xl shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                  <div className="space-y-2">
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-600 text-white rounded-full text-xs font-black uppercase tracking-wider shadow-xs">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Appointed & Enrolled Staff Member</span>
+                    </div>
+                    <h3 className="text-xl font-black text-slate-900">
+                      Official Appointment: {approvedApp.role}
+                    </h3>
+                    <p className="text-xs text-slate-700 font-medium">
+                      Hostel: <strong className="text-slate-950 font-bold">{approvedApp.hostelName}</strong> | Assigned Shift: <strong className="text-slate-950 font-bold">{approvedApp.shift || 'Day Shift'}</strong> | Wing: <strong className="text-slate-950 font-bold">{approvedApp.assignedBlock || 'All Blocks'}</strong>
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <div className="px-4 py-3 bg-white/90 border border-emerald-200 rounded-2xl text-center shadow-xs">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Status</span>
+                      <span className="text-sm font-black text-emerald-800">Active On Duty</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQuitReason('');
+                        setBargainTerms('');
+                        setBargainNotes('');
+                        setQuitMode('bargain');
+                        setShowResignModal(true);
+                      }}
+                      className="px-4 py-3 bg-purple-50 hover:bg-purple-100 text-purple-700 hover:text-purple-900 border border-purple-200 rounded-2xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer shadow-xs"
+                      title="Quit or bargain terms with manager to stay"
+                    >
+                      <Scale className="w-4 h-4 text-purple-600" />
+                      <span>Quit / Bargain Terms</span>
+                    </button>
+                  </div>
                 </div>
-                <div className="px-4 py-3 bg-white/90 border border-emerald-200 rounded-2xl text-center shrink-0">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Status</span>
-                  <span className="text-sm font-black text-emerald-800">Active On Duty</span>
+
+                {/* Application Lock Active Policy Card */}
+                <div className="p-5 bg-gradient-to-r from-blue-900 to-indigo-950 text-white rounded-3xl shadow-md border border-blue-800 space-y-2.5">
+                  <div className="flex items-start gap-3.5">
+                    <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-amber-300 shrink-0 border border-white/10">
+                      <Lock className="w-4 h-4" />
+                    </div>
+                    <div className="space-y-1 text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded-full bg-amber-400 text-amber-950 text-[10px] font-black uppercase">
+                          Application Lock Active
+                        </span>
+                        <span className="text-blue-200 font-semibold">• Exclusive Hostel Appointment</span>
+                      </div>
+                      <p className="text-blue-100 leading-relaxed font-medium">
+                        As an accredited staff member appointed to <strong>{approvedApp.hostelName}</strong>, you remain dedicated to your current job as <strong>{approvedApp.role}</strong>. Applications to other hostels are locked unless:
+                        <br />
+                        <strong>1.</strong> You are removed or sacked by your manager, or
+                        <br />
+                        <strong>2.</strong> You quit the job using the <strong>Quit Job</strong> button.
+                      </p>
+                      <div className="pt-1.5 flex items-center gap-2 text-emerald-300 font-bold">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <span>You are fully allowed to accept one-time job offers under the Offers tab at any time!</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             ) : activePendingApp ? (
@@ -972,8 +1297,54 @@ export default function PageStaffDashboard() {
               </div>
             ) : null}
 
+            {/* If previously dismissed / sacked by manager */}
+            {dismissedApp && !approvedApp && !activePendingApp && (
+              <div className="p-5 bg-rose-50 border border-rose-200 rounded-3xl flex items-start gap-4 text-xs text-rose-950">
+                <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0">
+                  <AlertCircle className="w-5 h-5" />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-0.5 rounded-full bg-rose-200 text-rose-900 text-[10px] font-black uppercase">
+                      Appointment Concluded
+                    </span>
+                    <span className="text-xs text-rose-700 font-bold">• Applications Unlocked</span>
+                  </div>
+                  <h4 className="text-sm font-black text-rose-950">
+                    Previous Appointment at {dismissedApp.hostelName} Ended by Management
+                  </h4>
+                  <p className="text-xs text-rose-800 leading-relaxed font-medium">
+                    Your appointment as <strong>{dismissedApp.role}</strong> was concluded by the hostel manager. Your application lock has been lifted and you are now fully eligible to apply for any available hostel positions below.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* If previously quit / resigned voluntarily */}
+            {resignedApp && !approvedApp && !activePendingApp && (
+              <div className="p-5 bg-sky-50 border border-sky-200 rounded-3xl flex items-start gap-4 text-xs text-sky-950">
+                <div className="w-10 h-10 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-0.5 rounded-full bg-sky-200 text-sky-900 text-[10px] font-black uppercase">
+                      Resignation Recorded
+                    </span>
+                    <span className="text-xs text-sky-700 font-bold">• Applications Unlocked</span>
+                  </div>
+                  <h4 className="text-sm font-black text-sky-950">
+                    Voluntary Resignation Confirmed
+                  </h4>
+                  <p className="text-xs text-sky-800 leading-relaxed font-medium">
+                    You have resigned from your position at {resignedApp.hostelName}. Your application lock has been lifted and you may apply for other accredited hostel jobs below.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* If has previous rejected applications, display note */}
-            {applications.some(a => a.status === 'Rejected') && !activePendingApp && !approvedApp && (
+            {applications.some(a => a.status === 'Rejected') && !activePendingApp && !approvedApp && !dismissedApp && !resignedApp && (
               <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-start gap-3 text-xs text-rose-900">
                 <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                 <div>
@@ -1064,22 +1435,30 @@ export default function PageStaffDashboard() {
                         <button
                           type="button"
                           onClick={() => {
+                            if (approvedApp) {
+                              triggerToast(`Application Locked: You are already actively employed as ${approvedApp.role} at ${approvedApp.hostelName}. You cannot apply for other hostel jobs unless you quit or are removed by management.`, 'error');
+                              return;
+                            }
                             if (!isStaffVerified) {
-                              setToastMessage({ text: 'Application Locked: Your account credentials must be verified by Admin first.', type: 'error' });
+                              triggerToast('Application Locked: Your account credentials must be verified by Admin first.', 'error');
+                              return;
+                            }
+                            if (activePendingApp) {
+                              triggerToast(`Application Locked: You already have a pending application for ${activePendingApp.role} at ${activePendingApp.hostelName}.`, 'error');
                               return;
                             }
                             setSelectedHostelId(h.id);
                             const element = document.getElementById('apply-form-section');
                             element?.scrollIntoView({ behavior: 'smooth' });
                           }}
-                          disabled={!isStaffVerified || !!activePendingApp}
+                          disabled={!isStaffVerified || !!activePendingApp || !!approvedApp}
                           className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                             selectedHostelId === h.id
                               ? 'bg-blue-900 text-white'
                               : 'bg-slate-100 hover:bg-blue-50 text-slate-800'
-                          } ${(!isStaffVerified || activePendingApp) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          } ${(!isStaffVerified || activePendingApp || approvedApp) ? 'opacity-60 cursor-not-allowed' : ''}`}
                         >
-                          {!isStaffVerified ? 'Locked (Unverified)' : selectedHostelId === h.id ? 'Selected' : 'Select Hostel'}
+                          {approvedApp ? 'Locked (Employed)' : !isStaffVerified ? 'Locked (Unverified)' : activePendingApp ? 'Locked (Pending)' : selectedHostelId === h.id ? 'Selected' : 'Select Hostel'}
                         </button>
                       </div>
                     </div>
@@ -1088,14 +1467,19 @@ export default function PageStaffDashboard() {
               </div>
             </div>
 
-            {/* APPLICATION FORM (LOCKED IF UNVERIFIED OR PENDING APPLICATION EXISTS) */}
+            {/* APPLICATION FORM (LOCKED IF EMPLOYED, UNVERIFIED OR PENDING APPLICATION EXISTS) */}
             <div id="apply-form-section" className="p-6 md:p-8 bg-white border border-slate-200/90 rounded-3xl shadow-sm space-y-6">
               <div className="flex items-center justify-between border-b pb-4">
                 <div>
                   <h3 className="text-lg font-black text-slate-900">Submit Staff Application with CV & ID</h3>
                   <p className="text-xs text-slate-500 font-medium">Your credentials will be forwarded directly to the property manager's notification center.</p>
                 </div>
-                {!isStaffVerified ? (
+                {approvedApp ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-950 border border-blue-300">
+                    <Lock className="w-3.5 h-3.5 text-blue-800" />
+                    <span>Locked (Active Employment)</span>
+                  </span>
+                ) : !isStaffVerified ? (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">
                     <Lock className="w-3.5 h-3.5 text-amber-700" />
                     <span>Locked (Unverified Credentials)</span>
@@ -1108,7 +1492,55 @@ export default function PageStaffDashboard() {
                 ) : null}
               </div>
 
-              {!isStaffVerified ? (
+              {approvedApp ? (
+                <div className="p-8 bg-slate-50 border-2 border-slate-200 rounded-3xl text-center space-y-4">
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-900 to-indigo-950 text-amber-300 flex items-center justify-center mx-auto shadow-md">
+                    <Lock className="w-7 h-7" />
+                  </div>
+                  <div className="space-y-2 max-w-lg mx-auto">
+                    <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-100 border border-amber-300 text-amber-950 text-[10px] font-black uppercase">
+                      Single-Hostel Appointment Enforced
+                    </div>
+                    <h4 className="text-base font-black text-slate-900">
+                      Application Locked: Employed at {approvedApp.hostelName}
+                    </h4>
+                    <p className="text-xs text-slate-600 leading-relaxed font-medium">
+                      You are currently hired and verified as <strong>{approvedApp.role}</strong> at <strong>{approvedApp.hostelName}</strong>. You cannot apply for any other hostel jobs unless:
+                    </p>
+                    <div className="text-left bg-white p-3.5 rounded-2xl border border-slate-200 text-xs space-y-1.5 text-slate-700 font-medium">
+                      <div className="flex items-center gap-2">
+                        <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-900 text-[10px] font-bold flex items-center justify-center shrink-0">1</span>
+                        <span>You are sacked or removed by your current hostel manager</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-900 text-[10px] font-bold flex items-center justify-center shrink-0">2</span>
+                        <span>You voluntarily quit / resign from the job</span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-emerald-700 font-bold">
+                      Note: You are still allowed to take one-time job offers under the Offers tab!
+                    </p>
+                  </div>
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowResignModal(true)}
+                      className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-2 shadow-sm"
+                    >
+                      <LogOutIcon className="w-4 h-4" />
+                      <span>Quit Job / Resign Position</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('offers')}
+                      className="px-4 py-2.5 rounded-xl bg-blue-900 hover:bg-blue-950 text-white text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-2 shadow-sm"
+                    >
+                      <DollarSign className="w-4 h-4 text-amber-300" />
+                      <span>Browse One-Time Job Offers</span>
+                    </button>
+                  </div>
+                </div>
+              ) : !isStaffVerified ? (
                 <div className="p-8 bg-amber-50/70 border-2 border-dashed border-amber-300 rounded-3xl text-center space-y-3">
                   <div className="w-12 h-12 rounded-2xl bg-amber-500 text-white flex items-center justify-center mx-auto font-bold shadow-md shadow-amber-500/30">
                     <Lock className="w-6 h-6 animate-pulse" />
@@ -1374,12 +1806,31 @@ export default function PageStaffDashboard() {
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-black text-slate-900">Job Offers & Hiring Proposals</h3>
-                <p className="text-xs text-slate-500 font-medium">Review job offers sent to you by property managers and accept them to notify requesters.</p>
+                <h3 className="text-lg font-black text-slate-900">One-Time Job Offers & Hiring Proposals</h3>
+                <p className="text-xs text-slate-500 font-medium">Review flexible, one-time job offers and private contracts sent to you by property managers and students.</p>
               </div>
               <span className="text-xs font-bold text-blue-900 bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
                 {jobOffers.length} Total Proposal{jobOffers.length === 1 ? '' : 's'}
               </span>
+            </div>
+
+            {/* One-Time Job Offers Policy Note */}
+            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-start sm:items-center gap-3 text-xs text-emerald-950 font-medium shadow-xs">
+              <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="w-4 h-4" />
+              </div>
+              <div className="space-y-0.5">
+                <span className="font-bold text-emerald-900">One-Time Job Offers Are Unrestricted: </span>
+                <span>
+                  {approvedApp ? (
+                    <>
+                      Although your regular hostel appointment is locked to <strong>{approvedApp.hostelName}</strong>, you are completely permitted to accept individual one-time job offers and side-tasks here.
+                    </>
+                  ) : (
+                    'Verified staff members are free to review, accept, or reject independent one-time job offers with upfront agreed wages.'
+                  )}
+                </span>
+              </div>
             </div>
 
             {jobOffers.length === 0 ? (
@@ -1777,6 +2228,236 @@ export default function PageStaffDashboard() {
                 className="px-5 py-2.5 rounded-xl bg-blue-900 hover:bg-blue-950 text-white font-bold text-xs shadow-md cursor-pointer"
               >
                 Close Map
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* QUIT / RESIGN FROM JOB & BARGAIN MODAL — CRYSTAL FROSTY BLUE PINEVELA THEME */}
+      {showResignModal && approvedApp && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white/90 backdrop-blur-2xl rounded-3xl max-w-xl w-full p-6 sm:p-7 shadow-2xl shadow-blue-950/25 border border-blue-200/80 space-y-5 animate-in fade-in zoom-in duration-150 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between gap-3.5 pb-3 border-b border-blue-100/70">
+              <div className="flex items-start gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-sky-500 text-white flex items-center justify-center shrink-0 shadow-lg shadow-blue-600/30 ring-4 ring-blue-100/80">
+                  <Scale className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-xl font-black text-slate-900 tracking-tight">Hostel Job Resignation & Bargaining</h3>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-100 text-blue-800 border border-blue-200">
+                      PineVela HR
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    Position: <strong className="text-blue-900">{approvedApp.role}</strong> at <strong className="text-blue-900">{approvedApp.hostelName}</strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowResignModal(false)}
+                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-xl hover:bg-blue-50 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Mandatory Reason for Quitting Section */}
+            <div className="space-y-2.5 p-4.5 bg-gradient-to-br from-blue-50/80 via-sky-50/50 to-white border border-blue-200/80 rounded-2xl shadow-xs">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-black text-blue-950 flex items-center gap-1.5">
+                  <AlertCircle className="w-4 h-4 text-blue-600" />
+                  <span>Reason why you want to quit <span className="text-rose-600">*</span></span>
+                </label>
+                <span className="text-[10px] font-bold text-blue-700 bg-blue-100/80 px-2 py-0.5 rounded-md border border-blue-200 uppercase tracking-wider">
+                  Mandatory for Manager
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-600 leading-relaxed">
+                Staff regulations require submitting a clear explanation to management when considering leaving your position.
+              </p>
+
+              {/* Quick Suggestion Chips */}
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {[
+                  'Salary / compensation is inadequate',
+                  'Shift schedule conflicts with classes/routine',
+                  'Excessive workload in assigned block',
+                  'Personal commitments & relocation',
+                  'Seeking different role / opportunities'
+                ].map((chip) => (
+                  <button
+                    key={chip}
+                    type="button"
+                    onClick={() => setQuitReason(chip)}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer border ${
+                      quitReason === chip
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-500/30'
+                        : 'bg-white/80 text-blue-900 border-blue-200/80 hover:bg-blue-50 hover:border-blue-300'
+                    }`}
+                  >
+                    {chip}
+                  </button>
+                ))}
+              </div>
+
+              <textarea
+                value={quitReason}
+                onChange={(e) => setQuitReason(e.target.value)}
+                placeholder="Type or select a reason why you are seeking to quit (minimum 5 characters)..."
+                rows={2}
+                className="w-full px-3.5 py-2.5 bg-white border border-blue-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-400/20 resize-none mt-1 shadow-xs"
+              />
+            </div>
+
+            {/* Mode Selection Tabs: Bargain to Stay VS Direct Quit */}
+            <div className="space-y-2">
+              <label className="text-xs font-black text-slate-800 block">Choose Your Action:</label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setQuitMode('bargain')}
+                  className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer space-y-1.5 ${
+                    quitMode === 'bargain'
+                      ? 'bg-gradient-to-br from-blue-50/90 to-sky-50/90 border-blue-400 ring-2 ring-blue-400/40 text-blue-950 shadow-sm shadow-blue-500/10'
+                      : 'bg-white/70 border-slate-200 hover:border-blue-300 text-slate-600'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 font-black text-xs text-blue-900">
+                    <Sparkles className="w-4 h-4 text-blue-600" />
+                    <span>Bargain to Stay</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 font-medium leading-tight">
+                    Propose terms (e.g. salary, shift, wing) to manager. If accepted, you're good! If declined, you can decide to quit or stay.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setQuitMode('direct')}
+                  className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer space-y-1.5 ${
+                    quitMode === 'direct'
+                      ? 'bg-gradient-to-br from-indigo-50/90 to-blue-50/90 border-indigo-400 ring-2 ring-indigo-400/40 text-indigo-950 shadow-sm shadow-indigo-500/10'
+                      : 'bg-white/70 border-slate-200 hover:border-blue-300 text-slate-600'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 font-black text-xs text-indigo-900">
+                    <LogOutIcon className="w-4 h-4 text-indigo-600" />
+                    <span>Direct Resignation</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 font-medium leading-tight">
+                    Submit your reason and officially terminate employment immediately. Application lock will be lifted.
+                  </p>
+                </button>
+              </div>
+            </div>
+
+            {/* Conditional Fields: If Bargaining */}
+            {quitMode === 'bargain' ? (
+              <div className="space-y-3 p-4 bg-gradient-to-br from-blue-50/80 via-indigo-50/40 to-white border border-blue-200 rounded-2xl shadow-xs">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-black text-blue-950 block">1. What area would you like to negotiate?</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { id: 'salary', label: 'Salary / Wage Increase' },
+                      { id: 'shift', label: 'Shift Adjustment' },
+                      { id: 'wing', label: 'Block / Wing Reassignment' },
+                      { id: 'workload', label: 'Workload & Responsibilities' },
+                      { id: 'custom', label: 'Other Terms' }
+                    ].map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setBargainType(c.id)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                          bargainType === c.id
+                            ? 'bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-500/25'
+                            : 'bg-white text-blue-900 border-blue-200 hover:bg-blue-100'
+                        }`}
+                      >
+                        {c.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-black text-blue-950 block">
+                    2. What deal / terms are you asking for to stay? <span className="text-rose-600">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={bargainTerms}
+                    onChange={(e) => setBargainTerms(e.target.value)}
+                    placeholder={
+                      bargainType === 'salary' ? 'e.g., Requesting wage increase to 1,200 GHS/month' :
+                      bargainType === 'shift' ? 'e.g., Requesting transfer from Night shift to Morning/Day shift' :
+                      bargainType === 'wing' ? 'e.g., Requesting reassignment to Annex Wing or Block A' :
+                      'e.g., State your specific required deal terms...'
+                    }
+                    className="w-full px-3.5 py-2.5 bg-white border border-blue-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-400/20 shadow-xs"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-blue-900 block">3. Note for Manager (Optional)</label>
+                  <input
+                    type="text"
+                    value={bargainNotes}
+                    onChange={(e) => setBargainNotes(e.target.value)}
+                    placeholder="e.g., If these terms can be met, I will gladly continue my dedicated service."
+                    className="w-full px-3.5 py-2 bg-white border border-blue-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-400/20 shadow-xs"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 bg-gradient-to-br from-indigo-50/80 via-blue-50/50 to-white border border-indigo-200/80 rounded-2xl space-y-2 text-xs text-indigo-950 shadow-xs">
+                <div className="font-bold flex items-center gap-1.5 text-indigo-900">
+                  <AlertCircle className="w-4 h-4 text-indigo-600" />
+                  <span>Direct resignation details:</span>
+                </div>
+                <ul className="list-disc pl-5 space-y-1 text-slate-700 font-medium text-[11px]">
+                  <li>Your official employment at <strong className="text-blue-900">{approvedApp.hostelName}</strong> ends immediately.</li>
+                  <li>Your manager is notified of your resignation and submitted reason.</li>
+                  <li><strong className="text-blue-900">Your application lock will be lifted</strong>, allowing you to apply for any other hostel position.</li>
+                </ul>
+              </div>
+            )}
+
+            {/* Buttons */}
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-blue-100/80">
+              <button
+                type="button"
+                onClick={() => setShowResignModal(false)}
+                disabled={submittingQuitOrBargain}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50 transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmitQuitOrBargain}
+                disabled={submittingQuitOrBargain || !quitReason.trim() || quitReason.trim().length < 5 || (quitMode === 'bargain' && !bargainTerms.trim())}
+                className="px-5 py-2.5 rounded-xl text-white font-black text-xs transition-all shadow-md shadow-blue-900/25 flex items-center gap-2 cursor-pointer disabled:opacity-50 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-800"
+              >
+                {submittingQuitOrBargain ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Submitting...</span>
+                  </>
+                ) : quitMode === 'bargain' ? (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    <span>Send Bargain Deal to Manager</span>
+                  </>
+                ) : (
+                  <>
+                    <LogOutIcon className="w-4 h-4" />
+                    <span>Confirm & Quit Job</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

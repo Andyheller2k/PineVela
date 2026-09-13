@@ -27,6 +27,15 @@ import {
   FileCheck
 } from 'lucide-react';
 import PineLogo from './PineLogo';
+import {
+  validateEmail,
+  cleanPhoneNumber,
+  validatePhone,
+  validateAddress,
+  formatDigitalAddress,
+  validateDigitalAddress,
+  resolveIdConfig
+} from '../utils/formValidation';
 
 interface ResidentOnboardingWizardProps {
   isOpen: boolean;
@@ -118,37 +127,63 @@ export default function ResidentOnboardingWizard({
   // Phase Navigation Validation Handlers
   const handleNextPhase = () => {
     if (phase === 1) {
-      if (!fullName.trim()) {
-        triggerToast('Please enter the resident’s full legal name.', 'error');
+      if (!fullName.trim() || fullName.trim().length < 3) {
+        triggerToast('Please enter the resident’s full legal name (minimum 3 characters).', 'error');
         return;
       }
-      if (!phone.trim() || phone.trim().length < 6) {
-        triggerToast('Please enter a valid phone number for the resident.', 'error');
+      const phoneCheck = validatePhone(phone, 'Resident primary phone');
+      if (!phoneCheck.isValid) {
+        triggerToast(phoneCheck.error!, 'error');
         return;
+      }
+      if (altPhone.trim()) {
+        const altCheck = validatePhone(altPhone, 'Alternative contact phone');
+        if (!altCheck.isValid) {
+          triggerToast(altCheck.error!, 'error');
+          return;
+        }
       }
     } else if (phase === 2) {
-      if (!address.trim()) {
-        triggerToast('Please enter the resident’s physical home address.', 'error');
+      const addrCheck = validateAddress(address, 'Home address');
+      if (!addrCheck.isValid) {
+        triggerToast(addrCheck.error!, 'error');
         return;
       }
-      if (!city.trim()) {
+      if (!city.trim() || city.trim().length < 2) {
         triggerToast('Please enter the home city/town.', 'error');
         return;
       }
+      if (digitalAddress.trim()) {
+        const gpsCheck = validateDigitalAddress(digitalAddress);
+        if (!gpsCheck.isValid) {
+          triggerToast(gpsCheck.error!, 'error');
+          return;
+        }
+      }
     } else if (phase === 3) {
-      if (!idNumber.trim()) {
-        triggerToast('Please enter the Student ID or National ID number.', 'error');
+      const idCfg = resolveIdConfig(idType);
+      const idCheck = idCfg.validate(idNumber);
+      if (!idCheck.isValid) {
+        triggerToast(idCheck.error!, 'error');
         return;
       }
     } else if (phase === 4) {
       // Validation for Manager's Info & Residence Section
-      if (!managerName.trim()) {
+      if (!managerName.trim() || managerName.trim().length < 3) {
         triggerToast('Please specify the Assigned Manager’s full name.', 'error');
         return;
       }
-      if (!managerPhone.trim()) {
-        triggerToast('Please specify the Assigned Manager’s phone contact.', 'error');
+      const mgrPhoneCheck = validatePhone(managerPhone, 'Assigned Manager phone');
+      if (!mgrPhoneCheck.isValid) {
+        triggerToast(mgrPhoneCheck.error!, 'error');
         return;
+      }
+      if (managerEmail.trim()) {
+        const mgrEmailCheck = validateEmail(managerEmail, 'Assigned Manager email');
+        if (!mgrEmailCheck.isValid) {
+          triggerToast(mgrEmailCheck.error!, 'error');
+          return;
+        }
       }
       if (!residenceName.trim()) {
         triggerToast('Please enter or select the Residence Name.', 'error');
@@ -159,9 +194,17 @@ export default function ResidentOnboardingWizard({
         return;
       }
     } else if (phase === 5) {
-      if (!email.trim() || !email.includes('@')) {
-        triggerToast('Please enter a valid email address for the resident.', 'error');
+      const emailCheck = validateEmail(email, 'Resident email address');
+      if (!emailCheck.isValid) {
+        triggerToast(emailCheck.error!, 'error');
         return;
+      }
+      if (emergencyContactPhone.trim()) {
+        const emPhoneCheck = validatePhone(emergencyContactPhone, 'Emergency contact phone');
+        if (!emPhoneCheck.isValid) {
+          triggerToast(emPhoneCheck.error!, 'error');
+          return;
+        }
       }
     }
 
@@ -183,6 +226,29 @@ export default function ResidentOnboardingWizard({
   // Final Registration Submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const emailCheck = validateEmail(email, 'Resident email address');
+    if (!emailCheck.isValid) {
+      triggerToast(emailCheck.error!, 'error');
+      return;
+    }
+    const phoneCheck = validatePhone(phone, 'Resident primary phone');
+    if (!phoneCheck.isValid) {
+      triggerToast(phoneCheck.error!, 'error');
+      return;
+    }
+    const addrCheck = validateAddress(address, 'Home address');
+    if (!addrCheck.isValid) {
+      triggerToast(addrCheck.error!, 'error');
+      return;
+    }
+    const idCfg = resolveIdConfig(idType);
+    const idCheck = idCfg.validate(idNumber);
+    if (!idCheck.isValid) {
+      triggerToast(idCheck.error!, 'error');
+      return;
+    }
+
     if (!declarationAccepted) {
       triggerToast('Please verify and check the Admin certification declaration.', 'error');
       return;
@@ -412,12 +478,13 @@ export default function ResidentOnboardingWizard({
                         <input
                           type="tel"
                           required
-                          placeholder="+233 24 000 0000"
+                          placeholder="024 000 0000 or +233 24 000 0000"
                           value={phone}
-                          onChange={(e) => setPhone(e.target.value)}
+                          onChange={(e) => setPhone(cleanPhoneNumber(e.target.value))}
                           className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-600"
                         />
                       </div>
+                      <p className="text-[10px] text-slate-400 font-medium mt-1">Numbers only (10 digits starting with 0, or international +233)</p>
                     </div>
 
                     <div>
@@ -428,12 +495,13 @@ export default function ResidentOnboardingWizard({
                         <Phone className="absolute left-3.5 top-3.5 w-4 h-4 text-slate-400" />
                         <input
                           type="tel"
-                          placeholder="+233 50 000 0000"
+                          placeholder="050 000 0000 or +233 50 000 0000"
                           value={altPhone}
-                          onChange={(e) => setAltPhone(e.target.value)}
+                          onChange={(e) => setAltPhone(cleanPhoneNumber(e.target.value))}
                           className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-600"
                         />
                       </div>
+                      <p className="text-[10px] text-slate-400 font-medium mt-1">Numbers only (optional)</p>
                     </div>
                   </div>
 
@@ -544,9 +612,10 @@ export default function ResidentOnboardingWizard({
                         type="text"
                         placeholder="e.g. GA-183-9024"
                         value={digitalAddress}
-                        onChange={(e) => setDigitalAddress(e.target.value)}
+                        onChange={(e) => setDigitalAddress(formatDigitalAddress(e.target.value))}
                         className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-600 uppercase"
                       />
+                      <p className="text-[10px] text-slate-400 font-medium mt-1">Format: XX-XXX-XXXX</p>
                     </div>
 
                     <div>
@@ -571,32 +640,56 @@ export default function ResidentOnboardingWizard({
                       <label className="block text-xs font-bold text-slate-700 mb-1">Identification Document Type</label>
                       <select
                         value={idType}
-                        onChange={(e) => setIdType(e.target.value)}
+                        onChange={(e) => {
+                          const newType = e.target.value;
+                          setIdType(newType);
+                          const cfg = resolveIdConfig(newType);
+                          setIdNumber(prev => cfg.formatInput(prev));
+                        }}
                         className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-600"
                       >
-                        <option value="Ghana Card (National ID)">Ghana Card (National ID)</option>
-                        <option value="University Student ID">University Student ID</option>
-                        <option value="Passport">Passport</option>
-                        <option value="Voter ID Card">Voter ID Card</option>
+                        <option value="Ghana Card (National ID)">Ghana Card (GHA-XXXXXXXXX-X)</option>
+                        <option value="University Student ID">University Student ID (Alphanumeric)</option>
+                        <option value="Voter ID Card">Voter ID Card (10 Digits — Numbers Only)</option>
+                        <option value="NHIS Card (Health Insurance)">NHIS Card (8 Digits — Numbers Only)</option>
+                        <option value="Passport">International Passport</option>
+                        <option value="Driver's License">Driver's License (DVLA)</option>
                       </select>
                     </div>
 
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        ID Document Number <span className="text-rose-500">*</span>
-                      </label>
-                      <div className="relative">
-                        <ShieldCheck className="absolute left-3.5 top-3.5 w-4 h-4 text-slate-400" />
-                        <input
-                          type="text"
-                          required
-                          placeholder="e.g. GHA-728192039-1 or STU-109282"
-                          value={idNumber}
-                          onChange={(e) => setIdNumber(e.target.value)}
-                          className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-600 uppercase"
-                        />
-                      </div>
-                    </div>
+                    {(() => {
+                      const cfg = resolveIdConfig(idType);
+                      return (
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="block text-xs font-bold text-slate-700">
+                              {cfg.name} Number <span className="text-rose-500">*</span>
+                            </label>
+                            {cfg.numericOnly && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 font-black tracking-wide uppercase">
+                                Numbers Only (No Alphabets)
+                              </span>
+                            )}
+                          </div>
+                          <div className="relative">
+                            <ShieldCheck className="absolute left-3.5 top-3.5 w-4 h-4 text-slate-400" />
+                            <input
+                              type={cfg.numericOnly ? "tel" : "text"}
+                              required
+                              inputMode={cfg.numericOnly ? "numeric" : "text"}
+                              maxLength={cfg.maxLength}
+                              placeholder={cfg.placeholder}
+                              value={idNumber}
+                              onChange={(e) => setIdNumber(cfg.formatInput(e.target.value))}
+                              className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-600 uppercase font-mono"
+                            />
+                          </div>
+                          <p className="text-[11px] text-slate-500 font-medium mt-1">
+                            {cfg.helperText}
+                          </p>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   <div>
@@ -687,10 +780,11 @@ export default function ResidentOnboardingWizard({
                           type="tel"
                           required
                           value={managerPhone}
-                          onChange={(e) => setManagerPhone(e.target.value)}
-                          placeholder="e.g. +233 24 123 4567"
+                          onChange={(e) => setManagerPhone(cleanPhoneNumber(e.target.value))}
+                          placeholder="024 123 4567 or +233 24 123 4567"
                           className="w-full px-4 py-3 bg-white border border-blue-200 rounded-2xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-600"
                         />
+                        <p className="text-[10px] text-slate-400 font-medium mt-1">Numbers only</p>
                       </div>
 
                       <div>
@@ -858,11 +952,12 @@ export default function ResidentOnboardingWizard({
                       <label className="block text-xs font-bold text-slate-700 mb-1">Emergency Contact Phone</label>
                       <input
                         type="tel"
-                        placeholder="+233 24 999 8888"
+                        placeholder="024 999 8888 or +233 24 999 8888"
                         value={emergencyContactPhone}
-                        onChange={(e) => setEmergencyContactPhone(e.target.value)}
+                        onChange={(e) => setEmergencyContactPhone(cleanPhoneNumber(e.target.value))}
                         className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-600"
                       />
+                      <p className="text-[10px] text-slate-400 font-medium mt-1">Numbers only</p>
                     </div>
                   </div>
 

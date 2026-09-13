@@ -870,3 +870,252 @@ export async function dbUpdateBoardRequest(id: string, updates: any): Promise<an
   return null;
 }
 
+// ==========================================
+// 12. DIGITAL ROOM KEYS & STUDENT ACCESS
+// ==========================================
+
+export function generateHostelRoomKeyCode(hostelName: string, blockNameOrInitial: string): string {
+  // Extract a clean prominent prefix from the hostel name
+  const words = (hostelName || 'Pinevela').replace(/[^a-zA-Z0-9\s]/g, '').trim().split(/\s+/);
+  let prefix = '';
+  if (words.length > 1) {
+    const significant = words.find(w => !['the', 'hotel', 'hostel', 'residence', 'hall', 'heights', 'villa', 'lodge'].includes(w.toLowerCase())) || words[0];
+    prefix = significant.toUpperCase().slice(0, 5);
+  } else {
+    prefix = (words[0] || 'PINE').toUpperCase().slice(0, 5);
+  }
+  if (prefix.length < 3) prefix = (prefix + 'VELA').slice(0, 4);
+
+  // Extract block initial: e.g. "Block A" -> "A", "Block B" -> "B", "Floor 1" -> "F1"
+  const cleanBlock = (blockNameOrInitial || 'A').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  let blockCode = 'A';
+  if (cleanBlock.startsWith('BLOCK') && cleanBlock.length > 5) {
+    blockCode = cleanBlock.substring(5);
+  } else if (cleanBlock) {
+    blockCode = cleanBlock.slice(0, 3);
+  }
+
+  // 6 randomly generated digits
+  const random6 = Math.floor(100000 + Math.random() * 900000).toString();
+
+  return `${prefix}-${blockCode}-${random6}`;
+}
+
+export async function dbGenerateHostelRoomKeys(hostel: any): Promise<any[]> {
+  const store = getStore();
+  if (!store.roomKeys) store.roomKeys = [];
+
+  const hostelId = hostel.id;
+  const hostelName = hostel.name || 'PineVela Residence';
+
+  // Determine blocks configuration from blocksList, blocks, or default synthesis
+  let blocks = hostel.blocksList || hostel.blocks || [];
+  if (!Array.isArray(blocks) || blocks.length === 0) {
+    const totalRooms = hostel.totalRooms || hostel.roomsAvailable || 30;
+    blocks = [
+      { name: 'Block A (Alpha)', blockName: 'Block A (Alpha)', totalRooms: Math.min(totalRooms, 30), startNum: 101, roomPrefix: 'A' },
+      { name: 'Block B (Beta)', blockName: 'Block B (Beta)', totalRooms: Math.max(10, Math.floor(totalRooms / 2)), startNum: 201, roomPrefix: 'B' }
+    ];
+  }
+
+  const generatedKeys: any[] = [];
+
+  for (let idx = 0; idx < blocks.length; idx++) {
+    const block = blocks[idx];
+    const blockName = block.name || block.blockName || `Block ${String.fromCharCode(65 + idx)}`;
+    const roomCount = block.totalRooms || block.rooms || 20;
+    const startNum = block.startNum || (idx + 1) * 100 + 1;
+    const defaultPrefix = String.fromCharCode(65 + idx);
+    const roomPrefix = block.roomPrefix || defaultPrefix;
+
+    for (let i = 0; i < roomCount; i++) {
+      const roomNum = `${roomPrefix}-${startNum + i}`;
+      const existing = store.roomKeys.find((rk: any) => 
+        rk.hostelId === hostelId && 
+        (rk.blockName === blockName || rk.blockName?.toLowerCase() === blockName.toLowerCase()) && 
+        rk.roomNumber === roomNum
+      );
+      if (!existing) {
+        const keyVal = generateHostelRoomKeyCode(hostelName, blockName);
+        const newKey = {
+          id: `rk-${hostelId}-${blockName.replace(/[^a-zA-Z0-9]/g, '_')}-${roomNum}`,
+          hostelId,
+          hostelName,
+          blockName,
+          blockInitial: roomPrefix || blockName.replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase() || 'A',
+          roomNumber: roomNum,
+          floor: Math.floor(i / 10) + 1,
+          roomKey: keyVal,
+          isAssigned: false,
+          status: 'Available',
+          createdAt: new Date().toISOString()
+        };
+        store.roomKeys.push(newKey);
+        generatedKeys.push(newKey);
+      }
+    }
+  }
+
+  persistStore();
+  return generatedKeys;
+}
+
+export async function dbRecordRoomKeyDispatch(roomKey: string, dispatchInfo: {
+  recipientEmail?: string;
+  recipientPhone?: string;
+  recipientName?: string;
+  customNote?: string;
+  senderManagerId?: string;
+  senderManagerName?: string;
+  [key: string]: any;
+}): Promise<any> {
+  const store = getStore();
+  if (!store.roomKeys) store.roomKeys = [];
+  if (!store.keyDispatches) store.keyDispatches = [];
+
+  const normalized = (roomKey || '').trim().toUpperCase();
+  const keyIndex = store.roomKeys.findIndex((rk: any) => rk.roomKey?.trim().toUpperCase() === normalized);
+
+  const dispatchRecord = {
+    id: `dispatch-${Date.now()}`,
+    roomKey: normalized,
+    ...dispatchInfo,
+    dispatchedAt: new Date().toISOString()
+  };
+  store.keyDispatches.unshift(dispatchRecord);
+
+  if (keyIndex >= 0) {
+    store.roomKeys[keyIndex].lastDispatchedAt = dispatchRecord.dispatchedAt;
+    store.roomKeys[keyIndex].lastDispatchedTo = dispatchInfo.recipientEmail || dispatchInfo.recipientPhone || dispatchInfo.recipientName || 'Resident';
+  }
+
+  persistStore();
+  return dispatchRecord;
+}
+
+export async function dbGetRoomKeys(hostelId?: string): Promise<any[]> {
+  const store = getStore();
+  if (!store.roomKeys) store.roomKeys = [];
+
+  // Ensure initial room keys exist for all hostels
+  if (store.hostels && store.hostels.length > 0) {
+    let hadMissing = false;
+    for (const h of store.hostels) {
+      const hasKeys = store.roomKeys.some((rk: any) => rk.hostelId === h.id);
+      if (!hasKeys) {
+        hadMissing = true;
+        await dbGenerateHostelRoomKeys(h);
+      }
+    }
+    if (hadMissing) {
+      persistStore();
+    }
+  }
+
+  if (hostelId) {
+    return store.roomKeys.filter((rk: any) => rk.hostelId === hostelId);
+  }
+  return store.roomKeys;
+}
+
+export async function dbGetRoomKeyByCode(code: string): Promise<any | null> {
+  const store = getStore();
+  if (!store.roomKeys) store.roomKeys = [];
+  const normalized = (code || '').trim().toUpperCase();
+  
+  // Also check if keys need generation
+  await dbGetRoomKeys();
+
+  return store.roomKeys.find((rk: any) => rk.roomKey?.trim().toUpperCase() === normalized) || null;
+}
+
+export async function dbAssignRoomKey(roomKey: string, studentData: {
+  studentId: string;
+  studentName: string;
+  studentEmail?: string;
+  studentPhone?: string;
+  assignedResidentType?: string;
+  assignedProgram?: string;
+  assignedDepartment?: string;
+  assignedInstitution?: string;
+  [key: string]: any;
+}): Promise<any> {
+  const store = getStore();
+  if (!store.roomKeys) store.roomKeys = [];
+  const normalized = (roomKey || '').trim().toUpperCase();
+
+  const idx = store.roomKeys.findIndex((rk: any) => rk.roomKey?.trim().toUpperCase() === normalized);
+  if (idx >= 0) {
+    store.roomKeys[idx] = {
+      ...store.roomKeys[idx],
+      isAssigned: true,
+      status: 'Occupied',
+      assignedStudentId: studentData.studentId,
+      assignedStudentName: studentData.studentName,
+      assignedStudentEmail: studentData.studentEmail,
+      assignedStudentPhone: studentData.studentPhone,
+      assignedResidentType: studentData.assignedResidentType || 'student',
+      assignedProgram: studentData.assignedProgram,
+      assignedDepartment: studentData.assignedDepartment,
+      assignedInstitution: studentData.assignedInstitution,
+      assignedAt: new Date().toISOString()
+    };
+    persistStore();
+    return store.roomKeys[idx];
+  }
+  return null;
+}
+
+// ==========================================
+// 13. STUDENT DIRECT MESSAGES
+// ==========================================
+
+export async function dbGetStudentMessages(filter?: {
+  studentId?: string;
+  managerId?: string;
+  hostelId?: string;
+}): Promise<any[]> {
+  const store = getStore();
+  if (!store.studentMessages) store.studentMessages = [];
+
+  let results = [...store.studentMessages];
+  if (filter?.studentId) {
+    results = results.filter((m: any) => m.studentId === filter.studentId);
+  }
+  if (filter?.managerId) {
+    results = results.filter((m: any) => m.managerId === filter.managerId);
+  }
+  if (filter?.hostelId) {
+    results = results.filter((m: any) => m.hostelId === filter.hostelId);
+  }
+
+  // Sort chronologically
+  return results.sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+}
+
+export async function dbCreateStudentMessage(msgData: any): Promise<any> {
+  const store = getStore();
+  if (!store.studentMessages) store.studentMessages = [];
+
+  const newMsg = {
+    id: msgData.id || `smsg-${generateUUID()}`,
+    studentId: msgData.studentId,
+    studentName: msgData.studentName || 'Student Resident',
+    studentEmail: msgData.studentEmail || '',
+    hostelId: msgData.hostelId,
+    hostelName: msgData.hostelName || 'Hostel',
+    managerId: msgData.managerId || '',
+    managerName: msgData.managerName || 'Hostel Manager',
+    senderRole: msgData.senderRole || 'student', // 'student' | 'manager'
+    message: msgData.message || '',
+    attachmentUrl: msgData.attachmentUrl || '',
+    timestamp: msgData.timestamp || new Date().toISOString(),
+    read: false
+  };
+
+  store.studentMessages.push(newMsg);
+  persistStore();
+  return newMsg;
+}
+
+

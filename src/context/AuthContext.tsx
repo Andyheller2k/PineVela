@@ -22,6 +22,20 @@ export interface AuthenticatedUser {
   profilePicture?: string;
   hasApprovedHostel?: boolean;
   hostelStatus?: string;
+  studentId?: string;
+  residentType?: 'student' | 'resident' | 'other' | string;
+  programOfStudy?: string;
+  department?: string;
+  institution?: string;
+  roomKey?: string;
+  hostelId?: string;
+  hostelName?: string;
+  blockName?: string;
+  roomNumber?: string;
+  managerId?: string;
+  managerName?: string;
+  managerPhone?: string;
+  managerEmail?: string;
 }
 
 interface AuthContextType {
@@ -65,7 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             let hasApprovedHostel = false;
             let hostelStatus = 'None';
 
-            if (userData.role === 'manager') {
+            if (userData && userData.role === 'manager') {
               try {
                 const hostelRes = await fetch('/api/manager/my-hostel', {
                   headers: {
@@ -134,7 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let hasApprovedHostel = false;
     let hostelStatus = 'None';
 
-    if (userData.role === 'manager') {
+    if (userData && userData.role === 'manager') {
       try {
         const hostelRes = await fetch('/api/manager/my-hostel', {
           headers: {

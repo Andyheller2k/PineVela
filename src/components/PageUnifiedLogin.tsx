@@ -2,8 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import PineLogo from './PineLogo';
-import { Mail, Key, Eye, EyeOff, ShieldCheck, ArrowLeft, ArrowRight, ShieldAlert, CheckCircle, RefreshCw, Sparkles, LogIn, ClipboardList, Building, MapPin, Lock, Phone, ChevronRight, ChevronLeft, Search, User, X, Clock, Briefcase, Home, Wrench } from 'lucide-react';
+import { Mail, Key, Eye, EyeOff, ShieldCheck, ArrowLeft, ArrowRight, ShieldAlert, CheckCircle, CheckCircle2, RefreshCw, Sparkles, LogIn, ClipboardList, Building, MapPin, Lock, Phone, ChevronRight, ChevronLeft, Search, User, X, Clock, Briefcase, Home, Wrench, GraduationCap, School, BookOpen, Building2, Bell } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import {
+  validateEmail,
+  cleanPhoneNumber,
+  validatePhone,
+  validateAddress,
+  resolveIdConfig
+} from '../utils/formValidation';
 
 // Static asset imports
 import manager2Img from '../../assets/manager2.jpeg';
@@ -55,6 +62,34 @@ export default function PageUnifiedLogin() {
 
   // Manager registration onboarding states
   const [showRegModal, setShowRegModal] = useState(false);
+
+  // Resident Digital Key Onboarding states
+  const [showStudentKeyModal, setShowStudentKeyModal] = useState(false);
+  const [studentKeyInput, setStudentKeyInput] = useState('');
+  const [studentKeyStep, setStudentKeyStep] = useState<1 | 2 | 3 | 4>(1); // 1: Category & Digital Key, 2: Personal & Academic Info, 3: Password & Security, 4: Success Confirmed
+  const [verifyingStudentKey, setVerifyingStudentKey] = useState(false);
+  const [verifiedKeyDetails, setVerifiedKeyDetails] = useState<any | null>(null);
+  const [studentKeyError, setStudentKeyError] = useState<string | null>(null);
+
+  // Resident Category & Academic Profile
+  const [stuResidentType, setStuResidentType] = useState<'student' | 'resident' | 'other'>('student');
+  const [stuCustomType, setStuCustomType] = useState('');
+  const [stuName, setStuName] = useState('');
+  const [stuId, setStuId] = useState('');
+  const [stuEmail, setStuEmail] = useState('');
+  const [stuPhone, setStuPhone] = useState('');
+  const [stuProgram, setStuProgram] = useState('');
+  const [stuDepartment, setStuDepartment] = useState('');
+  const [stuInstitution, setStuInstitution] = useState('');
+
+  // Password & Security
+  const [stuPassword, setStuPassword] = useState('');
+  const [stuConfirmPassword, setStuConfirmPassword] = useState('');
+  const [showStuPassword, setShowStuPassword] = useState(false);
+  const [showStuConfirmPassword, setShowStuConfirmPassword] = useState(false);
+  const [agreeTerms, setAgreeTerms] = useState(true);
+  const [submittingStudentClaim, setSubmittingStudentClaim] = useState(false);
+  const [claimedUserData, setClaimedUserData] = useState<any | null>(null);
   const [regStep, setRegStep] = useState(1); // 1: Account Info, 2: Verification Success
   const [regManagerName, setRegManagerName] = useState('');
   const [regManagerEmail, setRegManagerEmail] = useState('');
@@ -428,31 +463,139 @@ export default function PageUnifiedLogin() {
     }
   };
 
+  // Student/Resident Key Verification Handler
+  const handleVerifyStudentKey = async (keyCodeToVerify?: string) => {
+    const code = (keyCodeToVerify || studentKeyInput || '').trim().toUpperCase();
+    if (!code || code.length < 5) {
+      setStudentKeyError('Please input a valid digital room key (e.g. MAZE-A-749201).');
+      return;
+    }
+    setVerifyingStudentKey(true);
+    setStudentKeyError(null);
+    try {
+      const res = await fetch('/api/room-keys/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomKey: code })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.valid) {
+        setStudentKeyError(data.error || 'Invalid room key. Check with your hostel manager.');
+        setVerifiedKeyDetails(null);
+      } else {
+        setVerifiedKeyDetails(data);
+        setStudentKeyInput(code);
+        setStudentKeyError(null);
+        triggerToast(`Room Found: ${data.hostelName} (${data.blockName}, ${data.roomNumber})`, 'success');
+      }
+    } catch (e: any) {
+      setStudentKeyError('Network error verifying room key. Please try again.');
+    } finally {
+      setVerifyingStudentKey(false);
+    }
+  };
+
+  // Student/Resident Claim Room Key & Complete Onboarding Handler
+  const handleClaimStudentKeySubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!verifiedKeyDetails) {
+      triggerToast('Please verify a valid digital room key first.', 'error');
+      setStudentKeyStep(1);
+      return;
+    }
+    if (!stuName.trim() || !stuId.trim()) {
+      triggerToast('Please provide your full legal name and Student / Resident ID.', 'error');
+      setStudentKeyStep(2);
+      return;
+    }
+    if (stuPassword && stuConfirmPassword && stuPassword !== stuConfirmPassword) {
+      triggerToast('Passwords do not match. Please verify your password.', 'error');
+      return;
+    }
+
+    setSubmittingStudentClaim(true);
+    try {
+      const resolvedRoleType = stuResidentType === 'other' 
+        ? (stuCustomType.trim() || 'Special Resident') 
+        : stuResidentType;
+
+      const res = await fetch('/api/room-keys/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomKey: verifiedKeyDetails.roomKey,
+          studentName: stuName.trim(),
+          name: stuName.trim(),
+          studentId: stuId.trim().toUpperCase(),
+          residentId: stuId.trim().toUpperCase(),
+          studentEmail: stuEmail.trim(),
+          email: stuEmail.trim(),
+          studentPhone: stuPhone.trim(),
+          phone: stuPhone.trim(),
+          residentType: resolvedRoleType,
+          programOfStudy: stuProgram.trim() || (stuResidentType === 'student' ? 'General Academic Studies' : 'Professional Resident'),
+          department: stuDepartment.trim() || (stuResidentType === 'student' ? 'Academic Department' : 'General Resident Division'),
+          institution: stuInstitution.trim() || (stuResidentType === 'student' ? 'University / College' : 'Organization / Independent'),
+          password: stuPassword || 'student123'
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setClaimedUserData(data);
+        setStudentKeyStep(4);
+        triggerToast(`Welcome to ${verifiedKeyDetails.hostelName}! Manager notified.`, 'success');
+      } else {
+        triggerToast(data.error || 'Failed to complete resident onboarding.', 'error');
+      }
+    } catch (e: any) {
+      triggerToast(e.message || 'Error activating room key.', 'error');
+    } finally {
+      setSubmittingStudentClaim(false);
+    }
+  };
+
   const handleManagerRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!regManagerName.trim() || !regManagerEmail.trim() || !regPassword) {
-      triggerToast('Please provide your name, email, and password', 'error');
+    if (!regManagerName.trim() || regManagerName.trim().length < 3) {
+      triggerToast('Please provide your full legal name (minimum 3 characters)', 'error');
       return;
     }
 
-    if (!regNationalId.trim()) {
-      triggerToast('National ID / Ghana Card number is required for manager verification', 'error');
+    const emailCheck = validateEmail(regManagerEmail, 'Manager Work Email');
+    if (!emailCheck.isValid) {
+      triggerToast(emailCheck.error!, 'error');
       return;
     }
 
-    if (!regPhoneVerified(regManagerPhone)) {
-      triggerToast('Please provide a valid direct phone number', 'error');
+    const phoneCheck = validatePhone(regManagerPhone, 'Direct Phone Number');
+    if (!phoneCheck.isValid) {
+      triggerToast(phoneCheck.error!, 'error');
+      return;
+    }
+
+    const idCfg = resolveIdConfig(regDocumentType);
+    const idCheck = idCfg.validate(regNationalId);
+    if (!idCheck.isValid) {
+      triggerToast(idCheck.error!, 'error');
+      return;
+    }
+
+    if (regAddress.trim()) {
+      const addrCheck = validateAddress(regAddress, 'Operating Address');
+      if (!addrCheck.isValid) {
+        triggerToast(addrCheck.error!, 'error');
+        return;
+      }
+    }
+
+    if (!regPassword || regPassword.length < 6) {
+      triggerToast('Password must be at least 6 characters long', 'error');
       return;
     }
 
     if (regPassword !== regConfirmPassword) {
       triggerToast('Passwords do not match. Please verify your entry.', 'error');
-      return;
-    }
-
-    if (regPassword.length < 6) {
-      triggerToast('Password must be at least 6 characters long', 'error');
       return;
     }
 
@@ -797,6 +940,22 @@ export default function PageUnifiedLogin() {
             </form>
 
             <div className="text-center pt-3 border-t border-slate-100 space-y-2">
+              <div>
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setStudentKeyStep(1);
+                    setStudentKeyError(null);
+                    setVerifiedKeyDetails(null);
+                    setShowStudentKeyModal(true);
+                  }}
+                  className="group inline-flex items-center gap-2 text-xs font-black text-blue-900 hover:text-blue-950 bg-blue-600/10 hover:bg-blue-600/15 backdrop-blur-md px-4 py-2 rounded-full border border-blue-300/80 hover:border-blue-500 transition-all cursor-pointer shadow-xs hover:shadow-sm hover:-translate-y-0.5 w-full justify-center"
+                >
+                  <Key size={14} className="text-blue-700 group-hover:scale-110 transition-transform" />
+                  <span>Student or Resident? Claim Digital Room Key to Onboard & Enter</span>
+                  <ArrowRight size={12} className="text-blue-600 group-hover:translate-x-0.5 transition-transform" />
+                </button>
+              </div>
               <p className="text-xs sm:text-sm text-slate-500 font-semibold flex items-center justify-center gap-1.5 flex-wrap">
                 <span>New to PineVela?</span>
                 <button 
@@ -814,11 +973,11 @@ export default function PageUnifiedLogin() {
                     sessionStorage.setItem('navigated_to_staff_register', 'true');
                     navigate('/staff/register');
                   }} 
-                  className="group inline-flex items-center gap-2 text-xs font-black text-blue-900 hover:text-blue-950 bg-blue-600/10 hover:bg-blue-600/15 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-blue-200/80 hover:border-blue-400/80 transition-all cursor-pointer shadow-xs hover:shadow-sm hover:-translate-y-0.5"
+                  className="group inline-flex items-center gap-2 text-xs font-black text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200/80 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-slate-200 hover:border-slate-300 transition-all cursor-pointer shadow-xs hover:shadow-sm hover:-translate-y-0.5"
                 >
-                  <Wrench size={13} className="text-blue-700 group-hover:scale-110 transition-transform" />
+                  <Wrench size={13} className="text-slate-600 group-hover:scale-110 transition-transform" />
                   <span>Want to work as a staff? Find work now!!</span>
-                  <ArrowRight size={12} className="text-blue-600 group-hover:translate-x-0.5 transition-transform" />
+                  <ArrowRight size={12} className="text-slate-500 group-hover:translate-x-0.5 transition-transform" />
                 </button>
               </div>
             </div>
@@ -969,15 +1128,16 @@ export default function PageUnifiedLogin() {
                         <Phone size={15} />
                       </span>
                       <input
-                        type="text"
+                        type="tel"
                         required
-                        placeholder="e.g. +233 24 488 9231"
+                        placeholder="024 000 0000 or +233 24 000 0000"
                         value={regManagerPhone}
-                        onChange={(e) => setRegManagerPhone(e.target.value)}
+                        onChange={(e) => setRegManagerPhone(cleanPhoneNumber(e.target.value))}
                         autoComplete="tel"
                         className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50 text-slate-800 text-xs font-medium focus:ring-2 focus:ring-blue-900 focus:outline-none"
                       />
                     </div>
+                    <p className="text-[10px] text-slate-400 font-medium">Numbers only (10 digits starting with 0, or international +233)</p>
                   </div>
 
                   {/* Country of Issuance */}
@@ -1002,33 +1162,58 @@ export default function PageUnifiedLogin() {
                     <label className="text-slate-700 block font-bold">Document Type *</label>
                     <select
                       value={regDocumentType}
-                      onChange={(e) => setRegDocumentType(e.target.value)}
+                      onChange={(e) => {
+                        const newType = e.target.value;
+                        setRegDocumentType(newType);
+                        const cfg = resolveIdConfig(newType);
+                        setRegNationalId(prev => cfg.formatInput(prev));
+                      }}
                       className="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50 text-slate-800 text-xs font-semibold focus:ring-2 focus:ring-blue-900 focus:outline-none"
                     >
-                      <option value="Ghana Card">Ghana Card (National Identification Authority)</option>
-                      <option value="Passport">International Passport</option>
-                      <option value="Voter ID">National Voters ID</option>
-                      <option value="Driver's License">Driver's License</option>
+                      <option value="Ghana Card">Ghana Card (GHA-XXXXXXXXX-X)</option>
+                      <option value="Voter ID">National Voters ID (10 Digits — Numbers Only)</option>
+                      <option value="NHIS Card">NHIS Health Card (8 Digits — Numbers Only)</option>
+                      <option value="Passport">International Passport (Alphanumeric)</option>
+                      <option value="Driver's License">Driver's License (DVLA Alphanumeric)</option>
                     </select>
                   </div>
 
-                  {/* National ID / Ghana Card Number */}
-                  <div className="space-y-1">
-                    <label className="text-slate-700 block font-bold">Document / Ghana Card No. *</label>
-                    <div className="relative">
-                      <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 pointer-events-none">
-                        <ShieldCheck size={15} />
-                      </span>
-                      <input
-                        type="text"
-                        required
-                        placeholder="e.g. GHA-789201948-2"
-                        value={regNationalId}
-                        onChange={(e) => setRegNationalId(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50 text-slate-800 text-xs font-medium focus:ring-2 focus:ring-blue-900 focus:outline-none font-mono"
-                      />
-                    </div>
-                  </div>
+                  {/* National ID / Document Number with Dynamic Constraints */}
+                  {(() => {
+                    const cfg = resolveIdConfig(regDocumentType);
+                    return (
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <label className="text-slate-700 block font-bold">
+                            {cfg.name} Number *
+                          </label>
+                          {cfg.numericOnly && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-black tracking-wide uppercase">
+                              Numbers Only
+                            </span>
+                          )}
+                        </div>
+                        <div className="relative">
+                          <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 pointer-events-none">
+                            <ShieldCheck size={15} />
+                          </span>
+                          <input
+                            type={cfg.numericOnly ? "tel" : "text"}
+                            required
+                            inputMode={cfg.numericOnly ? "numeric" : "text"}
+                            maxLength={cfg.maxLength}
+                            placeholder={cfg.placeholder}
+                            value={regNationalId}
+                            onChange={(e) => setRegNationalId(cfg.formatInput(e.target.value))}
+                            className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50 text-slate-800 text-xs font-medium focus:ring-2 focus:ring-blue-900 focus:outline-none font-mono"
+                          />
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-medium">
+                          {cfg.helperText}
+                        </p>
+                      </div>
+                    );
+                  })()}
 
                   {/* Full Name on Document */}
                   <div className="space-y-1">
@@ -1550,6 +1735,615 @@ export default function PageUnifiedLogin() {
                 Close & Return to Login
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* RESIDENT & STUDENT DIGITAL ROOM KEY ONBOARDING MODAL */}
+      {showStudentKeyModal && (
+        <div className="fixed inset-0 bg-slate-950/75 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-4 animate-fade-in overflow-y-auto">
+          <div className="bg-white/95 backdrop-blur-2xl rounded-3xl max-w-xl w-full p-6 sm:p-8 border border-blue-200/80 shadow-2xl relative flex flex-col max-h-[92vh] overflow-y-auto text-left space-y-5">
+            
+            {/* Close Button */}
+            <button 
+              onClick={() => {
+                setShowStudentKeyModal(false);
+                setStudentKeyStep(1);
+              }}
+              className="absolute top-5 right-5 p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-all text-xl font-bold cursor-pointer"
+            >
+              <X size={18} />
+            </button>
+
+            {/* Stepper Header */}
+            <div className="space-y-3 pr-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white flex items-center justify-center shadow-md shadow-blue-600/30 shrink-0">
+                  <Key size={20} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                    <span>Resident & Student Onboarding</span>
+                    <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 tracking-wider">PineVela Key</span>
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    {studentKeyStep === 1 && 'Select resident category and validate your digital room key'}
+                    {studentKeyStep === 2 && 'Fill in your personal, academic, and institutional details'}
+                    {studentKeyStep === 3 && 'Create your account password and review room assignment'}
+                    {studentKeyStep === 4 && 'Room verified! Your manager has been notified of your check-in'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Step indicator bar */}
+              <div className="grid grid-cols-4 gap-1.5 pt-1">
+                {[
+                  { num: 1, label: 'Key & Role' },
+                  { num: 2, label: 'Profile' },
+                  { num: 3, label: 'Security' },
+                  { num: 4, label: 'Activated' }
+                ].map((s) => (
+                  <div key={s.num} className="flex flex-col gap-1">
+                    <div 
+                      className={`h-1.5 rounded-full transition-all ${
+                        studentKeyStep >= s.num 
+                          ? 'bg-gradient-to-r from-blue-600 to-indigo-600' 
+                          : 'bg-slate-200'
+                      }`} 
+                    />
+                    <span className={`text-[10px] font-bold text-center ${
+                      studentKeyStep === s.num ? 'text-blue-900' : 'text-slate-400'
+                    }`}>
+                      {s.label}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* STEP 1: Resident Category & Digital Room Key */}
+            {studentKeyStep === 1 && (
+              <div className="space-y-4">
+                
+                {/* Category Selection */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-black text-slate-800 block">
+                    1. Choose Your Residency Category <span className="text-rose-600">*</span>
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { id: 'student', label: 'Student', desc: 'Enrolled in university / college', icon: GraduationCap },
+                      { id: 'resident', label: 'Resident', desc: 'Working professional / intern', icon: Briefcase },
+                      { id: 'other', label: 'Other', desc: 'Visiting scholar / guest', icon: School }
+                    ].map((cat) => {
+                      const Icon = cat.icon;
+                      const isSelected = stuResidentType === cat.id;
+                      return (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => setStuResidentType(cat.id as any)}
+                          className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                            isSelected
+                              ? 'border-blue-600 bg-blue-50/90 shadow-sm ring-2 ring-blue-500/20'
+                              : 'border-slate-200 hover:border-slate-300 bg-white'
+                          }`}
+                        >
+                          <div className={`w-7 h-7 rounded-xl flex items-center justify-center mb-1.5 ${
+                            isSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'
+                          }`}>
+                            <Icon size={15} />
+                          </div>
+                          <div>
+                            <div className={`text-xs font-black ${isSelected ? 'text-blue-950' : 'text-slate-900'}`}>
+                              {cat.label}
+                            </div>
+                            <div className="text-[10px] text-slate-500 leading-tight line-clamp-2 mt-0.5">
+                              {cat.desc}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {stuResidentType === 'other' && (
+                    <div className="pt-1 animate-fade-in">
+                      <input
+                        type="text"
+                        value={stuCustomType}
+                        onChange={(e) => setStuCustomType(e.target.value)}
+                        placeholder="Please specify your resident status (e.g. Visiting Fellow, Postdoc)"
+                        className="w-full px-3.5 py-2.5 bg-blue-50/50 border border-blue-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Digital Key Section */}
+                <div className="space-y-2 pt-2 border-t border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-black text-slate-800 block">
+                      2. Enter Digital Room Key <span className="text-rose-600">*</span>
+                    </label>
+                    <span className="text-[11px] text-blue-700 font-semibold">
+                      Provided by Hostel Manager
+                    </span>
+                  </div>
+
+                  <div className="relative">
+                    <Key className="w-4 h-4 text-blue-600 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      type="text"
+                      autoFocus
+                      value={studentKeyInput}
+                      onChange={(e) => {
+                        setStudentKeyInput(e.target.value.toUpperCase());
+                        setStudentKeyError(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleVerifyStudentKey();
+                      }}
+                      placeholder="e.g. MAZE-A-749201"
+                      className="w-full pl-10 pr-24 py-3 bg-white border border-slate-200 rounded-2xl font-mono text-sm font-black uppercase text-slate-900 tracking-wider focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-400/20 shadow-inner"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleVerifyStudentKey()}
+                      disabled={verifyingStudentKey || !studentKeyInput.trim()}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-blue-900 hover:bg-blue-800 text-white rounded-xl text-xs font-bold transition-all cursor-pointer disabled:opacity-40 flex items-center gap-1.5"
+                    >
+                      {verifyingStudentKey ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <ShieldCheck size={14} />
+                      )}
+                      <span>Verify</span>
+                    </button>
+                  </div>
+
+                  {/* Sample Keys Quick-picker */}
+                  <div className="pt-1 flex items-center gap-1.5 flex-wrap text-[11px] text-slate-500">
+                    <span className="font-semibold">Sample Demo Keys:</span>
+                    {['MAZE-A-749201', 'EMERALD-A-849201', 'STAR-A-910248'].map((sampleKey) => (
+                      <button
+                        key={sampleKey}
+                        type="button"
+                        onClick={() => {
+                          setStudentKeyInput(sampleKey);
+                          handleVerifyStudentKey(sampleKey);
+                        }}
+                        className="px-2 py-0.5 bg-slate-100 hover:bg-blue-100 hover:text-blue-900 rounded font-mono text-[10px] font-bold text-slate-700 transition-colors cursor-pointer"
+                      >
+                        {sampleKey}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {studentKeyError && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-900 font-bold flex items-center gap-2 animate-fade-in">
+                    <ShieldAlert size={16} className="text-rose-600 shrink-0" />
+                    <span>{studentKeyError}</span>
+                  </div>
+                )}
+
+                {/* Verified Room Card */}
+                {verifiedKeyDetails && (
+                  <div className="p-4 bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl space-y-2 text-xs text-emerald-950 animate-fade-in shadow-xs">
+                    <div className="flex items-center justify-between font-black text-emerald-900">
+                      <span className="flex items-center gap-1.5">
+                        <CheckCircle2 size={16} className="text-emerald-600" />
+                        <span>Room Key Validated: {verifiedKeyDetails.roomKey}</span>
+                      </span>
+                      <span className="px-2 py-0.5 bg-emerald-200/80 text-emerald-900 font-extrabold rounded-full text-[10px]">
+                        Available
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 pt-1 font-bold text-[11px] bg-white/70 p-2.5 rounded-xl border border-emerald-200/60">
+                      <div>
+                        <span className="text-slate-400 block text-[10px] font-semibold">Hostel</span>
+                        <span className="text-slate-900 truncate block">{verifiedKeyDetails.hostelName}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px] font-semibold">Block</span>
+                        <span className="text-slate-900 truncate block">{verifiedKeyDetails.blockName}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px] font-semibold">Room No.</span>
+                        <span className="text-slate-900 truncate block">{verifiedKeyDetails.roomNumber}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!verifiedKeyDetails) {
+                        handleVerifyStudentKey();
+                      } else {
+                        setStudentKeyStep(2);
+                      }
+                    }}
+                    disabled={verifyingStudentKey || !studentKeyInput.trim()}
+                    className="w-full py-3.5 bg-gradient-to-r from-blue-900 to-indigo-900 hover:from-blue-800 hover:to-indigo-800 text-white font-extrabold text-xs sm:text-sm rounded-2xl shadow-lg shadow-blue-900/25 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    <span>Continue to Personal & Academic Profile</span>
+                    <ArrowRight size={16} />
+                  </button>
+                </div>
+
+              </div>
+            )}
+
+            {/* STEP 2: Personal & Academic / Institutional Profile */}
+            {studentKeyStep === 2 && verifiedKeyDetails && (
+              <div className="space-y-4">
+                
+                {/* Verified Room Badge */}
+                <div className="p-3 bg-blue-50/80 border border-blue-200 rounded-2xl flex items-center justify-between text-xs text-blue-950 font-bold">
+                  <div className="flex items-center gap-2">
+                    <Building size={16} className="text-blue-700" />
+                    <span>Assigning to: <strong>{verifiedKeyDetails.hostelName}</strong> ({verifiedKeyDetails.blockName} - {verifiedKeyDetails.roomNumber})</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setStudentKeyStep(1)}
+                    className="text-blue-700 underline text-[11px] cursor-pointer"
+                  >
+                    Change
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  
+                  {/* Name */}
+                  <div className="space-y-1">
+                    <label className="text-xs font-black text-slate-800 block">
+                      Full Legal Name <span className="text-rose-600">*</span>
+                    </label>
+                    <div className="relative">
+                      <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="text"
+                        required
+                        value={stuName}
+                        onChange={(e) => setStuName(e.target.value)}
+                        placeholder="e.g. Alex Kwame Mensah"
+                        className="w-full pl-10 pr-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
+                      />
+                    </div>
+                  </div>
+
+                  {/* ID & Phone */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs font-black text-slate-800 block">
+                        {stuResidentType === 'student' ? 'Student ID / Index No.' : 'Resident ID / National ID'} <span className="text-rose-600">*</span>
+                      </label>
+                      <div className="relative">
+                        <ShieldCheck className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        <input
+                          type="text"
+                          required
+                          value={stuId}
+                          onChange={(e) => setStuId(e.target.value.toUpperCase())}
+                          placeholder="e.g. STU-2026-8842"
+                          className="w-full pl-10 pr-3.5 py-2.5 bg-white border border-slate-200 rounded-xl font-mono text-xs font-bold uppercase text-slate-900 focus:outline-none focus:border-blue-600"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-black text-slate-800 block">
+                        Phone Number <span className="text-rose-600">*</span>
+                      </label>
+                      <div className="relative">
+                        <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        <input
+                          type="tel"
+                          required
+                          value={stuPhone}
+                          onChange={(e) => setStuPhone(e.target.value)}
+                          placeholder="e.g. +233 24 123 4567"
+                          className="w-full pl-10 pr-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Email */}
+                  <div className="space-y-1">
+                    <label className="text-xs font-black text-slate-800 block">
+                      Email Address <span className="text-rose-600">*</span>
+                    </label>
+                    <div className="relative">
+                      <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="email"
+                        required
+                        value={stuEmail}
+                        onChange={(e) => setStuEmail(e.target.value)}
+                        placeholder="e.g. alex.mensah@student.edu"
+                        className="w-full pl-10 pr-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Academic / Residency Details */}
+                  <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                    <div className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                      <BookOpen size={14} className="text-blue-600" />
+                      <span>{stuResidentType === 'student' ? 'Academic Program Details' : 'Professional & Institutional Details'}</span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-700 block">
+                        {stuResidentType === 'student' ? 'Program of Study / Major' : 'Occupation / Field of Practice'}
+                      </label>
+                      <input
+                        type="text"
+                        value={stuProgram}
+                        onChange={(e) => setStuProgram(e.target.value)}
+                        placeholder={stuResidentType === 'student' ? "e.g. BSc Computer Science & Engineering" : "e.g. Software Engineer / Financial Analyst"}
+                        className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-slate-700 block">
+                          Department / Faculty
+                        </label>
+                        <input
+                          type="text"
+                          value={stuDepartment}
+                          onChange={(e) => setStuDepartment(e.target.value)}
+                          placeholder="e.g. Department of Computer Science"
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-slate-700 block">
+                          Institution / University
+                        </label>
+                        <input
+                          type="text"
+                          value={stuInstitution}
+                          onChange={(e) => setStuInstitution(e.target.value)}
+                          placeholder="e.g. University of Ghana, Legon"
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
+                <div className="pt-2 flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setStudentKeyStep(1)}
+                    className="px-4 py-2.5 border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50 cursor-pointer"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!stuName.trim() || !stuId.trim() || !stuEmail.trim()) {
+                        triggerToast('Please provide your name, Student ID, and email.', 'error');
+                        return;
+                      }
+                      setStudentKeyStep(3);
+                    }}
+                    className="flex-1 py-3 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white font-black text-xs rounded-xl shadow-md shadow-blue-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <span>Continue to Password & Security</span>
+                    <ArrowRight size={15} />
+                  </button>
+                </div>
+
+              </div>
+            )}
+
+            {/* STEP 3: Password & Security Verification */}
+            {studentKeyStep === 3 && verifiedKeyDetails && (
+              <form onSubmit={handleClaimStudentKeySubmit} className="space-y-4">
+                
+                {/* Onboarding Summary Badge */}
+                <div className="p-4 bg-gradient-to-br from-blue-50/90 to-indigo-50/90 border border-blue-200/80 rounded-2xl space-y-2 text-xs text-blue-950">
+                  <div className="flex items-center justify-between font-black text-blue-900">
+                    <span className="flex items-center gap-1.5">
+                      <Sparkles size={16} className="text-blue-600" />
+                      <span>Room Assignment Summary</span>
+                    </span>
+                    <span className="font-mono text-[11px] bg-blue-200/60 px-2 py-0.5 rounded-lg text-blue-950">
+                      {verifiedKeyDetails.roomKey}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 bg-white/80 p-3 rounded-xl border border-blue-200/60 font-medium text-[11px]">
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">Resident Name:</span>
+                      <strong className="text-slate-900">{stuName || 'Resident'}</strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">ID & Category:</span>
+                      <strong className="text-slate-900 font-mono">{stuId || 'ID'}</strong> ({stuResidentType})
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">Hostel & Room:</span>
+                      <strong className="text-slate-900">{verifiedKeyDetails.hostelName}</strong> - {verifiedKeyDetails.blockName} (Room {verifiedKeyDetails.roomNumber})
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">Institution:</span>
+                      <strong className="text-slate-900 truncate block">{stuInstitution || 'University / College'}</strong>
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 bg-blue-100/50 rounded-xl flex items-center gap-2 text-[11px] text-blue-900 font-semibold">
+                    <Bell size={14} className="text-blue-700 shrink-0" />
+                    <span>A minimalistic notification will be dispatched to your Hostel Manager upon check-in.</span>
+                  </div>
+                </div>
+
+                {/* Password Setup */}
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-black text-slate-800 block">
+                      Create Account Password <span className="text-rose-600">*</span>
+                    </label>
+                    <div className="relative">
+                      <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type={showStuPassword ? "text" : "password"}
+                        required
+                        value={stuPassword}
+                        onChange={(e) => setStuPassword(e.target.value)}
+                        placeholder="Choose a strong password (min 6 chars)"
+                        className="w-full pl-10 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowStuPassword(!showStuPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        {showStuPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-black text-slate-800 block">
+                      Confirm Account Password <span className="text-rose-600">*</span>
+                    </label>
+                    <div className="relative">
+                      <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type={showStuConfirmPassword ? "text" : "password"}
+                        required
+                        value={stuConfirmPassword}
+                        onChange={(e) => setStuConfirmPassword(e.target.value)}
+                        placeholder="Repeat your password"
+                        className="w-full pl-10 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowStuConfirmPassword(!showStuConfirmPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        {showStuConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {stuPassword && (
+                    <div className="space-y-1">
+                      {(() => {
+                        const strength = getPasswordStrength(stuPassword);
+                        return (
+                          <div>
+                            <div className="flex justify-between items-center text-[10px] font-bold mb-1">
+                              <span className="text-slate-500">Security Strength</span>
+                              <span className={strength.textClass}>{strength.label}</span>
+                            </div>
+                            <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                              <div className={`h-full ${strength.color} transition-all duration-300`} />
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+
+                  <label className="flex items-start gap-2 pt-1 text-xs text-slate-600 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={agreeTerms}
+                      onChange={(e) => setAgreeTerms(e.target.checked)}
+                      className="mt-0.5 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
+                    />
+                    <span>
+                      I agree to the <strong>Hostel Community Code of Conduct</strong> and PineVela Resident Terms.
+                    </span>
+                  </label>
+                </div>
+
+                <div className="pt-2 flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setStudentKeyStep(2)}
+                    className="px-4 py-2.5 border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50 cursor-pointer"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingStudentClaim || !stuName.trim() || !stuId.trim() || !agreeTerms}
+                    className="flex-1 py-3 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white font-black text-xs rounded-xl shadow-md shadow-blue-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {submittingStudentClaim ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Activating Room Access & Notifying Manager...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle size={16} />
+                        <span>Complete Onboarding & Enter Room</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+              </form>
+            )}
+
+            {/* STEP 4: Minimalistic Confirmation & Room Activated */}
+            {studentKeyStep === 4 && claimedUserData && (
+              <div className="space-y-5 text-center py-4 animate-fade-in">
+                <div className="w-16 h-16 bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-3xl mx-auto flex items-center justify-center shadow-lg shadow-emerald-500/30 animate-bounce">
+                  <CheckCircle2 size={32} />
+                </div>
+
+                <div className="space-y-1.5">
+                  <h4 className="text-xl font-black text-slate-900 tracking-tight">
+                    Room Successfully Activated!
+                  </h4>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                    Welcome to <strong>{verifiedKeyDetails?.hostelName || 'your hostel'}</strong>. Your digital room key has been claimed and your profile is active.
+                  </p>
+                </div>
+
+                {/* Minimalistic Notification confirmation card */}
+                <div className="p-4 bg-blue-50/90 border border-blue-200/90 rounded-2xl text-left space-y-2 text-xs text-blue-950 max-w-md mx-auto">
+                  <div className="flex items-center gap-2 font-black text-blue-900">
+                    <Bell size={15} className="text-blue-600" />
+                    <span>Manager Alert Delivered</span>
+                  </div>
+                  <p className="text-[11px] text-blue-800 leading-relaxed">
+                    A check-in notice containing your name (<strong>{stuName}</strong>), ID (<strong>{stuId}</strong>), program (<strong>{stuProgram || 'General Studies'}</strong>), and room assignment (<strong>{verifiedKeyDetails?.blockName} - Room {verifiedKeyDetails?.roomNumber}</strong>) has been pushed to your manager's dashboard.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowStudentKeyModal(false);
+                    navigate('/student/dashboard', { replace: true });
+                  }}
+                  className="w-full max-w-md mx-auto py-3.5 bg-gradient-to-r from-blue-900 to-indigo-900 hover:from-blue-850 hover:to-indigo-850 text-white font-black text-sm rounded-2xl shadow-xl shadow-blue-900/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <LogIn size={18} />
+                  <span>Enter Student & Resident Console Now</span>
+                </button>
+              </div>
+            )}
+
           </div>
         </div>
       )}

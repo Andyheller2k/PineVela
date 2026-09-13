@@ -8,6 +8,12 @@ import FAQAccordion from './FAQAccordion';
 import TestimonialsCarousel from './TestimonialsCarousel';
 import { useAuth } from '../context/AuthContext';
 import LogoutConfirmationModal from './LogoutConfirmationModal';
+import {
+  validateEmail,
+  cleanPhoneNumber,
+  validatePhone,
+  resolveIdConfig
+} from '../utils/formValidation';
 
 import welcomeBg from '../../assets/welcome_bg.jpg';
 import hostelsBg from '../../assets/hostels_bg.jpg';
@@ -49,6 +55,7 @@ export default function Page1Public({
   const [appName, setAppName] = useState('');
   const [appPhone, setAppPhone] = useState('');
   const [appEmail, setAppEmail] = useState('');
+  const [appIdType, setAppIdType] = useState('Ghana Card');
   const [appNationalId, setAppNationalId] = useState('');
   const [appCvFileName, setAppCvFileName] = useState('');
   const [appCvData, setAppCvData] = useState('');
@@ -160,6 +167,45 @@ export default function Page1Public({
   const handleSendJobOffer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedStaffForOffer) return;
+
+    if (!jobRequesterName.trim() || jobRequesterName.trim().length < 2) {
+      setOfferToast({ text: 'Please enter your full name.', type: 'error' });
+      return;
+    }
+    if (!jobWorkOffered.trim()) {
+      setOfferToast({ text: 'Please describe the work being offered.', type: 'error' });
+      return;
+    }
+    if (!jobSchedule.trim()) {
+      setOfferToast({ text: 'Please specify the time and schedule.', type: 'error' });
+      return;
+    }
+    if (!jobLocation.trim()) {
+      setOfferToast({ text: 'Please specify the job location.', type: 'error' });
+      return;
+    }
+    if (!jobWage.trim()) {
+      setOfferToast({ text: 'Please specify the wage or salary offered.', type: 'error' });
+      return;
+    }
+    if (!jobContact.trim()) {
+      setOfferToast({ text: 'Please provide your contact (Phone number or Email).', type: 'error' });
+      return;
+    }
+    if (jobContact.includes('@')) {
+      const emailCheck = validateEmail(jobContact, 'Contact email');
+      if (!emailCheck.isValid) {
+        setOfferToast({ text: emailCheck.error!, type: 'error' });
+        return;
+      }
+    } else {
+      const phoneCheck = validatePhone(jobContact, 'Contact phone');
+      if (!phoneCheck.isValid) {
+        setOfferToast({ text: phoneCheck.error!, type: 'error' });
+        return;
+      }
+    }
+
     setSubmittingOffer(true);
     try {
       const res = await fetch('/api/job-offers', {
@@ -276,8 +322,33 @@ export default function Page1Public({
   const handleStaffAppSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedHostel) return;
-    if (!appName || !appPhone || !appCvData) {
-      setStaffAppToast({ text: "Please enter your name, phone number, and attach your CV.", type: 'error' });
+
+    if (!appName.trim() || appName.trim().length < 3) {
+      setStaffAppToast({ text: "Please enter your full legal name (minimum 3 characters).", type: 'error' });
+      return;
+    }
+    const phoneCheck = validatePhone(appPhone, 'Phone number');
+    if (!phoneCheck.isValid) {
+      setStaffAppToast({ text: phoneCheck.error!, type: 'error' });
+      return;
+    }
+    if (appEmail.trim()) {
+      const emailCheck = validateEmail(appEmail, 'Email address');
+      if (!emailCheck.isValid) {
+        setStaffAppToast({ text: emailCheck.error!, type: 'error' });
+        return;
+      }
+    }
+    if (appNationalId.trim()) {
+      const idCfg = resolveIdConfig(appIdType);
+      const idCheck = idCfg.validate(appNationalId);
+      if (!idCheck.isValid) {
+        setStaffAppToast({ text: idCheck.error!, type: 'error' });
+        return;
+      }
+    }
+    if (!appCvData) {
+      setStaffAppToast({ text: "Please attach your Curriculum Vitae (CV) document.", type: 'error' });
       return;
     }
 
@@ -1764,20 +1835,21 @@ export default function Page1Public({
                         <div>
                           <label className="block text-xs font-bold text-slate-700 mb-1">Phone Number *</label>
                           <input
-                            type="text"
+                            type="tel"
                             value={appPhone}
-                            onChange={(e) => setAppPhone(e.target.value)}
-                            placeholder="+233 24 123 4567"
+                            onChange={(e) => setAppPhone(cleanPhoneNumber(e.target.value))}
+                            placeholder="024 123 4567 or +233 24 123 4567"
                             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-blue-600 focus:bg-white"
                             required
                           />
+                          <p className="text-[10px] text-slate-400 font-medium mt-0.5">Numbers only (10 digits starting with 0, or international +233)</p>
                         </div>
                       </div>
 
-                      {/* Email & National ID */}
+                      {/* Email & Identity Document Type */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1">Email Address</label>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">Email Address (Optional)</label>
                           <input
                             type="email"
                             value={appEmail}
@@ -1787,16 +1859,56 @@ export default function Page1Public({
                           />
                         </div>
                         <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1">National ID / Ghana Card</label>
-                          <input
-                            type="text"
-                            value={appNationalId}
-                            onChange={(e) => setAppNationalId(e.target.value)}
-                            placeholder="GHA-000000000-0"
-                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-blue-600 focus:bg-white"
-                          />
+                          <label className="block text-xs font-bold text-slate-700 mb-1">ID Document Type</label>
+                          <select
+                            value={appIdType}
+                            onChange={(e) => {
+                              const newType = e.target.value;
+                              setAppIdType(newType);
+                              const cfg = resolveIdConfig(newType);
+                              setAppNationalId(prev => cfg.formatInput(prev));
+                            }}
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600 focus:bg-white"
+                          >
+                            <option value="Ghana Card">Ghana Card (GHA-XXXXXXXXX-X)</option>
+                            <option value="Voter ID">National Voters ID (10 Digits — Numbers Only)</option>
+                            <option value="NHIS Card">NHIS Health Card (8 Digits — Numbers Only)</option>
+                            <option value="Passport">International Passport (Alphanumeric)</option>
+                            <option value="Driver's License">Driver's License (DVLA Alphanumeric)</option>
+                          </select>
                         </div>
                       </div>
+
+                      {/* Dynamic ID Number */}
+                      {(() => {
+                        const cfg = resolveIdConfig(appIdType);
+                        return (
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="block text-xs font-bold text-slate-700">
+                                {cfg.name} Number
+                              </label>
+                              {cfg.numericOnly && (
+                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-black tracking-wide uppercase">
+                                  Numbers Only
+                                </span>
+                              )}
+                            </div>
+                            <input
+                              type={cfg.numericOnly ? "tel" : "text"}
+                              inputMode={cfg.numericOnly ? "numeric" : "text"}
+                              maxLength={cfg.maxLength}
+                              placeholder={cfg.placeholder}
+                              value={appNationalId}
+                              onChange={(e) => setAppNationalId(cfg.formatInput(e.target.value))}
+                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-blue-600 focus:bg-white font-mono"
+                            />
+                            <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+                              {cfg.helperText}
+                            </p>
+                          </div>
+                        );
+                      })()}
 
                       {/* CV File Upload */}
                       <div className="p-4 border-2 border-dashed border-blue-200 bg-blue-50/50 rounded-2xl text-center space-y-2">
@@ -2105,11 +2217,12 @@ export default function Page1Public({
                 <input 
                   type="text" 
                   required
-                  placeholder="e.g. +233 24 000 0000 / client@gmail.com"
+                  placeholder="e.g. 024 000 0000 or client@gmail.com"
                   value={jobContact}
                   onChange={e => setJobContact(e.target.value)}
                   className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-900 focus:outline-none"
                 />
+                <p className="text-[10px] text-slate-400 font-medium mt-1">Provide a valid email address or Ghana phone number</p>
               </div>
 
               {offerToast && (

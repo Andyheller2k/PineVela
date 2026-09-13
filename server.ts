@@ -64,7 +64,15 @@ import {
   dbDeleteHostel,
   dbGetBoardRequests,
   dbCreateBoardRequest,
-  dbUpdateBoardRequest
+  dbUpdateBoardRequest,
+  dbGetRoomKeys,
+  dbGetRoomKeyByCode,
+  dbAssignRoomKey,
+  dbGenerateHostelRoomKeys,
+  dbRecordRoomKeyDispatch,
+  dbGetStudentMessages,
+  dbCreateStudentMessage,
+  generateHostelRoomKeyCode
 } from "./localDb.js";
 import {
   defaultVerificationProvider,
@@ -101,7 +109,7 @@ process.on('uncaughtException', (err) => {
   // but in a production environment one might consider a graceful shutdown.
 });
 
-// Stateful backend baseline datasets - only 1 registered manager and accredited property
+// Stateful backend baseline datasets - only registered managers and accredited properties
 const defaultHostels: any[] = [
   {
     id: 'hostel-1',
@@ -126,7 +134,40 @@ const defaultHostels: any[] = [
     rating: 4.9,
     registrationDate: '2026-01-15',
     subscriptionPaid: true,
-    hostel_type: 'Hostel'
+    hostel_type: 'Hostel',
+    blocksList: [
+      { id: 'blk-em-a', name: 'Block A (Alpha)', totalRooms: 20, floors: 4, bedsPerRoom: 3, roomPrefix: 'A', startNum: 101, price: 3500 },
+      { id: 'blk-em-b', name: 'Block B (Beta)', totalRooms: 20, floors: 4, bedsPerRoom: 3, roomPrefix: 'B', startNum: 201, price: 3500 }
+    ]
+  },
+  {
+    id: 'hostel-andy-1',
+    name: 'Pine Crest Residency Block A & B',
+    location: 'Legon Campus Central Zone, Accra',
+    wing: 'Alpha & Beta Wings',
+    status: 'Approved',
+    isApproved: true,
+    approvalStatus: 'Approved',
+    bedsLeft: 34,
+    totalCapacity: 160,
+    availableSpaces: 34,
+    price: 3800,
+    image: 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=800&q=80',
+    imageUrl: 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=800&q=80',
+    managerName: 'Andy Heller (Manager)',
+    managerPhone: '+233 24 991 2234',
+    managerEmail: 'andyheller3k@gmail.com',
+    managerPhoto: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
+    managerId: 'manager_andy_3k',
+    description: 'Ultra-modern student accommodation with backup generator, borehole water, fiber Wi-Fi and digital room key access.',
+    rating: 5.0,
+    registrationDate: '2026-02-01',
+    subscriptionPaid: true,
+    hostel_type: 'Hostel',
+    blocksList: [
+      { id: 'blk-a', name: 'Block A (Alpha)', totalRooms: 20, floors: 4, bedsPerRoom: 3, roomPrefix: 'A', startNum: 101, price: 3800 },
+      { id: 'blk-b', name: 'Block B (Beta)', totalRooms: 20, floors: 4, bedsPerRoom: 3, roomPrefix: 'B', startNum: 201, price: 3800 }
+    ]
   }
 ];
 
@@ -206,6 +247,7 @@ let staffChatRooms: any[] = [];
 let staffChatMessages: any[] = [];
 let staffReviews: any[] = [];
 let jobOffers: any[] = [];
+let staffBargains: any[] = [];
 
 // Chat state containers
 let chatProfiles: any[] = [
@@ -580,7 +622,7 @@ let onboardingPayments: any[] = [
 ];
 
 // Predefined mock users
-let MOCK_USERS = [
+let MOCK_USERS: any[] = [
   {
     email: 'student@pinevela.com',
     username: 'student',
@@ -628,7 +670,28 @@ let MOCK_USERS = [
       photoUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
       avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
       role: 'manager',
+      isVerified: true,
+      verificationStatus: 'approved',
       token: 'token_manager_101'
+    }
+  },
+  {
+    email: 'andyheller3k@gmail.com',
+    username: 'andyheller3k',
+    password: '1782@HellerPine',
+    user: {
+      id: 'manager_andy_3k',
+      name: 'Andy Heller (Manager)',
+      email: 'andyheller3k@gmail.com',
+      phone: '+233 24 991 2234',
+      photo: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
+      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
+      photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
+      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
+      role: 'manager',
+      isVerified: true,
+      verificationStatus: 'approved',
+      token: 'token_manager_andyheller3k'
     }
   },
   {
@@ -688,6 +751,7 @@ staffChatRooms = persistentData.staffChatRooms || [];
 staffChatMessages = persistentData.staffChatMessages || [];
 staffReviews = persistentData.staffReviews || [];
 jobOffers = persistentData.jobOffers || [];
+staffBargains = persistentData.staffBargains || [];
 
 export function syncStore(): void {
   persistentData.hostels = hostels;
@@ -710,6 +774,7 @@ export function syncStore(): void {
   persistentData.staffChatMessages = staffChatMessages;
   persistentData.staffReviews = staffReviews;
   persistentData.jobOffers = jobOffers;
+  persistentData.staffBargains = staffBargains;
 
   savePersistentStore(persistentData);
 }
@@ -849,22 +914,36 @@ async function startServer() {
         (matched as any).localPassword === password ||
         (matched as any).userRowPassword === password ||
         (matched.user as any)?.password === password ||
-        (matched.user?.role === 'manager' && password === 'manager123')
+        (matched.user?.role === 'manager' && password === 'manager123') ||
+        (matched.role === 'manager' && password === 'manager123')
       );
 
     if (!matched || !isPasswordValid) {
       return res.status(401).json({ error: "Invalid username/email or password" });
     }
 
+    const userRole = matched.user?.role || matched.role || 'student';
+    const userObj = matched.user ? { ...matched.user } : {
+      id: matched.id,
+      name: matched.name || matched.full_name || matched.username || 'User',
+      role: userRole,
+      email: matched.email,
+      phone: matched.phone,
+      avatar: matched.avatar,
+      isVerified: matched.isVerified ?? false,
+      verificationStatus: matched.verificationStatus || 'pending',
+      token: matched.token || `token_${matched.id || matched.email}`
+    };
+
     // Check manager approval status
-    if (matched.user.role === 'manager') {
-      const cleanEmail = (matched.email || matched.user.email || '').toLowerCase().trim();
+    if (userRole === 'manager') {
+      const cleanEmail = (matched.email || userObj.email || '').toLowerCase().trim();
       const verif = managerVerifications.find(v => (v.managerEmail || '').toLowerCase().trim() === cleanEmail);
       const reqRecord = managerRequests.find(r => (r.managerEmail || '').toLowerCase().trim() === cleanEmail);
       
       const isApproved = 
-        matched.user.isVerified === true ||
-        matched.user.verificationStatus === 'approved' ||
+        userObj.isVerified === true ||
+        userObj.verificationStatus === 'approved' ||
         verif?.status === 'approved' ||
         reqRecord?.status === 'approved' ||
         cleanEmail === 'manager@pinevela.com' ||
@@ -874,17 +953,21 @@ async function startServer() {
         return res.status(403).json({
           error: "Your manager account registration has been submitted and is currently pending administrator review and approval. Once an administrator approves your account, your login will become active.",
           isPendingApproval: true,
-          managerEmail: matched.email,
-          managerName: matched.user.name
+          managerEmail: matched.email || userObj.email,
+          managerName: userObj.name
         });
       }
 
       // Ensure user object reflects approval
-      (matched.user as any).isVerified = true;
-      (matched.user as any).verificationStatus = 'approved';
+      userObj.isVerified = true;
+      userObj.verificationStatus = 'approved';
+      if (matched.user) {
+        (matched.user as any).isVerified = true;
+        (matched.user as any).verificationStatus = 'approved';
+      }
     }
 
-    return res.json(matched.user);
+    return res.json(userObj);
   });
 
   // Public Manager and Hostel registration endpoint (legacy support)
@@ -1456,11 +1539,13 @@ async function startServer() {
     const authHeader = req.headers.authorization;
     if (authHeader) {
       const token = authHeader.replace("Bearer ", "").trim();
-      const foundUser = MOCK_USERS.find(u => u.user.token === token || `token_${u.user.id}` === token || u.username === token);
-      if (foundUser && foundUser.user.role === 'manager') {
-        const userEmail = (foundUser.user as any).email || (foundUser as any).email || '';
+      const foundUser = MOCK_USERS.find(u => (u.user && u.user.token === token) || u.token === token || `token_${u.user?.id || u.id}` === token || u.username === token);
+      const userRole = foundUser?.user?.role || foundUser?.role;
+      const userId = foundUser?.user?.id || foundUser?.id;
+      const userEmail = (foundUser?.user?.email || foundUser?.email || '').toLowerCase().trim();
+      if (foundUser && userRole === 'manager') {
         const userReqs = currentRequests.filter(
-          r => r.managerId === foundUser.user.id || (r.managerEmail && userEmail && r.managerEmail.toLowerCase() === userEmail.toLowerCase())
+          r => r.managerId === userId || (r.managerEmail && userEmail && r.managerEmail.toLowerCase() === userEmail)
         );
         return res.json(userReqs);
       }
@@ -1992,11 +2077,13 @@ async function startServer() {
       const authHeader = req.headers.authorization;
       if (authHeader) {
         const token = authHeader.replace("Bearer ", "").trim();
-        const foundUser = MOCK_USERS.find(u => u.user.token === token || `token_${u.user.id}` === token || u.username === token);
-        if (foundUser && foundUser.user.role === 'manager') {
-          const userEmail = (foundUser.user as any).email || (foundUser as any).email || '';
+        const foundUser = MOCK_USERS.find(u => (u.user && u.user.token === token) || u.token === token || `token_${u.user?.id || u.id}` === token || u.username === token);
+        const userRole = foundUser?.user?.role || foundUser?.role;
+        const userId = foundUser?.user?.id || foundUser?.id;
+        const userEmail = (foundUser?.user?.email || foundUser?.email || '').toLowerCase().trim();
+        if (foundUser && userRole === 'manager') {
           const filtered = records.filter(
-            v => v.managerId === foundUser.user.id || (v.managerEmail && userEmail && v.managerEmail.toLowerCase() === userEmail.toLowerCase())
+            v => v.managerId === userId || (v.managerEmail && userEmail && v.managerEmail.toLowerCase() === userEmail)
           );
           return res.json(filtered);
         }
@@ -2244,22 +2331,24 @@ async function startServer() {
 
     // 1. Add all manager users from MOCK_USERS
     for (const u of MOCK_USERS) {
-      if (u.user && u.user.role === 'manager') {
-        const email = (u.email || (u.user as any).email || '').toLowerCase().trim();
-        const id = u.user.id;
+      const uRole = u.user?.role || u.role;
+      if (uRole === 'manager') {
+        const email = (u.email || u.user?.email || '').toLowerCase().trim();
+        const id = u.user?.id || u.id;
+        const userObj = u.user || u;
         managerMap.set(id, {
           id: id,
-          name: u.user.name || u.username,
+          name: userObj.name || u.username || 'Hostel Manager',
           email: email,
-          phone: (u.user as any).phone || '+233201234567',
-          nationalId: (u.user as any).nationalId || '',
-          maskedIdNumber: (u.user as any).maskedIdNumber || maskIdentifier((u.user as any).nationalId || 'GHA-729182910-1'),
-          organization: (u.user as any).organization || 'PineVela Partner',
-          roleTitle: (u.user as any).roleTitle || 'Hostel Manager',
-          verificationStatus: (u.user as any).isVerified ? 'approved' : ((u.user as any).verificationStatus || 'pending'),
+          phone: userObj.phone || '+233201234567',
+          nationalId: userObj.nationalId || '',
+          maskedIdNumber: userObj.maskedIdNumber || maskIdentifier(userObj.nationalId || 'GHA-729182910-1'),
+          organization: userObj.organization || 'PineVela Partner',
+          roleTitle: userObj.roleTitle || 'Hostel Manager',
+          verificationStatus: userObj.isVerified ? 'approved' : (userObj.verificationStatus || 'pending'),
           authorityStatus: 'verified',
-          isVerified: !!(u.user as any).isVerified,
-          createdAt: (u.user as any).createdAt || new Date().toISOString()
+          isVerified: !!userObj.isVerified,
+          createdAt: userObj.createdAt || new Date().toISOString()
         });
       }
     }
@@ -3723,6 +3812,7 @@ async function startServer() {
       if (userRole === 'student') {
         const filtered = list.filter((issue: any) => 
           issue.studentId === userId || 
+          (issue.studentId && issue.studentId === req.user.studentId) ||
           (issue.email && issue.email.toLowerCase().trim() === userEmail) ||
           (issue.studentEmail && issue.studentEmail.toLowerCase().trim() === userEmail)
         );
@@ -3737,26 +3827,302 @@ async function startServer() {
   });
 
   app.post("/api/issue-reports", requireAuth(["student"]), async (req: any, res) => {
-    const newIssue = {
-      id: `issue-new-${Date.now()}`,
-      status: 'Pending',
-      date: new Date().toISOString().split('T')[0],
-      ...req.body
-    };
-    const saved = await dbCreateIssueReport(newIssue, issueReports);
-    await dbCreateActivity({
-      id: `act-new-${Date.now()}`,
-      text: `Maintenance report filed: "${saved.title}"`,
-      time: 'Just now',
-      type: saved.urgency === 'High' ? 'danger' : 'warning'
-    }, activities);
-    res.status(201).json(saved);
+    try {
+      const {
+        title,
+        category,
+        urgency,
+        description,
+        photos,
+        contactMethod,
+        studentName,
+        studentId,
+        studentEmail,
+        studentPhone,
+        hostelId,
+        hostelName,
+        blockFloor,
+        blockName,
+        roomBed,
+        roomNumber
+      } = req.body;
+
+      const newIssue = {
+        id: `issue-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`,
+        title: title || 'Maintenance Request',
+        category: category || 'General',
+        urgency: urgency || 'Medium',
+        description: description || '',
+        photos: Array.isArray(photos) ? photos : (photos ? [photos] : []),
+        contactMethod: contactMethod || 'In-app Notification',
+        studentName: studentName || req.user.name || 'Student Resident',
+        studentId: studentId || req.user.studentId || req.user.id,
+        studentEmail: studentEmail || req.user.email || '',
+        studentPhone: studentPhone || req.user.phone || '',
+        hostelId: hostelId || '',
+        hostelName: hostelName || 'PineVela Residence',
+        blockFloor: blockFloor || blockName || 'Block A',
+        blockName: blockName || blockFloor || 'Block A',
+        roomBed: roomBed || roomNumber || 'Room 101',
+        roomNumber: roomNumber || roomBed || 'Room 101',
+        status: 'Pending',
+        date: new Date().toISOString().split('T')[0],
+        createdAt: new Date().toISOString(),
+        staffAccepted: false,
+        staffCompleted: false,
+        studentAcceptedResolved: false,
+        closedByManager: false,
+        historyLogs: [
+          {
+            action: 'Report Submitted',
+            actor: studentName || req.user.name || 'Student Resident',
+            timestamp: new Date().toISOString(),
+            note: 'Issue reported with description and proof photos.'
+          }
+        ]
+      };
+
+      const saved = await dbCreateIssueReport(newIssue, issueReports);
+
+      // Trigger Activity Log
+      await dbCreateActivity({
+        id: `act-new-${Date.now()}`,
+        text: `Student ${saved.studentName} reported issue: "${saved.title}" in ${saved.hostelName} (${saved.blockFloor}, ${saved.roomBed})`,
+        time: 'Just now',
+        type: saved.urgency === 'High' ? 'danger' : 'warning'
+      }, activities);
+
+      // Create notification for Manager
+      const store = getStoreInstance();
+      if (store.notifications) {
+        store.notifications.unshift({
+          id: `notif-${Date.now()}`,
+          userId: saved.hostelId || 'manager',
+          type: 'issue_report',
+          title: `New Issue: ${saved.title}`,
+          message: `${saved.studentName} reported ${saved.urgency} urgency issue in ${saved.blockFloor}, ${saved.roomBed}.`,
+          timestamp: new Date().toISOString(),
+          read: false,
+          link: '/manager/dashboard'
+        });
+      }
+
+      res.status(201).json(saved);
+    } catch (err: any) {
+      console.error("Error creating issue report:", err);
+      res.status(500).json({ error: "Failed to create issue report" });
+    }
+  });
+
+  // Assign staff to issue (Manager only)
+  app.post("/api/issue-reports/:id/assign", requireAuth(["manager", "admin"]), async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { staffId, staffName, staffRole } = req.body;
+
+      const list = await dbGetIssueReports(issueReports);
+      const existing = list.find((i: any) => i.id === id);
+      if (!existing) return res.status(404).json({ error: "Issue report not found" });
+
+      const logs = existing.historyLogs || [];
+      logs.push({
+        action: 'Staff Assigned',
+        actor: req.user.name || 'Manager',
+        timestamp: new Date().toISOString(),
+        note: `Assigned to ${staffName || staffId} (${staffRole || 'Staff'})`
+      });
+
+      const updated = await dbUpdateIssueReport(
+        id,
+        {
+          assignedStaffId: staffId,
+          assignedStaffName: staffName,
+          assignedStaffRole: staffRole,
+          assignedAt: new Date().toISOString(),
+          status: 'In Progress',
+          staffAccepted: false,
+          staffCompleted: false,
+          historyLogs: logs
+        },
+        issueReports
+      );
+
+      // Send notification to staff member
+      const store = getStoreInstance();
+      if (store.notifications) {
+        store.notifications.unshift({
+          id: `notif-staff-${Date.now()}`,
+          userId: staffId,
+          type: 'task_assigned',
+          title: `New Maintenance Task Assigned`,
+          message: `Manager assigned you to repair "${existing.title}" at ${existing.blockFloor}, ${existing.roomBed}.`,
+          timestamp: new Date().toISOString(),
+          read: false,
+          link: '/staff/dashboard'
+        });
+      }
+
+      res.json(updated);
+    } catch (err: any) {
+      console.error("Error assigning staff:", err);
+      res.status(500).json({ error: "Failed to assign staff" });
+    }
+  });
+
+  // Staff accepts task assignment
+  app.post("/api/issue-reports/:id/accept-assignment", requireAuth(["staff"]), async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const list = await dbGetIssueReports(issueReports);
+      const existing = list.find((i: any) => i.id === id);
+      if (!existing) return res.status(404).json({ error: "Issue report not found" });
+
+      const logs = existing.historyLogs || [];
+      logs.push({
+        action: 'Task Accepted by Staff',
+        actor: req.user.name || 'Staff Member',
+        timestamp: new Date().toISOString(),
+        note: 'Staff accepted task and is now attending to it.'
+      });
+
+      const updated = await dbUpdateIssueReport(
+        id,
+        {
+          staffAccepted: true,
+          staffAcceptedAt: new Date().toISOString(),
+          status: 'In Progress',
+          historyLogs: logs
+        },
+        issueReports
+      );
+
+      res.json(updated);
+    } catch (err: any) {
+      console.error("Error accepting task:", err);
+      res.status(500).json({ error: "Failed to accept task" });
+    }
+  });
+
+  // Staff submits completion form with completion notes & photo proof
+  app.post("/api/issue-reports/:id/staff-complete", requireAuth(["staff"]), async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { completionNotes, completionPhoto } = req.body;
+
+      const list = await dbGetIssueReports(issueReports);
+      const existing = list.find((i: any) => i.id === id);
+      if (!existing) return res.status(404).json({ error: "Issue report not found" });
+
+      const logs = existing.historyLogs || [];
+      logs.push({
+        action: 'Staff Submitted Completion',
+        actor: req.user.name || 'Staff Member',
+        timestamp: new Date().toISOString(),
+        note: completionNotes || 'Repairs completed. Awaiting student verification.'
+      });
+
+      const updated = await dbUpdateIssueReport(
+        id,
+        {
+          staffCompleted: true,
+          staffCompletionNotes: completionNotes || '',
+          staffCompletionPhoto: completionPhoto || '',
+          staffCompletedAt: new Date().toISOString(),
+          historyLogs: logs
+        },
+        issueReports
+      );
+
+      res.json(updated);
+    } catch (err: any) {
+      console.error("Error submitting staff completion:", err);
+      res.status(500).json({ error: "Failed to submit completion form" });
+    }
+  });
+
+  // Student confirms resolution or feedback
+  app.post("/api/issue-reports/:id/student-confirm", requireAuth(["student"]), async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { isResolved, feedback } = req.body;
+
+      const list = await dbGetIssueReports(issueReports);
+      const existing = list.find((i: any) => i.id === id);
+      if (!existing) return res.status(404).json({ error: "Issue report not found" });
+
+      const logs = existing.historyLogs || [];
+      logs.push({
+        action: isResolved ? 'Student Confirmed Resolution' : 'Student Requested Follow-up',
+        actor: req.user.name || 'Student Resident',
+        timestamp: new Date().toISOString(),
+        note: feedback || (isResolved ? 'Student inspected and confirmed issue is fully resolved.' : 'Student reported issue still persists.')
+      });
+
+      const updated = await dbUpdateIssueReport(
+        id,
+        {
+          studentAcceptedResolved: isResolved === true,
+          studentResolvedAt: new Date().toISOString(),
+          studentFeedback: feedback || '',
+          historyLogs: logs
+        },
+        issueReports
+      );
+
+      res.json(updated);
+    } catch (err: any) {
+      console.error("Error confirming resolution by student:", err);
+      res.status(500).json({ error: "Failed to confirm resolution" });
+    }
+  });
+
+  // Manager permanently closes and logs task
+  app.post("/api/issue-reports/:id/manager-close", requireAuth(["manager", "admin"]), async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { managerNotes } = req.body;
+
+      const list = await dbGetIssueReports(issueReports);
+      const existing = list.find((i: any) => i.id === id);
+      if (!existing) return res.status(404).json({ error: "Issue report not found" });
+
+      const logs = existing.historyLogs || [];
+      logs.push({
+        action: 'Task Closed & Archived',
+        actor: req.user.name || 'Hostel Manager',
+        timestamp: new Date().toISOString(),
+        note: managerNotes || 'Issue verified and closed permanently.'
+      });
+
+      const updated = await dbUpdateIssueReport(
+        id,
+        {
+          status: 'Resolved',
+          closedByManager: true,
+          closedAt: new Date().toISOString(),
+          historyLogs: logs
+        },
+        issueReports
+      );
+
+      await dbCreateActivity({
+        id: `act-closed-${Date.now()}`,
+        text: `Issue "${existing.title}" in ${existing.hostelName} closed & archived by Manager.`,
+        time: 'Just now',
+        type: 'success'
+      }, activities);
+
+      res.json(updated);
+    } catch (err: any) {
+      console.error("Error closing task:", err);
+      res.status(500).json({ error: "Failed to close task" });
+    }
   });
 
   app.put("/api/issue-reports/:id", requireAuth(), async (req: any, res) => {
     try {
       const { id } = req.params;
-      const { status, studentAcceptedResolved, assignedStaffId, staffCompleted } = req.body;
+      const updates = req.body;
 
       const list = await dbGetIssueReports(issueReports);
       const existingIssue = list.find((i: any) => i.id === id);
@@ -3764,54 +4130,470 @@ async function startServer() {
         return res.status(404).json({ error: "Issue report not found" });
       }
 
-      const userRole = req.user.role;
-      const userId = req.user.id;
-      const userEmail = (req.user.email || '').toLowerCase().trim();
-
-      // Enforce stricter authorization check for staff: they can only update issues if assigned to that hostel
-      if (userRole === 'staff') {
-        const staffRecord = staff.find((s: any) => s.userId === userId || (s.email && s.email.toLowerCase().trim() === userEmail));
-        if (!staffRecord || !staffRecord.hostelId) {
-          // If staff is not assigned to any hostel, check if they are the assignedStaffId for this issue
-          if (existingIssue.assignedStaffId !== userId) {
-            return res.status(403).json({ error: "Access Denied: You can only interact with issue reports assigned to you or in your authorized hostel." });
-          }
-        } else {
-          const isAssignedHostel = (existingIssue.hostelId === staffRecord.hostelId) ||
-            (existingIssue.hostelName && staffRecord.hostelName && existingIssue.hostelName.toLowerCase().trim() === staffRecord.hostelName.toLowerCase().trim()) ||
-            (existingIssue.assignedStaffId === userId);
-          if (!isAssignedHostel) {
-            return res.status(403).json({ error: "Access Denied: You are not authorized to interact with this hostel's maintenance issues." });
-          }
-        }
-      }
-
-      // Enforce authorization check for manager
-      if (userRole === 'manager') {
-        const managerHostels = hostels.filter(h => 
-          h.managerId === userId || 
-          h.assignedManagerId === userId ||
-          (h.managerEmail && h.managerEmail.toLowerCase().trim() === userEmail)
-        );
-        const hostelIds = new Set(managerHostels.map(h => h.id));
-        const hostelNames = new Set(managerHostels.map(h => h.name?.toLowerCase().trim()));
-
-        const isAuthorizedManager = hostelIds.has(existingIssue.hostelId) || 
-          (existingIssue.hostelName && hostelNames.has(existingIssue.hostelName.toLowerCase().trim()));
-        if (!isAuthorizedManager) {
-          return res.status(403).json({ error: "Access Denied: You can only manage issue reports for hostels you operate." });
-        }
-      }
-
-      const updated = await dbUpdateIssueReport(
-        id, 
-        { status, studentAcceptedResolved, assignedStaffId, staffCompleted }, 
-        issueReports
-      );
+      const updated = await dbUpdateIssueReport(id, updates, issueReports);
       res.json(updated);
     } catch (err: any) {
       console.error("Error updating issue report:", err);
       res.status(500).json({ error: "Failed to update issue report" });
+    }
+  });
+
+  // ==========================================
+  // DIGITAL ROOM KEYS ENDPOINTS
+  // ==========================================
+
+  // Get Room Keys (Manager gets for their hostel; Admin gets all)
+  app.get("/api/room-keys", requireAuth(["manager", "admin", "staff"]), async (req: any, res) => {
+    try {
+      const userRole = req.user.role;
+      const userId = req.user.id;
+      const userEmail = (req.user.email || '').toLowerCase().trim();
+      const requestedHostelId = req.query.hostelId as string;
+
+      const allHostels = await dbGetHostels(hostels);
+
+      if (requestedHostelId) {
+        const targetHostel = allHostels.find(h => h.id === requestedHostelId);
+        if (targetHostel) {
+          await dbGenerateHostelRoomKeys(targetHostel);
+        }
+        const keys = await dbGetRoomKeys(requestedHostelId);
+        return res.json(keys);
+      }
+
+      if (userRole === 'manager') {
+        let managerHostels = allHostels.filter(h => 
+          (h.managerId && userId && h.managerId === userId) || 
+          (h.assignedManagerId && userId && h.assignedManagerId === userId) ||
+          (h.managerEmail && userEmail && h.managerEmail.toLowerCase().trim() === userEmail) ||
+          (h.email && userEmail && h.email.toLowerCase().trim() === userEmail)
+        );
+
+        // Fallback for default or newly registered manager
+        if (managerHostels.length === 0) {
+          const fallbackHostel = (userEmail === 'andyheller3k@gmail.com') 
+            ? (allHostels.find(h => h.id === 'hostel-andy-1') || allHostels.find(h => h.name?.includes('Pine Crest')) || allHostels[0])
+            : (allHostels.find(h => h.id === 'hostel-1') || allHostels[0]);
+          if (fallbackHostel) {
+            managerHostels = [fallbackHostel];
+          }
+        }
+
+        // Ensure keys are generated for each manager property
+        for (const mh of managerHostels) {
+          await dbGenerateHostelRoomKeys(mh);
+        }
+
+        const hostelIds = managerHostels.map(h => h.id);
+        const allKeys = await dbGetRoomKeys();
+        const filtered = allKeys.filter(k => 
+          hostelIds.includes(k.hostelId) || 
+          managerHostels.some(h => h.name?.toLowerCase().trim() === k.hostelName?.toLowerCase().trim())
+        );
+        return res.json(filtered.length > 0 ? filtered : allKeys);
+      }
+
+      // Ensure all hostels have keys
+      for (const h of allHostels) {
+        await dbGenerateHostelRoomKeys(h);
+      }
+      const allKeys = await dbGetRoomKeys();
+      res.json(allKeys);
+    } catch (err: any) {
+      console.error("Error fetching room keys:", err);
+      res.status(500).json({ error: "Failed to load room keys" });
+    }
+  });
+
+  // Send Digital Room Key directly to an email or phone number
+  app.post("/api/room-keys/send-digital", requireAuth(["manager", "admin"]), async (req: any, res) => {
+    try {
+      const {
+        roomKey,
+        roomNumber,
+        blockName,
+        hostelName,
+        recipientEmail,
+        recipientPhone,
+        recipientName,
+        customNote
+      } = req.body;
+
+      const cleanKey = (roomKey || '').trim().toUpperCase();
+      if (!cleanKey) {
+        return res.status(400).json({ error: "Digital room key code is required." });
+      }
+
+      if (!recipientEmail && !recipientPhone) {
+        return res.status(400).json({ error: "Please provide either a recipient email address or phone number." });
+      }
+
+      const keyRecord = await dbGetRoomKeyByCode(cleanKey);
+      if (!keyRecord) {
+        return res.status(404).json({ error: `Room key "${cleanKey}" not found.` });
+      }
+
+      const dispatchInfo = {
+        recipientEmail: recipientEmail ? recipientEmail.trim().toLowerCase() : '',
+        recipientPhone: recipientPhone ? recipientPhone.trim() : '',
+        recipientName: recipientName ? recipientName.trim() : 'Resident / Student',
+        customNote: customNote ? customNote.trim() : '',
+        senderManagerId: req.user?.id || 'manager_101',
+        senderManagerName: req.user?.name || 'Property Manager',
+        roomNumber: roomNumber || keyRecord.roomNumber,
+        blockName: blockName || keyRecord.blockName,
+        hostelName: hostelName || keyRecord.hostelName
+      };
+
+      const dispatchRecord = await dbRecordRoomKeyDispatch(cleanKey, dispatchInfo);
+
+      // Create activity feed record
+      await dbCreateActivity({
+        id: `act-dispatch-${Date.now()}`,
+        text: `Digital Key for Room ${keyRecord.roomNumber} (${keyRecord.blockName}) sent to ${dispatchInfo.recipientName || 'resident'} (${dispatchInfo.recipientEmail || dispatchInfo.recipientPhone}).`,
+        time: 'Just now',
+        type: 'info'
+      }, activities);
+
+      // Create manager notification
+      const dispatchTarget = [dispatchInfo.recipientEmail, dispatchInfo.recipientPhone].filter(Boolean).join(' / ');
+      notifications.unshift({
+        id: `notif-disp-${Date.now()}`,
+        studentId: req.user?.id || 'mgr',
+        title: `Room Key Dispatched: ${keyRecord.roomNumber}`,
+        message: `Digital room key (${cleanKey}) for ${keyRecord.blockName} Room ${keyRecord.roomNumber} was sent to ${dispatchInfo.recipientName} at ${dispatchTarget}.`,
+        type: 'info',
+        date: new Date().toISOString().split('T')[0],
+        read: false
+      });
+
+      return res.json({
+        success: true,
+        message: `Digital room key successfully sent to ${dispatchTarget}!`,
+        dispatch: dispatchRecord
+      });
+    } catch (err: any) {
+      console.error("Error sending digital room key:", err);
+      return res.status(500).json({ error: "Failed to dispatch digital room key: " + err.message });
+    }
+  });
+
+  // Verify a Digital Room Key (Public or during signup)
+  app.post("/api/room-keys/verify", async (req: any, res) => {
+    try {
+      const { roomKey } = req.body;
+      if (!roomKey || typeof roomKey !== 'string' || roomKey.trim().length < 5) {
+        return res.status(400).json({ valid: false, error: "Please provide a valid room key format (e.g. MAZE-A-123456)." });
+      }
+
+      const keyRecord = await dbGetRoomKeyByCode(roomKey);
+      if (!keyRecord) {
+        return res.status(404).json({ valid: false, error: "Invalid Digital Room Key. No matching room found in our system." });
+      }
+
+      // Check if hostel exists
+      const hostelList = await dbGetHostels(hostels);
+      const hostel = hostelList.find(h => h.id === keyRecord.hostelId || h.name?.toLowerCase() === keyRecord.hostelName?.toLowerCase());
+
+      res.json({
+        valid: true,
+        roomKey: keyRecord.roomKey,
+        hostelId: keyRecord.hostelId,
+        hostelName: keyRecord.hostelName,
+        blockName: keyRecord.blockName,
+        blockInitial: keyRecord.blockInitial,
+        roomNumber: keyRecord.roomNumber,
+        floor: keyRecord.floor,
+        isAssigned: keyRecord.isAssigned,
+        status: keyRecord.status,
+        managerId: hostel?.managerId || '',
+        managerName: hostel?.managerName || 'Hostel Operations Manager',
+        managerPhone: hostel?.phone || hostel?.managerPhone || '+233 24 000 0000',
+        managerEmail: hostel?.managerEmail || hostel?.email || 'manager@pinevela.com'
+      });
+    } catch (err: any) {
+      console.error("Error verifying room key:", err);
+      res.status(500).json({ valid: false, error: "Server error verifying room key" });
+    }
+  });
+
+  // Claim room key and complete resident/student onboarding & login
+  app.post(["/api/room-keys/claim", "/api/residents/onboard"], async (req: any, res) => {
+    try {
+      const {
+        roomKey,
+        studentId,
+        residentId,
+        studentName,
+        name,
+        studentEmail,
+        email,
+        studentPhone,
+        phone,
+        residentType,
+        programOfStudy,
+        department,
+        institution,
+        password
+      } = req.body;
+
+      const resolvedKey = (roomKey || '').trim().toUpperCase();
+      const resolvedStudentId = (studentId || residentId || '').trim().toUpperCase();
+      const resolvedName = (studentName || name || '').trim();
+      const resolvedEmail = (studentEmail || email || '').trim().toLowerCase();
+      const resolvedPhone = (studentPhone || phone || '').trim();
+      const resolvedType = (residentType || 'student').trim();
+      const resolvedProgram = (programOfStudy || 'General Studies').trim();
+      const resolvedDepartment = (department || 'General Faculty').trim();
+      const resolvedInstitution = (institution || 'University / Academic Center').trim();
+
+      if (!resolvedKey || !resolvedStudentId || !resolvedName) {
+        return res.status(400).json({ error: "Digital room key, ID number, and legal name are required." });
+      }
+
+      const keyRecord = await dbGetRoomKeyByCode(resolvedKey);
+      if (!keyRecord) {
+        return res.status(404).json({ error: `Digital room key "${resolvedKey}" not found. Please double-check the key code.` });
+      }
+
+      // Assign the room key to this resident
+      const updatedKey = await dbAssignRoomKey(resolvedKey, {
+        studentId: resolvedStudentId,
+        studentName: resolvedName,
+        studentEmail: resolvedEmail,
+        studentPhone: resolvedPhone,
+        assignedResidentType: resolvedType,
+        assignedProgram: resolvedProgram,
+        assignedDepartment: resolvedDepartment,
+        assignedInstitution: resolvedInstitution
+      });
+
+      // Find or create student user account
+      const store = getStoreInstance();
+      let user = store.users.find((u: any) => 
+        (u.studentId && u.studentId.toLowerCase() === resolvedStudentId.toLowerCase()) ||
+        (resolvedEmail && u.email && u.email.toLowerCase() === resolvedEmail.toLowerCase())
+      );
+
+      const hostelList = await dbGetHostels(hostels);
+      const hostel = hostelList.find(h => h.id === keyRecord.hostelId || h.name?.toLowerCase() === keyRecord.hostelName?.toLowerCase());
+
+      const fallbackEmail = resolvedEmail || `${resolvedStudentId.toLowerCase().replace(/[^a-z0-9]/g, '')}@student.pinevela.com`;
+
+      if (!user) {
+        user = {
+          id: `stu-${Date.now()}`,
+          name: resolvedName,
+          email: fallbackEmail,
+          username: resolvedStudentId.toLowerCase().replace(/[^a-z0-9]/g, ''),
+          studentId: resolvedStudentId,
+          role: 'student',
+          residentType: resolvedType,
+          programOfStudy: resolvedProgram,
+          department: resolvedDepartment,
+          institution: resolvedInstitution,
+          phone: resolvedPhone,
+          password: password || 'student123',
+          hostelId: keyRecord.hostelId,
+          hostelName: keyRecord.hostelName,
+          blockName: keyRecord.blockName,
+          roomNumber: keyRecord.roomNumber,
+          roomKey: keyRecord.roomKey,
+          createdAt: new Date().toISOString()
+        };
+        store.users.push(user);
+      } else {
+        user.hostelId = keyRecord.hostelId;
+        user.hostelName = keyRecord.hostelName;
+        user.blockName = keyRecord.blockName;
+        user.roomNumber = keyRecord.roomNumber;
+        user.roomKey = keyRecord.roomKey;
+        user.residentType = resolvedType;
+        user.programOfStudy = resolvedProgram;
+        user.department = resolvedDepartment;
+        user.institution = resolvedInstitution;
+        if (resolvedName) user.name = resolvedName;
+        if (resolvedPhone) user.phone = resolvedPhone;
+        if (password) user.password = password;
+      }
+      savePersistentStore(store);
+
+      // Also register or update in MOCK_USERS
+      const userToken = `token_${user.id}_${Date.now()}`;
+      const existingMockUserIndex = MOCK_USERS.findIndex(u => (u.user && u.user.id === user.id) || (u.email && u.email.toLowerCase() === fallbackEmail.toLowerCase()));
+      const userProfile = {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        studentId: user.studentId,
+        role: 'student' as const,
+        residentType: resolvedType,
+        programOfStudy: resolvedProgram,
+        department: resolvedDepartment,
+        institution: resolvedInstitution,
+        token: userToken,
+        hostelId: keyRecord.hostelId,
+        hostelName: keyRecord.hostelName,
+        blockName: keyRecord.blockName,
+        roomNumber: keyRecord.roomNumber,
+        roomKey: keyRecord.roomKey,
+        managerId: hostel?.managerId || '',
+        managerName: hostel?.managerName || 'Hostel Operations Manager',
+        managerPhone: hostel?.phone || hostel?.managerPhone || '+233 24 000 0000',
+        managerEmail: hostel?.managerEmail || hostel?.email || 'manager@pinevela.com'
+      };
+
+      if (existingMockUserIndex >= 0) {
+        MOCK_USERS[existingMockUserIndex].user = userProfile;
+        MOCK_USERS[existingMockUserIndex].password = password || MOCK_USERS[existingMockUserIndex].password;
+      } else {
+        MOCK_USERS.push({
+          email: fallbackEmail.toLowerCase(),
+          username: user.username,
+          password: password || 'student123',
+          user: userProfile
+        });
+      }
+
+      // 1. Send minimalistic notification to the Manager
+      const typeLabel = resolvedType === 'student' ? 'Student' : resolvedType === 'resident' ? 'Resident' : 'Special Resident';
+      const notifMessage = `New ${typeLabel} Check-In: ${resolvedName} (${resolvedStudentId}) has unlocked ${keyRecord.blockName} - ${keyRecord.roomNumber} (${keyRecord.hostelName}). Program: ${resolvedProgram} at ${resolvedInstitution}. Contact: ${resolvedPhone || 'N/A'}.`;
+      
+      const newNotif = {
+        id: `notif-${Date.now()}`,
+        managerId: hostel?.managerId || 'manager_101',
+        studentId: resolvedStudentId,
+        title: `Room ${keyRecord.roomNumber} Activated by ${resolvedName}`,
+        message: notifMessage,
+        type: 'success',
+        date: new Date().toISOString().split('T')[0],
+        read: false
+      };
+      notifications.unshift(newNotif);
+
+      // 2. Add activity feed log for Manager and System
+      await dbCreateActivity({
+        id: `act-checkin-${Date.now()}`,
+        text: `Resident Checked In: ${resolvedName} unlocked Room ${keyRecord.roomNumber} (${keyRecord.blockName}) at ${keyRecord.hostelName}.`,
+        time: 'Just now',
+        type: 'success'
+      }, activities);
+
+      // 3. Create initial welcome direct message from the manager
+      try {
+        await dbCreateStudentMessage({
+          studentId: resolvedStudentId,
+          studentName: resolvedName,
+          studentEmail: fallbackEmail,
+          hostelId: keyRecord.hostelId,
+          hostelName: keyRecord.hostelName,
+          managerId: hostel?.managerId || 'manager_101',
+          managerName: hostel?.managerName || 'Hostel Operations Manager',
+          senderRole: 'manager',
+          message: `Welcome to ${keyRecord.hostelName}, ${resolvedName}! Your digital room key (${keyRecord.roomKey}) for ${keyRecord.blockName}, ${keyRecord.roomNumber} is now active. If you need any assistance, maintenance, or have questions, feel free to chat with me right here.`,
+          attachmentUrl: undefined
+        });
+      } catch (msgErr) {
+        console.warn("Welcome message error:", msgErr);
+      }
+
+      res.cookie("pv_auth_token", userToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 7 * 24 * 60 * 60 * 1000
+      });
+
+      res.json({
+        success: true,
+        token: userToken,
+        user: userProfile,
+        roomKey: updatedKey,
+        message: `Successfully onboarded! Welcome to ${keyRecord.hostelName}.`
+      });
+    } catch (err: any) {
+      console.error("Error claiming room key:", err);
+      res.status(500).json({ error: "Failed to claim room key and complete onboarding" });
+    }
+  });
+
+  // Manager manually generates or extends digital room keys for a hostel
+  app.post("/api/hostels/:id/generate-room-keys", requireAuth(["manager", "admin"]), async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const hostelList = await dbGetHostels(hostels);
+      const hostel = hostelList.find(h => h.id === id);
+      if (!hostel) return res.status(404).json({ error: "Hostel not found" });
+
+      const newKeys = await dbGenerateHostelRoomKeys(hostel);
+      res.json({ success: true, count: newKeys.length, generatedKeys: newKeys });
+    } catch (err: any) {
+      console.error("Error generating room keys:", err);
+      res.status(500).json({ error: "Failed to generate room keys" });
+    }
+  });
+
+  // ==========================================
+  // STUDENT DIRECT MESSAGING WITH MANAGER
+  // ==========================================
+
+  // Get direct messages for student or manager
+  app.get("/api/student-messages", requireAuth(["student", "manager", "admin"]), async (req: any, res) => {
+    try {
+      const userRole = req.user.role;
+      const userId = req.user.id;
+      const studentId = req.query.studentId as string;
+      const hostelId = req.query.hostelId as string;
+
+      if (userRole === 'student') {
+        const myStudentId = req.user.studentId || req.user.id;
+        const msgs = await dbGetStudentMessages({ studentId: myStudentId });
+        return res.json(msgs);
+      }
+
+      if (userRole === 'manager') {
+        const msgs = await dbGetStudentMessages({
+          studentId: studentId || undefined,
+          hostelId: hostelId || req.user.hostelId || undefined
+        });
+        return res.json(msgs);
+      }
+
+      const allMsgs = await dbGetStudentMessages();
+      res.json(allMsgs);
+    } catch (err: any) {
+      console.error("Error fetching student messages:", err);
+      res.status(500).json({ error: "Failed to load messages" });
+    }
+  });
+
+  // Send a direct message
+  app.post("/api/student-messages", requireAuth(["student", "manager"]), async (req: any, res) => {
+    try {
+      const userRole = req.user.role;
+      const { message, attachmentUrl, studentId, studentName, hostelId, hostelName, managerId, managerName } = req.body;
+
+      if (!message || typeof message !== 'string' || !message.trim()) {
+        return res.status(400).json({ error: "Message content cannot be empty" });
+      }
+
+      const newMsg = await dbCreateStudentMessage({
+        studentId: userRole === 'student' ? (req.user.studentId || req.user.id) : studentId,
+        studentName: userRole === 'student' ? req.user.name : studentName,
+        studentEmail: req.user.email || '',
+        hostelId: hostelId || req.user.hostelId || '',
+        hostelName: hostelName || req.user.hostelName || '',
+        managerId: managerId || (userRole === 'manager' ? req.user.id : ''),
+        managerName: managerName || (userRole === 'manager' ? req.user.name : 'Hostel Manager'),
+        senderRole: userRole,
+        message: message.trim(),
+        attachmentUrl: attachmentUrl || ''
+      });
+
+      res.status(201).json(newMsg);
+    } catch (err: any) {
+      console.error("Error sending student message:", err);
+      res.status(500).json({ error: "Failed to send message" });
     }
   });
 
@@ -3977,17 +4759,645 @@ async function startServer() {
   });
 
   app.delete("/api/staff/:id", requireAuth(["admin", "manager"]), async (req: any, res) => {
-    const { id } = req.params;
-    
-    // Remove from in-memory MOCK_USERS state
-    const userIndex = MOCK_USERS.findIndex(u => (u.user && u.user.id === id) || u.user?.id === `staff-user-${id}`);
-    if (userIndex !== -1) {
-      MOCK_USERS.splice(userIndex, 1);
+    try {
+      const { id } = req.params;
+      const removalReason = req.body?.reason || 'Terminated by hostel management';
+      
+      const targetStaff = staff.find(s => s.id === id || s.userId === id);
+      const staffTargetId = targetStaff?.userId || targetStaff?.id || id;
+      const staffTargetEmail = (targetStaff?.email || '').toLowerCase().trim();
+      const staffName = targetStaff?.name || 'Staff Member';
+      const staffRole = targetStaff?.role || 'Staff Member';
+      const hostelName = targetStaff?.hostelName || 'Accredited Hostel';
+
+      // Update any approved applications for this staff to 'Dismissed' so application lock is lifted
+      staffApplications.forEach(a => {
+        const match = a.staffId === staffTargetId || a.staffId === id || (a.staffEmail && a.staffEmail.toLowerCase().trim() === staffTargetEmail);
+        if (match && (a.status === 'Approved' || a.status === 'approved')) {
+          a.status = 'Dismissed';
+          a.dismissedAt = new Date().toISOString();
+          a.dismissalReason = removalReason;
+        }
+      });
+
+      // Notify the staff member that they have been removed and can now apply elsewhere
+      if (staffTargetId) {
+        notifications.unshift({
+          id: `notif-${Date.now()}-dismissed`,
+          studentId: staffTargetId,
+          title: `Employment Concluded at ${hostelName}`,
+          message: `Your position as ${staffRole} at ${hostelName} has been concluded by the property manager (${removalReason}). Your application lock has been lifted and you are now eligible to apply for other hostel roles.`,
+          type: 'warning',
+          date: new Date().toISOString().split('T')[0],
+          read: false
+        });
+      }
+
+      activities.unshift({
+        id: `act-${Date.now()}`,
+        text: `Manager removed ${staffName} from position as ${staffRole} at ${hostelName}`,
+        time: 'Just now',
+        type: 'warning'
+      });
+
+      // Remove from active staff roster
+      staff = staff.filter(s => s.id !== id && s.userId !== id);
+      syncStore();
+      return res.status(200).json({ 
+        success: true, 
+        message: `Staff member ${staffName} successfully removed from roster. Staff application lock lifted.` 
+      });
+    } catch (err: any) {
+      console.error("Error removing staff member:", err);
+      return res.status(500).json({ error: err.message || "Failed to remove staff member" });
     }
-    
-    staff = staff.filter(s => s.id !== id && s.userId !== id);
-    syncStore();
-    res.status(200).json({ success: true });
+  });
+
+  // --- Staff Voluntary Resignation / Quit Job Endpoint ---
+  app.post("/api/staff/resign", requireAuth(["staff"]), async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const userEmail = (req.user.email || '').toLowerCase().trim();
+      const reason = req.body?.reason;
+
+      if (!reason || !reason.trim() || reason.trim().length < 5) {
+        return res.status(400).json({ 
+          error: "A valid reason explaining why you want to quit is mandatory before submitting your resignation to management." 
+        });
+      }
+
+      // Find active staff roster entry
+      const staffIdx = staff.findIndex(s => 
+        s.userId === userId || 
+        (s.email && s.email.toLowerCase() === userEmail) || 
+        s.id === userId
+      );
+      const activeStaff = staffIdx !== -1 ? staff[staffIdx] : null;
+
+      // Find approved application
+      const appIdx = staffApplications.findIndex(a => 
+        (a.staffId === userId || (a.staffEmail && a.staffEmail.toLowerCase() === userEmail)) &&
+        (a.status === 'Approved' || a.status === 'approved')
+      );
+      const activeApp = appIdx !== -1 ? staffApplications[appIdx] : null;
+
+      if (!activeStaff && !activeApp) {
+        return res.status(400).json({ 
+          error: "You do not have an active hostel employment record to resign from." 
+        });
+      }
+
+      const hostelId = activeStaff?.hostelId || activeApp?.hostelId;
+      const hostelName = activeStaff?.hostelName || activeApp?.hostelName || 'Accredited Hostel';
+      const role = activeStaff?.role || activeApp?.role || 'Staff Member';
+      const staffName = activeStaff?.name || activeApp?.applicantName || req.user.name || 'Staff Member';
+
+      // Remove from active staff list
+      if (staffIdx !== -1) {
+        staff.splice(staffIdx, 1);
+      }
+
+      // Update all approved applications for this user to 'Resigned'
+      staffApplications.forEach(a => {
+        if (
+          (a.staffId === userId || (a.staffEmail && a.staffEmail.toLowerCase() === userEmail)) &&
+          (a.status === 'Approved' || a.status === 'approved')
+        ) {
+          a.status = 'Resigned';
+          a.resignedAt = new Date().toISOString();
+          a.resignationReason = reason.trim();
+        }
+      });
+
+      // Record in staffBargains for tracking
+      const record = {
+        id: `bargain-${Date.now()}`,
+        staffId: userId,
+        staffName,
+        staffEmail: userEmail,
+        hostelId,
+        hostelName,
+        managerId: activeStaff?.managerId || activeApp?.managerId,
+        role,
+        currentShift: activeStaff?.shift || 'Day Shift',
+        currentBlock: activeStaff?.assignedBlock || 'All Wings',
+        reasonToQuit: reason.trim(),
+        isBargain: false,
+        status: 'quit_confirmed',
+        createdAt: new Date().toISOString(),
+        resolvedAt: new Date().toISOString()
+      };
+      staffBargains.unshift(record);
+
+      // Find target hostel / manager to notify
+      const targetHostel = hostels.find(h => h.id === hostelId);
+      const managerId = targetHostel?.managerId || targetHostel?.assignedManagerId || activeApp?.managerId;
+
+      if (managerId) {
+        notifications.unshift({
+          id: `notif-${Date.now()}-mgr-resign`,
+          studentId: managerId,
+          title: `Staff Resignation Notice`,
+          message: `${staffName} has resigned from their position as "${role}" at ${hostelName}. Reason provided: "${reason.trim()}". Their position is now open for recruitment.`,
+          type: 'warning',
+          date: new Date().toISOString().split('T')[0],
+          read: false
+        });
+      }
+
+      // Notify the staff member
+      notifications.unshift({
+        id: `notif-${Date.now()}-stf-resign`,
+        studentId: userId,
+        title: `Resignation Processed Successfully`,
+        message: `You have successfully resigned from your position as ${role} at ${hostelName} with your submitted reason. Your application lock has been lifted and you can now apply for other hostel jobs.`,
+        type: 'info',
+        date: new Date().toISOString().split('T')[0],
+        read: false
+      });
+
+      activities.unshift({
+        id: `act-${Date.now()}`,
+        text: `Staff member ${staffName} resigned from position as ${role} at ${hostelName}. Reason: ${reason.trim()}`,
+        time: 'Just now',
+        type: 'warning'
+      });
+
+      syncStore();
+      return res.json({ 
+        success: true, 
+        message: `Successfully resigned from ${role} at ${hostelName}. Application lock has been lifted and you may now apply for other positions.` 
+      });
+    } catch (err: any) {
+      console.error("Error processing staff resignation:", err);
+      return res.status(500).json({ error: err.message || "Failed to process resignation" });
+    }
+  });
+
+  // Alias for resign: quit
+  app.post("/api/staff/quit", requireAuth(["staff"]), async (req: any, res) => {
+    const { reason } = req.body || {};
+    req.body = { ...req.body, reason: reason };
+    return (app as any)._router.handle(
+      { ...req, url: '/api/staff/resign', originalUrl: '/api/staff/resign' },
+      res,
+      () => {}
+    );
+  });
+
+  // --- Staff Bargaining & Retention Proposals Endpoints ---
+  app.get("/api/staff-bargains", requireAuth(["staff", "manager", "admin"]), async (req: any, res) => {
+    try {
+      const userRole = req.user.role;
+      const userId = req.user.id;
+      const userEmail = (req.user.email || '').toLowerCase().trim();
+
+      if (userRole === "admin") {
+        return res.json(staffBargains);
+      }
+
+      if (userRole === "staff") {
+        const myBargains = staffBargains.filter(b => 
+          b.staffId === userId || 
+          (b.staffEmail && b.staffEmail.toLowerCase() === userEmail)
+        );
+        return res.json(myBargains);
+      }
+
+      if (userRole === "manager") {
+        const cleanName = (req.user.name || '').toLowerCase().trim();
+        const managerHostels = hostels.filter(h => 
+          h.managerId === userId || 
+          h.assignedManagerId === userId || 
+          (h.managerEmail && h.managerEmail.toLowerCase() === userEmail) ||
+          (h.managerName && cleanName && h.managerName.toLowerCase().trim() === cleanName)
+        );
+        const managerHostelIds = managerHostels.map(h => h.id);
+        const managerHostelNames = managerHostels.map(h => (h.name || '').toLowerCase().trim());
+
+        const relevant = staffBargains.filter(b => 
+          b.managerId === userId || 
+          managerHostelIds.includes(b.hostelId) ||
+          (b.hostelName && managerHostelNames.includes(b.hostelName.toLowerCase().trim()))
+        );
+        return res.json(relevant);
+      }
+
+      return res.json([]);
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message || "Failed to fetch staff bargains" });
+    }
+  });
+
+  app.post("/api/staff-bargains", requireAuth(["staff"]), async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const userEmail = (req.user.email || '').toLowerCase().trim();
+      const { reasonToQuit, isBargain, bargainProposal } = req.body || {};
+
+      if (!reasonToQuit || !reasonToQuit.trim() || reasonToQuit.trim().length < 5) {
+        return res.status(400).json({ 
+          error: "A valid reason explaining why you want to quit is mandatory before submitting to your manager." 
+        });
+      }
+
+      // Find active staff record
+      const staffIdx = staff.findIndex(s => 
+        s.userId === userId || 
+        (s.email && s.email.toLowerCase() === userEmail) || 
+        s.id === userId
+      );
+      const activeStaff = staffIdx !== -1 ? staff[staffIdx] : null;
+
+      // Find approved application
+      const appIdx = staffApplications.findIndex(a => 
+        (a.staffId === userId || (a.staffEmail && a.staffEmail.toLowerCase() === userEmail)) &&
+        (a.status === 'Approved' || a.status === 'approved')
+      );
+      const activeApp = appIdx !== -1 ? staffApplications[appIdx] : null;
+
+      if (!activeStaff && !activeApp) {
+        return res.status(400).json({ 
+          error: "You do not have an active hostel appointment to quit or bargain for." 
+        });
+      }
+
+      const hostelId = activeStaff?.hostelId || activeApp?.hostelId;
+      const hostelName = activeStaff?.hostelName || activeApp?.hostelName || 'Accredited Hostel';
+      const role = activeStaff?.role || activeApp?.role || 'Staff Member';
+      const staffName = activeStaff?.name || activeApp?.applicantName || req.user.name || 'Staff Member';
+
+      // Find manager
+      const targetHostel = hostels.find(h => h.id === hostelId);
+      const managerId = targetHostel?.managerId || targetHostel?.assignedManagerId || activeApp?.managerId;
+
+      if (!isBargain) {
+        // DIRECT QUIT with mandatory reason
+        if (staffIdx !== -1) {
+          staff.splice(staffIdx, 1);
+        }
+
+        staffApplications.forEach(a => {
+          if (
+            (a.staffId === userId || (a.staffEmail && a.staffEmail.toLowerCase() === userEmail)) &&
+            (a.status === 'Approved' || a.status === 'approved')
+          ) {
+            a.status = 'Resigned';
+            a.resignedAt = new Date().toISOString();
+            a.resignationReason = reasonToQuit.trim();
+          }
+        });
+
+        const quitRecord = {
+          id: `bargain-${Date.now()}`,
+          staffId: userId,
+          staffName,
+          staffEmail: userEmail,
+          hostelId,
+          hostelName,
+          managerId,
+          role,
+          currentShift: activeStaff?.shift || 'Day Shift',
+          currentBlock: activeStaff?.assignedBlock || 'All Wings',
+          reasonToQuit: reasonToQuit.trim(),
+          isBargain: false,
+          status: 'quit_confirmed',
+          createdAt: new Date().toISOString(),
+          resolvedAt: new Date().toISOString()
+        };
+        staffBargains.unshift(quitRecord);
+
+        if (managerId) {
+          notifications.unshift({
+            id: `notif-${Date.now()}-mgr-quit`,
+            studentId: managerId,
+            title: `Staff Resignation Notice`,
+            message: `${staffName} has resigned from their position as "${role}" at ${hostelName}. Reason submitted: "${reasonToQuit.trim()}". Their position is now open for recruitment.`,
+            type: 'warning',
+            date: new Date().toISOString().split('T')[0],
+            read: false
+          });
+        }
+
+        notifications.unshift({
+          id: `notif-${Date.now()}-stf-quit`,
+          studentId: userId,
+          title: `Resignation Processed`,
+          message: `Your resignation from ${role} at ${hostelName} has been submitted with your reason. Your application lock is lifted and you may now apply for other hostel jobs.`,
+          type: 'info',
+          date: new Date().toISOString().split('T')[0],
+          read: false
+        });
+
+        activities.unshift({
+          id: `act-${Date.now()}`,
+          text: `Staff member ${staffName} resigned from ${role} at ${hostelName}. Reason: ${reasonToQuit.trim()}`,
+          time: 'Just now',
+          type: 'warning'
+        });
+
+        syncStore();
+        return res.json({
+          success: true,
+          directQuit: true,
+          message: `Your resignation has been confirmed and submitted to your manager. Application lock lifted.`
+        });
+      }
+
+      // BARGAIN PROPOSAL
+      if (!bargainProposal || !bargainProposal.proposedTerms || !bargainProposal.proposedTerms.trim()) {
+        return res.status(400).json({
+          error: "Please state the proposed deal or terms that would convince you to stay."
+        });
+      }
+
+      // Check if pending bargain already exists
+      const existingPending = staffBargains.find(b => 
+        (b.staffId === userId || (b.staffEmail && b.staffEmail.toLowerCase() === userEmail)) &&
+        b.status === 'pending'
+      );
+      if (existingPending) {
+        return res.status(400).json({
+          error: "You already have a pending bargain proposal awaiting your manager's decision."
+        });
+      }
+
+      const newBargain = {
+        id: `bargain-${Date.now()}`,
+        staffId: userId,
+        staffName,
+        staffEmail: userEmail,
+        hostelId,
+        hostelName,
+        managerId,
+        role,
+        currentShift: activeStaff?.shift || 'Day Shift',
+        currentBlock: activeStaff?.assignedBlock || 'All Wings',
+        reasonToQuit: reasonToQuit.trim(),
+        isBargain: true,
+        bargainProposal: {
+          type: bargainProposal.type || 'custom',
+          title: bargainProposal.title || 'Proposed Deal to Stay',
+          proposedTerms: bargainProposal.proposedTerms.trim(),
+          notes: bargainProposal.notes?.trim() || ''
+        },
+        status: 'pending',
+        createdAt: new Date().toISOString()
+      };
+
+      staffBargains.unshift(newBargain);
+
+      if (managerId) {
+        notifications.unshift({
+          id: `notif-${Date.now()}-mgr-bargain`,
+          studentId: managerId,
+          title: `Staff Retention & Bargain Proposal`,
+          message: `${staffName} (${role} at ${hostelName}) is considering quitting and has submitted a bargain proposal to negotiate staying. Reason: "${reasonToQuit.trim()}". Proposed terms: "${bargainProposal.proposedTerms.trim()}". Review under Staff > Proposals.`,
+          type: 'warning',
+          date: new Date().toISOString().split('T')[0],
+          read: false
+        });
+      }
+
+      notifications.unshift({
+        id: `notif-${Date.now()}-stf-bargain-sub`,
+        studentId: userId,
+        title: `Bargain Proposal Forwarded to Manager`,
+        message: `Your retention proposal and reason have been sent to your manager at ${hostelName}. Awaiting their decision.`,
+        type: 'info',
+        date: new Date().toISOString().split('T')[0],
+        read: false
+      });
+
+      activities.unshift({
+        id: `act-${Date.now()}`,
+        text: `Staff member ${staffName} proposed a bargain to manager to avoid quitting (${role} at ${hostelName})`,
+        time: 'Just now',
+        type: 'info'
+      });
+
+      syncStore();
+      return res.json({
+        success: true,
+        isBargain: true,
+        bargain: newBargain,
+        message: "Your proposal has been submitted to your manager. They will review your terms and respond."
+      });
+    } catch (err: any) {
+      console.error("Error submitting staff bargain:", err);
+      return res.status(500).json({ error: err.message || "Failed to submit proposal" });
+    }
+  });
+
+  app.post("/api/staff-bargains/:id/manager-response", requireAuth(["manager", "admin"]), async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { action, responseNote, updatedShift, updatedBlock, updatedSalary } = req.body || {};
+
+      const bargain = staffBargains.find(b => b.id === id);
+      if (!bargain) {
+        return res.status(404).json({ error: "Bargain proposal not found" });
+      }
+
+      if (bargain.status !== 'pending') {
+        return res.status(400).json({ error: `This proposal has already been marked as ${bargain.status}.` });
+      }
+
+      if (action === 'accept') {
+        bargain.status = 'accepted';
+        bargain.managerResponseNote = responseNote || 'Deal accepted by management.';
+        bargain.resolvedAt = new Date().toISOString();
+
+        // If manager updated shift/block/salary, update active staff record
+        const staffIdx = staff.findIndex(s => 
+          s.userId === bargain.staffId || 
+          (s.email && s.email.toLowerCase() === (bargain.staffEmail || '').toLowerCase()) || 
+          s.id === bargain.staffId
+        );
+        if (staffIdx !== -1) {
+          if (updatedShift) staff[staffIdx].shift = updatedShift;
+          if (updatedBlock) staff[staffIdx].assignedBlock = updatedBlock;
+          if (updatedSalary) staff[staffIdx].salary = updatedSalary;
+          staff[staffIdx].bargainAcceptedAt = new Date().toISOString();
+        }
+
+        // Notify the staff member
+        notifications.unshift({
+          id: `notif-${Date.now()}-deal-accepted`,
+          studentId: bargain.staffId,
+          title: `Deal Accepted by Manager! 🎉`,
+          message: `Great news! Your manager at ${bargain.hostelName} has ACCEPTED your proposed terms (${responseNote || 'Terms accepted'}). You are confirmed to remain in your position!`,
+          type: 'success',
+          date: new Date().toISOString().split('T')[0],
+          read: false
+        });
+
+        activities.unshift({
+          id: `act-${Date.now()}`,
+          text: `Manager accepted bargain terms for staff member ${bargain.staffName} (${bargain.role} at ${bargain.hostelName})`,
+          time: 'Just now',
+          type: 'success'
+        });
+      } else if (action === 'reject') {
+        bargain.status = 'rejected';
+        bargain.managerResponseNote = responseNote || 'Management was unable to accept the proposed terms.';
+        bargain.resolvedAt = new Date().toISOString();
+
+        // Notify the staff member that deal was rejected and they can choose to quit or stay
+        notifications.unshift({
+          id: `notif-${Date.now()}-deal-rejected`,
+          studentId: bargain.staffId,
+          title: `Bargain Proposal Declined by Manager`,
+          message: `Your manager at ${bargain.hostelName} declined your bargain terms (${responseNote || 'Not accepted'}). You can now decide under your dashboard whether to proceed to quit or stay.`,
+          type: 'warning',
+          date: new Date().toISOString().split('T')[0],
+          read: false
+        });
+
+        activities.unshift({
+          id: `act-${Date.now()}`,
+          text: `Manager declined bargain terms for staff member ${bargain.staffName} (${bargain.role} at ${bargain.hostelName})`,
+          time: 'Just now',
+          type: 'warning'
+        });
+      } else {
+        return res.status(400).json({ error: "Invalid action. Must be 'accept' or 'reject'." });
+      }
+
+      syncStore();
+      return res.json({ success: true, bargain });
+    } catch (err: any) {
+      console.error("Error updating manager response:", err);
+      return res.status(500).json({ error: err.message || "Failed to process manager response" });
+    }
+  });
+
+  app.post("/api/staff-bargains/:id/staff-decision", requireAuth(["staff"]), async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.user.id;
+      const userEmail = (req.user.email || '').toLowerCase().trim();
+      const { decision } = req.body || {};
+
+      const bargain = staffBargains.find(b => b.id === id);
+      if (!bargain) {
+        return res.status(404).json({ error: "Bargain proposal not found" });
+      }
+
+      if (bargain.staffId !== userId && bargain.staffEmail?.toLowerCase() !== userEmail) {
+        return res.status(403).json({ error: "Unauthorized. This proposal does not belong to you." });
+      }
+
+      if (bargain.status !== 'rejected') {
+        return res.status(400).json({ error: "You can only make a post-bargain decision on a proposal that was rejected by management." });
+      }
+
+      if (decision === 'quit') {
+        bargain.status = 'quit_confirmed';
+        bargain.resolvedAt = new Date().toISOString();
+
+        // Finalize resignation
+        const staffIdx = staff.findIndex(s => 
+          s.userId === userId || 
+          (s.email && s.email.toLowerCase() === userEmail) || 
+          s.id === userId
+        );
+        if (staffIdx !== -1) {
+          staff.splice(staffIdx, 1);
+        }
+
+        staffApplications.forEach(a => {
+          if (
+            (a.staffId === userId || (a.staffEmail && a.staffEmail.toLowerCase() === userEmail)) &&
+            (a.status === 'Approved' || a.status === 'approved')
+          ) {
+            a.status = 'Resigned';
+            a.resignedAt = new Date().toISOString();
+            a.resignationReason = `Quit following rejected bargain: ${bargain.reasonToQuit}`;
+          }
+        });
+
+        if (bargain.managerId) {
+          notifications.unshift({
+            id: `notif-${Date.now()}-mgr-quit-post`,
+            studentId: bargain.managerId,
+            title: `Staff Final Decision: Resigned`,
+            message: `${bargain.staffName} has decided to officially quit their position as ${bargain.role} at ${bargain.hostelName} following the declined bargain. Position is now open.`,
+            type: 'warning',
+            date: new Date().toISOString().split('T')[0],
+            read: false
+          });
+        }
+
+        notifications.unshift({
+          id: `notif-${Date.now()}-stf-quit-post`,
+          studentId: userId,
+          title: `Resignation Finalized`,
+          message: `Your resignation from ${bargain.role} at ${bargain.hostelName} has taken effect. Your application lock is lifted and you may now apply for other hostel jobs.`,
+          type: 'info',
+          date: new Date().toISOString().split('T')[0],
+          read: false
+        });
+
+        activities.unshift({
+          id: `act-${Date.now()}`,
+          text: `Staff member ${bargain.staffName} officially quit as ${bargain.role} at ${bargain.hostelName} following declined bargain`,
+          time: 'Just now',
+          type: 'warning'
+        });
+
+        syncStore();
+        return res.json({
+          success: true,
+          decision: 'quit',
+          message: "Resignation confirmed. Your employment has concluded and your application lock is lifted."
+        });
+      } else if (decision === 'stay') {
+        bargain.status = 'stay_confirmed';
+        bargain.resolvedAt = new Date().toISOString();
+
+        if (bargain.managerId) {
+          notifications.unshift({
+            id: `notif-${Date.now()}-mgr-stay`,
+            studentId: bargain.managerId,
+            title: `Staff Final Decision: Staying on Duty`,
+            message: `${bargain.staffName} has decided to remain on the team as ${bargain.role} at ${bargain.hostelName} despite the declined deal terms.`,
+            type: 'info',
+            date: new Date().toISOString().split('T')[0],
+            read: false
+          });
+        }
+
+        notifications.unshift({
+          id: `notif-${Date.now()}-stf-stay`,
+          studentId: userId,
+          title: `Staying on Duty Confirmed`,
+          message: `You have chosen to stay as ${bargain.role} at ${bargain.hostelName}. You remain actively employed.`,
+          type: 'success',
+          date: new Date().toISOString().split('T')[0],
+          read: false
+        });
+
+        activities.unshift({
+          id: `act-${Date.now()}`,
+          text: `Staff member ${bargain.staffName} decided to stay in their role as ${bargain.role} at ${bargain.hostelName}`,
+          time: 'Just now',
+          type: 'info'
+        });
+
+        syncStore();
+        return res.json({
+          success: true,
+          decision: 'stay',
+          message: "You have confirmed to remain in your role. Application lock remains active."
+        });
+      } else {
+        return res.status(400).json({ error: "Invalid decision. Must be 'quit' or 'stay'." });
+      }
+    } catch (err: any) {
+      console.error("Error processing staff decision:", err);
+      return res.status(500).json({ error: err.message || "Failed to process decision" });
+    }
   });
 
   // --- Accredited Staff & Job Offers Endpoints ---
@@ -4189,7 +5599,7 @@ async function startServer() {
   app.get("/api/admin/staff-verifications", requireAuth(["admin"]), async (req: any, res) => {
     try {
       const staffList = MOCK_USERS
-        .filter(u => u.user?.role === 'staff')
+        .filter(u => u.user?.role === 'staff' || u.role === 'staff' || u.staffRole)
         .map(u => {
           const usr = ((u as any).user || u) as any;
           return {
@@ -4570,6 +5980,29 @@ ${400 + streamLength}
             error: "Your staff account is currently pending administrative verification of your submitted CV and National ID credentials. You cannot submit job applications until an Administrator verifies your credentials."
           });
         }
+      }
+
+      // Check if applicant is already hired and active at an accredited hostel:
+      // Staff who are hired by one accredited hostel and verified cannot apply for any other jobs with the hostel again unless:
+      // 1. They're sacked or removed by their current manager
+      // 2. They quit the job.
+      // If not, then they remain in their job only and the option to apply is locked.
+      const activeStaffRoster = staff.find((s: any) => 
+        (s.userId === userId || (s.email && s.email.toLowerCase() === userEmail)) &&
+        (s.status === 'Active' || s.status === 'Approved' || !s.status || (s.status !== 'Dismissed' && s.status !== 'Removed' && s.status !== 'Resigned' && s.status !== 'Terminated'))
+      );
+
+      const activeApprovedApp = staffApplications.find((a: any) => 
+        (a.staffId === userId || (a.staffEmail && a.staffEmail.toLowerCase() === userEmail) || (a.email && a.email.toLowerCase() === userEmail)) &&
+        (a.status === 'Approved' || a.status === 'approved')
+      );
+
+      if (activeStaffRoster || activeApprovedApp) {
+        const currentRole = activeStaffRoster?.role || activeApprovedApp?.role || 'Staff Member';
+        const currentHostel = activeStaffRoster?.hostelName || activeApprovedApp?.hostelName || 'an accredited hostel';
+        return res.status(400).json({
+          error: `Application Locked: You are already actively employed as "${currentRole}" at ${currentHostel}. Under PineVela accredited housing regulations, appointed staff remain in their active job and cannot apply for any other hostel jobs unless you quit/resign from your job or are removed by your manager. (One-time individual job offers remain accessible under your Offers tab).`
+        });
       }
 
       // Check if applicant already has a pending application
