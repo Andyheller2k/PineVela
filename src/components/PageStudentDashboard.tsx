@@ -1125,8 +1125,8 @@ export default function PageStudentDashboard() {
                   </div>
                 </div>
 
-                {notifications.map(notif => (
-                  <div key={notif.id} className={`p-4 ${notif.read ? 'bg-slate-50/70' : 'bg-white'} border ${notif.read ? 'border-slate-200/80' : 'border-blue-200/80 shadow-sm'} rounded-2xl flex items-start gap-3.5`}>
+                {notifications.map((notif, index) => (
+                  <div key={`${notif.id}-${index}`} className={`p-4 ${notif.read ? 'bg-slate-50/70' : 'bg-white'} border ${notif.read ? 'border-slate-200/80' : 'border-blue-200/80 shadow-sm'} rounded-2xl flex items-start gap-3.5`}>
                     <div className={`p-2.5 rounded-xl ${notif.type === 'success' ? 'bg-emerald-600' : notif.type === 'warning' ? 'bg-amber-600' : 'bg-slate-800'} text-white shrink-0`}>
                       <Bell className="w-4 h-4" />
                     </div>
