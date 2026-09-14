@@ -151,19 +151,19 @@ export default function EditResidenceModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fadeIn overflow-y-auto">
       <div className="bg-white border border-blue-200 rounded-3xl max-w-4xl w-full shadow-2xl overflow-hidden my-6 flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="p-6 bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white flex items-center justify-between shrink-0">
+        <div className="p-6 bg-gradient-to-r from-sky-400/25 via-blue-500/20 to-indigo-400/25 backdrop-blur-xl border-b border-sky-200/80 text-slate-900 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20">
-              <Building2 className="w-5 h-5 text-cyan-300" />
+            <div className="w-10 h-10 rounded-2xl bg-blue-100 flex items-center justify-center border border-blue-200 shadow-xs">
+              <Building2 className="w-5 h-5 text-blue-900" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white">Edit Registered Residence Record</h3>
-              <p className="text-xs text-blue-200">Official PineVela administrative override for "{residence.name}"</p>
+              <h3 className="text-lg font-black text-slate-900">Edit Registered Residence Record</h3>
+              <p className="text-xs text-slate-600 font-medium">Official PineVela administrative override for "{residence.name}"</p>
             </div>
           </div>
           <button 
             onClick={onClose}
-            className="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer"
+            className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>

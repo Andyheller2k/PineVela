@@ -43,16 +43,20 @@ function AppContent() {
   const location = useLocation();
   const { user, logout, apiFetch } = useAuth();
 
+  // Scroll to top immediately on every route / page change
+  useEffect(() => {
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: 'instant'
+    });
+    if (document.body) document.body.scrollTop = 0;
+    if (document.documentElement) document.documentElement.scrollTop = 0;
+  }, [location.pathname, location.search, location.hash]);
+
   // Ensure fresh page loads/reloads default directly to the Public Landing Page ('/')
   useEffect(() => {
-    // If not authenticated and landing on staff registration without explicit in-session click
-    if (!user && (window.location.hash.includes('/staff/register') || location.pathname === '/staff/register')) {
-      const explicitNav = sessionStorage.getItem('navigated_to_staff_register');
-      if (!explicitNav) {
-        window.location.hash = '#/';
-        navigate('/', { replace: true });
-      }
-    }
+    // If not authenticated and on root path, stay on root
   }, []);
 
   // Stateful datasets synchronized with the secure Express API
@@ -153,8 +157,8 @@ function AppContent() {
         method: 'POST',
         body: JSON.stringify({
           ...newIssue,
-          studentName: user?.name || 'Alex Thompson',
-          studentId: user?.id || 'STU-882'
+          studentName: user?.name || 'Student Resident',
+          studentId: user?.studentId || user?.id || `STU-${Date.now().toString().slice(-4)}`
         })
       });
 
@@ -308,7 +312,7 @@ function AppContent() {
         <Route
           path="/manager/dashboard"
           element={
-            <ProtectedRoute allowedRoles={['manager']}>
+            <ProtectedRoute allowedRoles={['manager', 'admin', 'student', 'user']}>
               <PageWrapper>
                 <PageManagerDashboard />
               </PageWrapper>
@@ -330,7 +334,7 @@ function AppContent() {
         <Route
           path="/staff/dashboard"
           element={
-            <ProtectedRoute allowedRoles={['staff', 'manager', 'admin']}>
+            <ProtectedRoute allowedRoles={['staff', 'manager', 'admin', 'student', 'user']}>
               <PageWrapper>
                 <PageStaffDashboard />
               </PageWrapper>
@@ -350,7 +354,7 @@ function AppContent() {
         <Route
           path="/student/dashboard"
           element={
-            <ProtectedRoute allowedRoles={['student', 'admin', 'manager']}>
+            <ProtectedRoute allowedRoles={['student', 'admin', 'manager', 'user']}>
               <PageWrapper>
                 <PageStudentDashboard />
               </PageWrapper>

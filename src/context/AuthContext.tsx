@@ -3,7 +3,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 export interface AuthenticatedUser {
   id: string;
   name: string;
-  role: 'student' | 'manager' | 'admin' | 'staff';
+  role: 'student' | 'manager' | 'admin' | 'staff' | 'user';
   token: string;
   username?: string;
   email?: string;

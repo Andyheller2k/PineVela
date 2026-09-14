@@ -234,19 +234,19 @@ export const ManagerMeetingsTab: React.FC<ManagerMeetingsTabProps> = ({
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Header Banner */}
-      <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white p-6 md:p-8 rounded-3xl shadow-xl border border-blue-800/40 relative overflow-hidden">
-        <div className="absolute right-0 top-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
+      <div className="bg-gradient-to-r from-sky-400/20 via-blue-500/15 to-indigo-400/20 backdrop-blur-xl border border-sky-300/50 text-slate-900 p-6 md:p-8 rounded-3xl shadow-xl relative overflow-hidden">
+        <div className="absolute right-0 top-0 w-96 h-96 bg-sky-200/20 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2">
             <div className="flex items-center gap-2.5">
-              <span className="p-2 bg-blue-500/20 backdrop-blur-md rounded-xl text-blue-300 border border-blue-400/30">
+              <span className="p-2 bg-blue-100 rounded-xl text-blue-900 border border-blue-200 shadow-xs">
                 <CalendarCheck className="w-5 h-5" />
               </span>
-              <h2 className="text-xl md:text-2xl font-black tracking-tight text-white">
+              <h2 className="text-xl md:text-2xl font-black tracking-tight text-slate-900">
                 Meeting Requests & Consultation Logs
               </h2>
             </div>
-            <p className="text-xs md:text-sm text-blue-200/90 max-w-2xl font-medium leading-relaxed">
+            <p className="text-xs md:text-sm text-slate-600 max-w-2xl font-medium leading-relaxed">
               Official meeting appointment portal for resident students and duty staff to book consultations, grievance reviews, and operational check-ins with facility management.
             </p>
           </div>
@@ -254,7 +254,7 @@ export const ManagerMeetingsTab: React.FC<ManagerMeetingsTabProps> = ({
           <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={fetchMeetings}
-              className="px-3.5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border border-white/10 cursor-pointer"
+              className="px-3.5 py-2.5 bg-white/90 hover:bg-white text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border border-slate-200 shadow-xs cursor-pointer"
               title="Refresh meeting logs"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
@@ -262,31 +262,31 @@ export const ManagerMeetingsTab: React.FC<ManagerMeetingsTabProps> = ({
             </button>
             <button
               onClick={() => setShowBookModal(true)}
-              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-blue-500/30 flex items-center gap-2 cursor-pointer border border-blue-400/30"
+              className="px-4 py-2.5 bg-blue-900 hover:bg-blue-950 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-2 cursor-pointer"
             >
-              <Plus className="w-4 h-4" />
-              <span>Book / Log Meeting</span>
+              <CalendarCheck className="w-4 h-4 text-sky-300" />
+              <span>Book Appointment</span>
             </button>
           </div>
         </div>
 
         {/* Quick Counters */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-6 border-t border-blue-800/60 text-xs">
-          <div className="bg-white/5 backdrop-blur-md rounded-2xl p-3 border border-white/10">
-            <div className="text-blue-300 text-[11px] font-semibold">Total Meeting Records</div>
-            <div className="text-xl font-black text-white mt-0.5">{meetings.length}</div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-6 border-t border-sky-300/40 text-xs">
+          <div className="bg-white/70 backdrop-blur-md rounded-2xl p-3 border border-sky-200/60 shadow-xs">
+            <div className="text-slate-600 text-[11px] font-bold">Total Meeting Records</div>
+            <div className="text-xl font-black text-slate-900 mt-0.5">{meetings.length}</div>
           </div>
-          <div className="bg-amber-500/10 backdrop-blur-md rounded-2xl p-3 border border-amber-400/20">
-            <div className="text-amber-300 text-[11px] font-semibold">Pending Review</div>
-            <div className="text-xl font-black text-amber-300 mt-0.5">{pendingCount}</div>
+          <div className="bg-amber-500/15 backdrop-blur-md rounded-2xl p-3 border border-amber-300/50 shadow-xs">
+            <div className="text-amber-900 text-[11px] font-bold">Pending Review</div>
+            <div className="text-xl font-black text-amber-900 mt-0.5">{pendingCount}</div>
           </div>
-          <div className="bg-emerald-500/10 backdrop-blur-md rounded-2xl p-3 border border-emerald-400/20">
-            <div className="text-emerald-300 text-[11px] font-semibold">Approved / Scheduled</div>
-            <div className="text-xl font-black text-emerald-300 mt-0.5">{approvedCount}</div>
+          <div className="bg-emerald-500/15 backdrop-blur-md rounded-2xl p-3 border border-emerald-300/50 shadow-xs">
+            <div className="text-emerald-900 text-[11px] font-bold">Approved / Scheduled</div>
+            <div className="text-xl font-black text-emerald-900 mt-0.5">{approvedCount}</div>
           </div>
-          <div className="bg-purple-500/10 backdrop-blur-md rounded-2xl p-3 border border-purple-400/20">
-            <div className="text-purple-300 text-[11px] font-semibold">Completed</div>
-            <div className="text-xl font-black text-purple-300 mt-0.5">{completedCount}</div>
+          <div className="bg-purple-500/15 backdrop-blur-md rounded-2xl p-3 border border-purple-300/50 shadow-xs">
+            <div className="text-purple-900 text-[11px] font-bold">Completed</div>
+            <div className="text-xl font-black text-purple-900 mt-0.5">{completedCount}</div>
           </div>
         </div>
       </div>
@@ -541,7 +541,7 @@ export const ManagerMeetingsTab: React.FC<ManagerMeetingsTabProps> = ({
                     required
                     value={bookRequesterName}
                     onChange={(e) => setBookRequesterName(e.target.value)}
-                    placeholder="e.g. Kwame Mensah / Sarah Connor"
+                    placeholder="e.g. Kwame Mensah / Resident Name"
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-600 focus:bg-white"
                   />
                 </div>

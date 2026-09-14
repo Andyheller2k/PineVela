@@ -212,19 +212,19 @@ export const ManagerAccountSettingsModal: React.FC<ManagerAccountSettingsModalPr
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
       <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[90vh]">
         {/* Modal Header */}
-        <div className="p-6 bg-gradient-to-r from-blue-900 to-indigo-900 text-white flex items-center justify-between">
+        <div className="p-6 bg-gradient-to-r from-sky-400/25 via-blue-500/20 to-indigo-400/25 backdrop-blur-xl border-b border-sky-200/80 text-slate-900 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center text-blue-300">
+            <div className="w-10 h-10 rounded-2xl bg-blue-100 flex items-center justify-center text-blue-900 border border-blue-200 shadow-xs">
               <Settings className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white">Manager Account Settings</h3>
-              <p className="text-xs text-blue-200">Manage alerts, meeting availability, security, and emergency routing</p>
+              <h3 className="text-base font-black text-slate-900">Manager Account Settings</h3>
+              <p className="text-xs text-slate-600 font-medium">Manage alerts, meeting availability, security, and emergency routing</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-xl transition-all cursor-pointer"
+            className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>

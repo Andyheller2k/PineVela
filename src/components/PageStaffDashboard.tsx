@@ -96,6 +96,8 @@ export default function PageStaffDashboard() {
   const [jobOffers, setJobOffers] = useState<any[]>([]);
   const [staffRecord, setStaffRecord] = useState<any | null>(null);
   const [viewingOfferMap, setViewingOfferMap] = useState<any | null>(null);
+  const [declineOfferModal, setDeclineOfferModal] = useState<any | null>(null);
+  const [declineOfferReason, setDeclineOfferReason] = useState('Schedule conflict with current hostel maintenance tasks');
   const mapInstanceRef = React.useRef<any>(null);
 
   // Maintenance Workflow States
@@ -243,6 +245,26 @@ export default function PageStaffDashboard() {
       }
     } catch (err: any) {
       triggerToast(err.message || 'Failed to accept offer', 'error');
+    }
+  };
+
+  const handleDeclineOffer = async () => {
+    if (!declineOfferModal) return;
+    try {
+      const res = await apiFetch(`/api/job-offers/${declineOfferModal.id}/decline`, {
+        method: 'PUT',
+        body: JSON.stringify({ reason: declineOfferReason || 'Declined due to scheduling commitments' })
+      });
+      if (res.success || res.offer) {
+        triggerToast('Job offer declined and client notified.', 'info');
+        setDeclineOfferModal(null);
+        setDeclineOfferReason('Schedule conflict with current hostel maintenance tasks');
+        loadData();
+      } else {
+        triggerToast(res.error || 'Failed to decline offer', 'error');
+      }
+    } catch (err: any) {
+      triggerToast(err.message || 'Failed to decline offer', 'error');
     }
   };
 
@@ -1389,27 +1411,27 @@ export default function PageStaffDashboard() {
                 </div>
 
                 {/* Application Lock Active Policy Card */}
-                <div className="p-5 bg-gradient-to-r from-blue-900 to-indigo-950 text-white rounded-3xl shadow-md border border-blue-800 space-y-2.5">
+                <div className="p-5 bg-gradient-to-r from-sky-400/20 via-blue-500/15 to-indigo-400/20 backdrop-blur-xl border border-sky-300/50 rounded-3xl shadow-lg relative overflow-hidden space-y-2.5">
                   <div className="flex items-start gap-3.5">
-                    <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-amber-300 shrink-0 border border-white/10">
-                      <Lock className="w-4 h-4" />
+                    <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-900 flex items-center justify-center shrink-0 border border-blue-200 shadow-xs">
+                      <Lock className="w-4 h-4 text-blue-900" />
                     </div>
                     <div className="space-y-1 text-xs">
                       <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 rounded-full bg-amber-400 text-amber-950 text-[10px] font-black uppercase">
+                        <span className="px-2 py-0.5 rounded-full bg-amber-400 text-amber-950 text-[10px] font-black uppercase shadow-xs">
                           Application Lock Active
                         </span>
-                        <span className="text-blue-200 font-semibold">• Exclusive Hostel Appointment</span>
+                        <span className="text-blue-950 font-bold">• Exclusive Hostel Appointment</span>
                       </div>
-                      <p className="text-blue-100 leading-relaxed font-medium">
-                        As an accredited staff member appointed to <strong>{approvedApp.hostelName}</strong>, you remain dedicated to your current job as <strong>{approvedApp.role}</strong>. Applications to other hostels are locked unless:
+                      <p className="text-slate-700 leading-relaxed font-medium">
+                        As an accredited staff member appointed to <strong className="text-blue-950">{approvedApp.hostelName}</strong>, you remain dedicated to your current job as <strong className="text-blue-950">{approvedApp.role}</strong>. Applications to other hostels are locked unless:
                         <br />
                         <strong>1.</strong> You are removed or sacked by your manager, or
                         <br />
                         <strong>2.</strong> You quit the job using the <strong>Quit Job</strong> button.
                       </p>
-                      <div className="pt-1.5 flex items-center gap-2 text-emerald-300 font-bold">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <div className="pt-1.5 flex items-center gap-2 text-emerald-800 font-bold">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                         <span>You are fully allowed to accept one-time job offers under the Offers tab at any time!</span>
                       </div>
                     </div>
@@ -1967,32 +1989,41 @@ export default function PageStaffDashboard() {
         {/* ========================================================================= */}
         {activeTab === 'offers' && (
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h3 className="text-lg font-black text-slate-900">One-Time Job Offers & Hiring Proposals</h3>
-                <p className="text-xs text-slate-500 font-medium">Review flexible, one-time job offers and private contracts sent to you by property managers and students.</p>
+                <p className="text-xs text-slate-500 font-medium">Review verified, secure one-time hiring proposals and freelance contracts with full client identity details.</p>
               </div>
-              <span className="text-xs font-bold text-blue-900 bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
-                {jobOffers.length} Total Proposal{jobOffers.length === 1 ? '' : 's'}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-blue-900 bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
+                  {jobOffers.length} Proposal{jobOffers.length === 1 ? '' : 's'}
+                </span>
+                <span className="text-xs font-bold text-emerald-900 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200 flex items-center gap-1">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Verified Requesters</span>
+                </span>
+              </div>
             </div>
 
             {/* One-Time Job Offers Policy Note */}
-            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-start sm:items-center gap-3 text-xs text-emerald-950 font-medium shadow-xs">
-              <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                <CheckCircle2 className="w-4 h-4" />
+            <div className="p-4 bg-gradient-to-r from-sky-50 via-blue-50 to-indigo-50 border border-sky-200 rounded-2xl flex items-start sm:items-center gap-3 text-xs text-blue-950 font-medium shadow-xs">
+              <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-800 flex items-center justify-center shrink-0 border border-blue-200">
+                <ShieldCheck className="w-5 h-5 text-blue-700" />
               </div>
               <div className="space-y-0.5">
-                <span className="font-bold text-emerald-900">One-Time Job Offers Are Unrestricted: </span>
-                <span>
+                <div className="font-bold text-blue-900 flex items-center gap-1.5">
+                  <span>Identity-Verified Independent Contracting</span>
+                  <span className="px-2 py-0.2 bg-emerald-100 text-emerald-800 rounded text-[9px] font-black uppercase">Ghana ID Checked</span>
+                </div>
+                <p className="text-[11px] text-slate-600">
                   {approvedApp ? (
                     <>
-                      Although your regular hostel appointment is locked to <strong>{approvedApp.hostelName}</strong>, you are completely permitted to accept individual one-time job offers and side-tasks here.
+                      Although your primary residency appointment is at <strong>{approvedApp.hostelName}</strong>, PineVela permits you to freely accept external one-time contracts with verified upfront wages and location tracking.
                     </>
                   ) : (
-                    'Verified staff members are free to review, accept, or reject independent one-time job offers with upfront agreed wages.'
+                    'Review client credentials, exact work site GPS address, and agreed upfront compensation before accepting.'
                   )}
-                </span>
+                </p>
               </div>
             </div>
 
@@ -2001,60 +2032,199 @@ export default function PageStaffDashboard() {
                 <Briefcase className="w-10 h-10 text-slate-300 mx-auto" />
                 <h4 className="text-base font-bold text-slate-800">No Job Offers Received Yet</h4>
                 <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                  When property managers or users send you a job offer from the PineVela Accredited Staff section on the landing page, it will appear here.
+                  When university residents, hostel managers, or private clients send you a direct one-time job proposal, it will appear here with full identity inspection details.
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {jobOffers.map((offer: any) => {
                   const isAccepted = offer.status === 'Accepted';
+                  const isDeclined = offer.status === 'Declined';
+                  const isPending = !isAccepted && !isDeclined;
+                  const cleanPhone = (offer.requesterContact || offer.contact || '').replace(/[^0-9+]/g, '');
+
                   return (
-                    <div key={offer.id} className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-4 flex flex-col justify-between">
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${isAccepted ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-                            {offer.status || 'Pending'}
-                          </span>
-                          <span className="text-[11px] text-slate-400">{new Date(offer.createdAt).toLocaleDateString()}</span>
-                        </div>
-
-                        <div>
-                          <h4 className="text-base font-extrabold text-slate-900">{offer.workOffered}</h4>
-                          <p className="text-xs text-blue-900 font-bold mt-0.5">Offered by: {offer.requesterName}</p>
-                        </div>
-
-                        <div className="space-y-1.5 text-xs text-slate-600 font-medium bg-slate-50 p-3.5 rounded-xl border border-slate-200/60">
-                          <div><span className="font-bold text-slate-800">Time & Schedule:</span> {offer.timeAndSchedule}</div>
-                          <div>
-                            <span className="font-bold text-slate-800">Location:</span>{' '}
-                            <button
-                              type="button"
-                              onClick={() => setViewingOfferMap(offer)}
-                              className="text-blue-700 underline font-semibold hover:text-blue-900 inline-flex items-center gap-1 cursor-pointer"
-                            >
-                              <MapPin className="w-3.5 h-3.5 text-blue-600 inline" />
-                              <span>{offer.location} (Tap for Map)</span>
-                            </button>
+                    <div key={offer.id} className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-5 flex flex-col justify-between hover:border-blue-300 transition-all">
+                      <div className="space-y-4">
+                        {/* Header Badge & Date */}
+                        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                              isAccepted ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
+                              isDeclined ? 'bg-rose-100 text-rose-800 border border-rose-200' :
+                              'bg-amber-100 text-amber-800 border border-amber-200 animate-pulse'
+                            }`}>
+                              {offer.status || 'Pending Review'}
+                            </span>
+                            {offer.category && (
+                              <span className="px-2 py-0.5 bg-blue-50 text-blue-800 rounded-md text-[10px] font-bold border border-blue-200">
+                                {offer.category}
+                              </span>
+                            )}
                           </div>
-                          <div><span className="font-bold text-slate-800">Wage & Salary:</span> {offer.wageSalary}</div>
-                          <div><span className="font-bold text-slate-800">Manager Contact:</span> {offer.contact || offer.requesterContact || offer.requesterEmail}</div>
+                          <span className="text-[11px] text-slate-400 font-medium">
+                            {offer.createdAt ? new Date(offer.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recent'}
+                          </span>
+                        </div>
+
+                        {/* Title & Trade */}
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-base font-black text-slate-900">{offer.workOffered || offer.title || 'General Maintenance Task'}</h4>
+                          </div>
+                          {offer.workCategory && (
+                            <span className="inline-block mt-1 text-[11px] font-bold text-blue-700 bg-blue-50/80 px-2 py-0.5 rounded border border-blue-100">
+                              🔧 Specialization: {offer.workCategory}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Requester Identity & Security Box */}
+                        <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2.5">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className="w-8 h-8 rounded-xl bg-blue-900 text-white flex items-center justify-center font-black text-xs shrink-0 shadow-xs">
+                                {offer.requesterName?.[0] || 'C'}
+                              </div>
+                              <div>
+                                <div className="text-xs font-black text-slate-900">{offer.requesterName || 'Private Requester'}</div>
+                                <div className="text-[10px] text-slate-500 font-medium">{offer.requesterType || offer.category || 'Verified Client'}</div>
+                              </div>
+                            </div>
+                            {offer.requesterNationalId ? (
+                              <span className="px-2 py-0.5 bg-emerald-50 text-emerald-800 text-[10px] font-bold rounded-lg border border-emerald-200 flex items-center gap-1">
+                                <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                                <span>ID: {offer.requesterNationalId}</span>
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-[10px] font-semibold rounded-lg border border-blue-100">
+                                Campus Verified
+                              </span>
+                            )}
+                          </div>
+
+                          {offer.requesterOrganization && (
+                            <div className="text-[11px] text-slate-600 font-medium flex items-center gap-1.5 pt-1 border-t border-slate-200/60">
+                              <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span>Property/Hostel: <strong className="text-slate-800">{offer.requesterOrganization}</strong></span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Task Scope & Details Grid */}
+                        <div className="space-y-2 text-xs text-slate-700 font-medium bg-gradient-to-br from-blue-50/40 via-sky-50/20 to-white p-4 rounded-2xl border border-blue-100 space-y-2.5">
+                          {offer.description && (
+                            <div className="pb-2 border-b border-blue-100/60">
+                              <span className="font-bold text-slate-900 block mb-0.5">Task Description / Issue:</span>
+                              <p className="text-[11px] text-slate-600 leading-relaxed bg-white/80 p-2.5 rounded-xl border border-slate-200/60">
+                                {offer.description}
+                              </p>
+                            </div>
+                          )}
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                            <div>
+                              <span className="font-bold text-slate-900">Schedule: </span>
+                              <span className="text-slate-700">{offer.timeAndSchedule || offer.schedule || 'Flexible as agreed'}</span>
+                            </div>
+                            {offer.estimatedDuration && (
+                              <div>
+                                <span className="font-bold text-slate-900">Est. Duration: </span>
+                                <span className="text-slate-700">{offer.estimatedDuration}</span>
+                              </div>
+                            )}
+                            <div className="sm:col-span-2">
+                              <span className="font-bold text-slate-900">Location: </span>
+                              <button
+                                type="button"
+                                onClick={() => setViewingOfferMap(offer)}
+                                className="text-blue-700 underline font-bold hover:text-blue-900 inline-flex items-center gap-1 cursor-pointer bg-blue-50/80 px-2 py-0.5 rounded-md border border-blue-200 ml-1"
+                              >
+                                <MapPin className="w-3 h-3 text-blue-600 inline" />
+                                <span>{offer.location || offer.digitalAddress || 'Campus Area'} (View Map)</span>
+                              </button>
+                            </div>
+                            <div>
+                              <span className="font-bold text-emerald-800">Offered Wage: </span>
+                              <span className="font-black text-emerald-900">{offer.wageSalary || offer.wage || 'Competitive Rate'}</span>
+                            </div>
+                            {offer.paymentMethod && (
+                              <div>
+                                <span className="font-bold text-slate-900">Payment Mode: </span>
+                                <span className="text-slate-700">{offer.paymentMethod}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Direct Requester Contact Options */}
+                        <div className="p-3 bg-slate-50/80 rounded-2xl border border-slate-200/60 flex flex-wrap items-center justify-between gap-2">
+                          <div className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                            <Phone className="w-3.5 h-3.5 text-blue-600" />
+                            <span>{offer.requesterContact || offer.contact || offer.requesterEmail || 'Contact on file'}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            {cleanPhone && (
+                              <>
+                                <a
+                                  href={`tel:${cleanPhone}`}
+                                  className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-800 border border-slate-200 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all"
+                                >
+                                  <Phone className="w-3 h-3 text-emerald-600" />
+                                  <span>Call</span>
+                                </a>
+                                <a
+                                  href={`https://wa.me/${cleanPhone.replace('+', '')}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all"
+                                >
+                                  <span>WhatsApp</span>
+                                </a>
+                              </>
+                            )}
+                            {offer.requesterEmail && (
+                              <a
+                                href={`mailto:${offer.requesterEmail}`}
+                                className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-800 border border-slate-200 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all"
+                              >
+                                <Mail className="w-3 h-3 text-blue-600" />
+                                <span>Email</span>
+                              </a>
+                            )}
+                          </div>
                         </div>
                       </div>
 
-                      <div className="pt-2">
+                      {/* Action Footer */}
+                      <div className="pt-2 border-t border-slate-100">
                         {isAccepted ? (
-                          <div className="w-full py-3 bg-emerald-50 text-emerald-800 rounded-xl font-bold text-xs flex items-center justify-center gap-2 border border-emerald-200">
-                            <CheckCircle2 size={16} />
-                            <span>Offer Accepted & Logged!</span>
+                          <div className="w-full py-3 bg-emerald-50 text-emerald-800 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 border border-emerald-200">
+                            <CheckCircle2 size={16} className="text-emerald-600" />
+                            <span>Offer Accepted & Contact Dispatched!</span>
+                          </div>
+                        ) : isDeclined ? (
+                          <div className="w-full py-2.5 bg-slate-100 text-slate-600 rounded-2xl font-semibold text-xs flex items-center justify-center gap-2 border border-slate-200">
+                            <XCircle size={15} className="text-slate-400" />
+                            <span>Offer Declined ({offer.declineReason || 'Schedule conflict'})</span>
                           </div>
                         ) : (
-                          <button
-                            onClick={() => handleAcceptOffer(offer.id)}
-                            className="w-full py-3 bg-blue-900 hover:bg-blue-950 text-white rounded-xl font-black text-xs shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer"
-                          >
-                            <Check size={16} />
-                            <span>Accept Offer & Notify Manager</span>
-                          </button>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <button
+                              onClick={() => setDeclineOfferModal(offer)}
+                              className="w-full py-2.5 bg-white hover:bg-rose-50 text-rose-700 hover:text-rose-800 border border-rose-200 rounded-2xl font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                            >
+                              <X size={14} />
+                              <span>Decline Offer</span>
+                            </button>
+                            <button
+                              onClick={() => handleAcceptOffer(offer.id)}
+                              className="w-full py-2.5 bg-blue-900 hover:bg-blue-950 text-white rounded-2xl font-black text-xs shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer"
+                            >
+                              <Check size={16} />
+                              <span>Accept Job Offer</span>
+                            </button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -2402,17 +2572,17 @@ export default function PageStaffDashboard() {
       {/* ========================================================================= */}
       {activeTab === 'maintenance' && approvedApp && (
         <div className="space-y-6 pt-3">
-          <div className="p-6 bg-gradient-to-r from-blue-900 via-indigo-900 to-sky-950 text-white rounded-3xl shadow-xl border border-blue-700 relative overflow-hidden mt-2">
-            <div className="absolute -right-10 -bottom-10 w-48 h-48 bg-white/5 rounded-full blur-2xl pointer-events-none" />
+          <div className="p-6 bg-gradient-to-r from-sky-400/20 via-blue-500/15 to-indigo-400/20 backdrop-blur-xl border border-sky-300/50 text-slate-900 rounded-3xl shadow-xl relative overflow-hidden mt-2">
+            <div className="absolute -right-10 -bottom-10 w-48 h-48 bg-sky-200/20 rounded-full blur-2xl pointer-events-none" />
             <div className="relative z-10 space-y-2">
               <div className="flex items-center gap-2">
-                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/30 text-emerald-300 text-[10px] font-black uppercase tracking-wider border border-emerald-400/30">
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 text-[10px] font-black uppercase tracking-wider border border-emerald-300">
                   Active Duty Dispatch
                 </span>
-                <span className="text-xs text-sky-200 font-semibold">• Hostel: {approvedApp.hostelName}</span>
+                <span className="text-xs text-blue-900 font-semibold">• Hostel: {approvedApp.hostelName}</span>
               </div>
-              <h3 className="text-xl font-black text-white tracking-tight">Vocational Repair Desk</h3>
-              <p className="text-xs text-slate-200 max-w-2xl leading-relaxed font-medium">
+              <h3 className="text-xl font-black text-slate-900 tracking-tight">Vocational Repair Desk</h3>
+              <p className="text-xs text-slate-600 max-w-2xl leading-relaxed font-medium">
                 Manage, diagnose, and resolve repair requests assigned to you by the hostel manager. Maintain strict SLA timeframes to avoid delay penalties.
               </p>
             </div>
@@ -3018,6 +3188,80 @@ export default function PageStaffDashboard() {
                     <span>Confirm & Quit Job</span>
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: DECLINE JOB OFFER */}
+      {declineOfferModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b pb-3 border-slate-100">
+              <div className="flex items-center gap-2.5 text-rose-700 font-black text-base">
+                <XCircle className="w-5 h-5 text-rose-600" />
+                <span>Decline Job Offer</span>
+              </div>
+              <button
+                onClick={() => setDeclineOfferModal(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600">
+              You are declining the proposal for <strong>{declineOfferModal.workOffered || 'this task'}</strong> from <strong>{declineOfferModal.requesterName}</strong>. Please select or state your reason:
+            </p>
+
+            <div className="space-y-2">
+              {[
+                'Schedule conflict with current hostel maintenance tasks',
+                'Task location is outside my operating coverage area',
+                'Required materials/equipment are unavailable',
+                'Offered wage is below standard service rate'
+              ].map((reason) => (
+                <button
+                  key={reason}
+                  type="button"
+                  onClick={() => setDeclineOfferReason(reason)}
+                  className={`w-full text-left p-2.5 rounded-xl text-xs font-medium border transition-all cursor-pointer ${
+                    declineOfferReason === reason
+                      ? 'bg-rose-50 border-rose-300 text-rose-950 font-bold'
+                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  {reason}
+                </button>
+              ))}
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-slate-700 block">Custom note to client:</label>
+              <textarea
+                value={declineOfferReason}
+                onChange={(e) => setDeclineOfferReason(e.target.value)}
+                rows={2}
+                className="w-full p-2.5 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-rose-400"
+                placeholder="Type reason here..."
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDeclineOfferModal(null)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+              >
+                Keep Offer
+              </button>
+              <button
+                type="button"
+                onClick={handleDeclineOffer}
+                className="px-5 py-2 text-xs font-black bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow-md transition-all cursor-pointer"
+              >
+                Confirm Decline
               </button>
             </div>
           </div>

@@ -11,6 +11,7 @@ import {
   ArrowRight, 
   ArrowLeft, 
   CheckCircle2, 
+  Clock,
   Building, 
   FileText, 
   UploadCloud, 
@@ -23,9 +24,11 @@ import {
   FileCheck, 
   Compass, 
   Sparkles,
-  ChevronRight
+  ChevronRight,
+  X
 } from 'lucide-react';
 import PineLogo from './PineLogo';
+import { useAuth } from '../context/AuthContext';
 import {
   validateEmail,
   cleanPhoneNumber,
@@ -38,9 +41,106 @@ import {
 
 export default function PageManagerOnboarding() {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   // Active Phase State (1 to 5, 6 for Success)
   const [phase, setPhase] = useState<number>(1);
+
+  // Existing Registered Manager Account State
+  const [existingManagerRecord, setExistingManagerRecord] = useState<any>(null);
+  const [checkingExisting, setCheckingExisting] = useState<boolean>(true);
+  const [showDeleteModal, setShowDeleteModal] = useState<boolean>(false);
+  const [delEmail, setDelEmail] = useState<string>('');
+  const [delPassword, setDelPassword] = useState<string>('');
+  const [delLoading, setDelLoading] = useState<boolean>(false);
+  const [delError, setDelError] = useState<string | null>(null);
+  const [showDelPassword, setShowDelPassword] = useState<boolean>(false);
+
+  // Fetch and check if user already has a recorded Manager account
+  const fetchMyManagerAccount = async () => {
+    try {
+      setCheckingExisting(true);
+      const queryEmail = user?.email || '';
+      const token = localStorage.getItem('pinevela_auth_token') || (user as any)?.token;
+      const headers: any = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(`/api/users/my-registered-accounts?email=${encodeURIComponent(queryEmail)}`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.managerAccount) {
+          setExistingManagerRecord(data.managerAccount);
+          setDelEmail(data.managerAccount.email || queryEmail);
+        } else {
+          setExistingManagerRecord(null);
+        }
+      }
+    } catch (err) {
+      console.warn("Could not check registered manager account status:", err);
+    } finally {
+      setCheckingExisting(false);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchMyManagerAccount();
+  }, [user]);
+
+  // Pre-populate fields from logged-in user if available
+  React.useEffect(() => {
+    if (user) {
+      if (user.name) setFullName(user.name);
+      if (user.email) setEmail(user.email);
+    }
+  }, [user]);
+
+  // Account Deletion Handler
+  const handleDeleteAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!delEmail || !delPassword) {
+      setDelError('Email and password are required.');
+      return;
+    }
+    setDelLoading(true);
+    setDelError(null);
+    try {
+      const res = await fetch('/api/users/delete-registered-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          role: 'manager',
+          email: delEmail.trim(),
+          password: delPassword
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Invalid email or password.');
+      }
+      setToastType('success');
+      setToastMessage(data.message || 'Manager account deleted successfully.');
+      setExistingManagerRecord(null);
+      setShowDeleteModal(false);
+      setDelPassword('');
+      setPhase(1);
+    } catch (err: any) {
+      setDelError(err.message || 'Invalid email or password.');
+    } finally {
+      setDelLoading(false);
+    }
+  };
+
+  // Ensure every phase and page view starts strictly from the top
+  React.useEffect(() => {
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: 'instant'
+    });
+    if (document.body) document.body.scrollTop = 0;
+    if (document.documentElement) document.documentElement.scrollTop = 0;
+  }, [phase]);
+
   const [loadingSubmit, setLoadingSubmit] = useState<boolean>(false);
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false);
@@ -384,7 +484,10 @@ export default function PageManagerOnboarding() {
       {/* Header Bar */}
       <header className="bg-white/80 backdrop-blur-md border-b border-blue-100/50 sticky top-0 z-30 px-6 py-4 shadow-xs">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
+          <div 
+            onClick={() => navigate('/student/dashboard')}
+            className="flex items-center gap-3 cursor-pointer"
+          >
             <PineLogo size={36} hideText={false} />
             <span className="hidden sm:inline-block h-5 w-px bg-slate-200" />
             <span className="hidden sm:inline-block text-xs font-extrabold text-blue-900 uppercase tracking-wider bg-blue-50 px-2.5 py-1 rounded-full border border-blue-100">
@@ -393,11 +496,11 @@ export default function PageManagerOnboarding() {
           </div>
 
           <button
-            onClick={() => navigate('/login')}
-            className="flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-blue-900 bg-slate-100 hover:bg-slate-200 px-3.5 py-2 rounded-xl transition-all cursor-pointer"
+            onClick={() => navigate('/student/dashboard')}
+            className="w-9 h-9 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 transition-all cursor-pointer border border-slate-200"
+            title="Close and return to account"
           >
-            <ArrowLeft size={15} />
-            <span>Back to Login</span>
+            <X size={18} />
           </button>
         </div>
       </header>
@@ -405,7 +508,116 @@ export default function PageManagerOnboarding() {
       {/* Main Content Area */}
       <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-8 flex flex-col justify-center">
         
-        {phase <= 5 ? (
+        {checkingExisting ? (
+          <div className="bg-white rounded-3xl border border-slate-100 shadow-xl p-12 text-center flex flex-col items-center justify-center space-y-4">
+            <div className="w-10 h-10 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+            <p className="text-sm font-bold text-slate-600">Checking Registered Manager Account Status...</p>
+          </div>
+        ) : existingManagerRecord ? (
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl overflow-hidden relative animate-fadeIn">
+            {/* Top Brand Line */}
+            <div className="h-2 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 w-full" />
+            
+            <div className="p-6 sm:p-10 space-y-8">
+              {/* Header Info */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold shadow-sm">
+                    <Building className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black uppercase text-emerald-700 tracking-wider">Recorded Registered Account</span>
+                      <span className="text-[10px] bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded-full border border-slate-200">
+                        Hostel Manager Gateway
+                      </span>
+                    </div>
+                    <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mt-1">
+                      {existingManagerRecord.name}
+                    </h1>
+                    <p className="text-xs text-slate-500 font-medium">
+                      Registered Manager Account under <strong className="text-slate-700">{existingManagerRecord.email}</strong>
+                    </p>
+                  </div>
+                </div>
+
+                {/* Verification Status Badge */}
+                <div className="flex items-center gap-2">
+                  {existingManagerRecord.status === 'Approved' ? (
+                    <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-emerald-50 text-emerald-800 border border-emerald-200 font-extrabold text-xs">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <span>Status: Approved & Active</span>
+                    </div>
+                  ) : existingManagerRecord.status === 'Rejected' ? (
+                    <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-rose-50 text-rose-800 border border-rose-200 font-extrabold text-xs">
+                      <X className="w-4 h-4 text-rose-600" />
+                      <span>Status: Registration Rejected</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-amber-50 text-amber-900 border border-amber-200 font-extrabold text-xs">
+                      <Clock className="w-4 h-4 text-amber-600 animate-pulse" />
+                      <span>Status: Pending Admin Approval</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Account Details Summary Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
+                  <span className="text-[10px] uppercase tracking-wider font-extrabold text-slate-400">Organization / Business</span>
+                  <p className="text-sm font-black text-slate-800">{existingManagerRecord.organizationName}</p>
+                </div>
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
+                  <span className="text-[10px] uppercase tracking-wider font-extrabold text-slate-400">Designated Hostel</span>
+                  <p className="text-sm font-black text-slate-800">{existingManagerRecord.hostelName}</p>
+                </div>
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
+                  <span className="text-[10px] uppercase tracking-wider font-extrabold text-slate-400">National ID Document</span>
+                  <p className="text-sm font-black text-slate-800">{existingManagerRecord.idType} ({existingManagerRecord.idNumber})</p>
+                </div>
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
+                  <span className="text-[10px] uppercase tracking-wider font-extrabold text-slate-400">Contact Phone Number</span>
+                  <p className="text-sm font-black text-slate-800">{existingManagerRecord.phone}</p>
+                </div>
+              </div>
+
+              {/* Account Notice Box */}
+              <div className="p-4 rounded-2xl bg-blue-50/70 border border-blue-100 flex items-start gap-3">
+                <ShieldCheck className="w-5 h-5 text-blue-700 shrink-0 mt-0.5" />
+                <div className="text-xs text-blue-950 leading-relaxed font-medium">
+                  <strong>Single Account Policy Active:</strong> Your manager registration is recorded in our system. You cannot create another manager account while this registration exists. To update or start over with a new account, you can delete your current record below.
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDelEmail(existingManagerRecord.email || user?.email || '');
+                    setShowDeleteModal(true);
+                  }}
+                  className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-black text-xs border border-rose-200 flex items-center justify-center gap-2 cursor-pointer transition-all shadow-xs"
+                >
+                  <X className="w-4 h-4" />
+                  <span>Delete Account & Re-Register</span>
+                </button>
+
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => navigate('/manager/dashboard')}
+                    className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-black text-xs shadow-md flex items-center justify-center gap-2 cursor-pointer transition-all"
+                  >
+                    <span>Go to Manager Console</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : phase <= 5 ? (
           <div className="bg-white rounded-3xl border border-slate-100 shadow-2xl overflow-hidden relative">
             
             {/* Top Brand Line */}
@@ -1168,10 +1380,10 @@ export default function PageManagerOnboarding() {
             </div>
 
             <button
-              onClick={() => navigate('/login')}
+              onClick={() => navigate('/student/dashboard')}
               className="w-full py-4 bg-blue-900 hover:bg-blue-850 text-white font-extrabold text-sm rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
-              <span>Return to Login Screen</span>
+              <span>Return to User Account Home</span>
               <ArrowRight size={18} />
             </button>
           </motion.div>
@@ -1184,6 +1396,94 @@ export default function PageManagerOnboarding() {
       <footer className="text-center py-6 text-[10px] sm:text-xs text-slate-400 border-t border-slate-100 bg-white">
         &copy; 2026 PineVela Residence Solutions. Manager Onboarding Protocol Enforced with Cryptographic Verification.
       </footer>
+
+      {/* Account Deletion Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-slate-100 space-y-6 relative">
+            <button
+              type="button"
+              onClick={() => setShowDeleteModal(false)}
+              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 flex items-center justify-center cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="space-y-2">
+              <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center font-bold">
+                <Lock className="w-6 h-6" />
+              </div>
+              <h3 className="text-lg font-black text-slate-900">Authenticate Account Deletion</h3>
+              <p className="text-xs text-slate-500 leading-relaxed font-medium">
+                Enter the email address and password for this Manager account to permanently delete it from our database and allow fresh registration.
+              </p>
+            </div>
+
+            {delError && (
+              <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold flex items-center gap-2">
+                <span>⚠️</span>
+                <span>{delError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleDeleteAccount} className="space-y-4">
+              <div>
+                <label className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1.5">Account Email</label>
+                <input
+                  type="email"
+                  value={delEmail}
+                  onChange={(e) => setDelEmail(e.target.value)}
+                  required
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-rose-500"
+                  placeholder="e.g. manager@hostel.com"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1.5">Account Password</label>
+                <div className="relative">
+                  <input
+                    type={showDelPassword ? 'text' : 'password'}
+                    value={delPassword}
+                    onChange={(e) => setDelPassword(e.target.value)}
+                    required
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-rose-500 pr-10"
+                    placeholder="Enter your account password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowDelPassword(!showDelPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    {showDelPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteModal(false)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={delLoading}
+                  className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs shadow-md flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {delLoading ? (
+                    <span>Deleting...</span>
+                  ) : (
+                    <span>Confirm & Delete Account</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );

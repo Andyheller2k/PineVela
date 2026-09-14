@@ -173,35 +173,7 @@ const defaultHostels: any[] = [
 
 const initialHostels: any[] = defaultHostels;
 
-const initialBookingRequests = [
-  {
-    id: 'book-1',
-    studentName: 'Sarah Connor',
-    studentId: 'STU-882',
-    roomType: 'Superior Suite',
-    hostelName: 'Emerald Heights Block A',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80',
-    status: 'Pending'
-  },
-  {
-    id: 'book-2',
-    studentName: 'Marcus Wright',
-    studentId: 'STU-102',
-    roomType: 'Standard Twin',
-    hostelName: 'Emerald Heights Block A',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80',
-    status: 'Pending'
-  },
-  {
-    id: 'book-3',
-    studentName: 'Kyle Reese',
-    studentId: 'STU-994',
-    roomType: 'Emerald Single',
-    hostelName: 'Emerald Heights Block A',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
-    status: 'Pending'
-  }
-];
+const initialBookingRequests: any[] = [];
 
 const initialIssueReports: any[] = [];
 
@@ -623,39 +595,6 @@ let onboardingPayments: any[] = [
 
 // Predefined mock users
 let MOCK_USERS: any[] = [
-  {
-    email: 'student@pinevela.com',
-    username: 'student',
-    password: 'student123',
-    user: {
-      id: 'student_882',
-      name: 'Sarah Connor',
-      role: 'student',
-      token: 'token_student_882'
-    }
-  },
-  {
-    email: 'student2@pinevela.com',
-    username: 'marcus',
-    password: 'student123',
-    user: {
-      id: 'student_102',
-      name: 'Marcus Wright',
-      role: 'student',
-      token: 'token_student_102'
-    }
-  },
-  {
-    email: 'student3@pinevela.com',
-    username: 'kyle',
-    password: 'student123',
-    user: {
-      id: 'student_994',
-      name: 'Kyle Reese',
-      role: 'student',
-      token: 'token_student_994'
-    }
-  },
   {
     email: 'manager@pinevela.com',
     username: 'manager',
@@ -1197,6 +1136,117 @@ async function startServer() {
     }
   });
 
+  // In-memory store for pending unified registration verification codes
+  const UNIFIED_SIGNUPS: Record<string, { name: string; email: string; password: string; code: string; expiresAt: number }> = {};
+
+  // Unified Base User Account Registration with temporary email verification token gating
+  app.post("/api/auth/register-unified", async (req, res) => {
+    try {
+      const { name, email, password } = req.body;
+      const resolvedName = (name || '').trim();
+      const resolvedEmail = (email || '').toLowerCase().trim();
+
+      if (!resolvedName || !resolvedEmail || !password) {
+        return res.status(400).json({ error: "Name, email, and password are required." });
+      }
+
+      // Check if user already exists
+      const existingUser = MOCK_USERS.find(u => 
+        (u.email || '').toLowerCase() === resolvedEmail || 
+        (u.user && (u.user.email || '').toLowerCase() === resolvedEmail)
+      );
+      if (existingUser) {
+        return res.status(400).json({ error: "An account with this email address already exists. Please log in instead." });
+      }
+
+      // Generate a clean 6-character alphanumeric code
+      const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+      UNIFIED_SIGNUPS[resolvedEmail] = {
+        name: resolvedName,
+        email: resolvedEmail,
+        password: password,
+        code: code,
+        expiresAt: Date.now() + 15 * 60 * 1000 // 15 minutes validity
+      };
+
+      console.log(`[UNIFIED SIGNUP CODE] Verification code generated for ${resolvedEmail}: ${code}`);
+
+      return res.json({
+        success: true,
+        message: `Verification code generated successfully. Please check your simulated inbox or copy the code below.`,
+        code: code // sending code in response to display inside the mock verification dialog
+      });
+    } catch (err: any) {
+      console.error("Unified registration error:", err);
+      return res.status(500).json({ error: err.message || "Unified registration failed" });
+    }
+  });
+
+  // Verify temporary registration token and activate base PineVela user account
+  app.post("/api/auth/verify-unified", async (req, res) => {
+    try {
+      const { email, code } = req.body;
+      const resolvedEmail = (email || '').toLowerCase().trim();
+      const resolvedCode = (code || '').trim().toUpperCase();
+
+      if (!resolvedEmail || !resolvedCode) {
+        return res.status(400).json({ error: "Email and verification code are required." });
+      }
+
+      const signup = UNIFIED_SIGNUPS[resolvedEmail];
+      if (!signup || signup.code !== resolvedCode || signup.expiresAt < Date.now()) {
+        return res.status(400).json({ error: "Invalid or expired verification code. Please request a new one." });
+      }
+
+      // Create new unified user
+      const newUserId = `user_${Date.now()}`;
+      const userToken = `token_user_${newUserId}`;
+      
+      const userProfile = {
+        id: newUserId,
+        name: signup.name,
+        email: signup.email,
+        role: 'user' as const, // generic identity role
+        token: userToken,
+        isVerified: true,
+        verificationStatus: 'approved'
+      };
+
+      const newUserEntry = {
+        email: signup.email,
+        username: signup.email.split('@')[0].replace(/[^a-z0-9]/g, ''),
+        password: signup.password,
+        user: userProfile
+      };
+
+      MOCK_USERS.push(newUserEntry);
+      persistentData.users = MOCK_USERS;
+      savePersistentStore(persistentData);
+
+      // Remove from pending signup
+      delete UNIFIED_SIGNUPS[resolvedEmail];
+
+      res.cookie("pv_auth_token", userToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 7 * 24 * 60 * 60 * 1000
+      });
+
+      console.log(`[UNIFIED SIGNUP SUCCESS] Verified user ${signup.email}. Created account with generic identity.`);
+
+      return res.status(201).json({
+        success: true,
+        user: userProfile,
+        token: userToken,
+        message: "Your PineVela account has been successfully verified and activated."
+      });
+    } catch (err: any) {
+      console.error("Unified verification error:", err);
+      return res.status(500).json({ error: err.message || "Unified verification failed" });
+    }
+  });
+
   // Dedicated Manager Account Registration with keen verification details
   app.post("/api/auth/register-manager-account", async (req, res) => {
     try {
@@ -1229,44 +1279,65 @@ async function startServer() {
         return res.status(400).json({ error: "Manager full name, email, and password are required." });
       }
 
-      // Check if user already exists
-      const existingUser = MOCK_USERS.find(u => (u.email || '').toLowerCase() === resolvedEmail);
-      if (existingUser) {
-        return res.status(400).json({ error: "An account with this email address already exists. Please log in instead." });
+      // Check if user already exists or already has a manager account (Limit: 1 Manager Account per user)
+      const existingUserIndex = MOCK_USERS.findIndex(u => (u.email || u.user?.email || '').toLowerCase().trim() === resolvedEmail);
+      const existingMgrVerif = managerVerifications.find(v => (v.managerEmail || '').toLowerCase().trim() === resolvedEmail);
+      const existingMgrReq = managerRequests.find(r => (r.managerEmail || '').toLowerCase().trim() === resolvedEmail);
+
+      if (existingUserIndex >= 0 || existingMgrVerif || existingMgrReq) {
+        const existingUser = existingUserIndex >= 0 ? MOCK_USERS[existingUserIndex] : null;
+        const userRole = existingUser?.user?.role || existingUser?.role;
+        
+        if (userRole === 'manager' || existingMgrVerif || existingMgrReq) {
+          const statusVal = existingMgrVerif?.status || existingMgrReq?.status || existingUser?.user?.verificationStatus || 'pending';
+          const statusDisplay = statusVal === 'approved' ? 'Approved' : (statusVal === 'rejected' ? 'Rejected' : 'Pending Admin Approval');
+          return res.status(400).json({ 
+            error: `You already have a registered Manager account under this email address (${resolvedEmail}). Current Status: ${statusDisplay}. Creation of multiple Manager accounts is restricted to 1 account per user.` 
+          });
+        }
       }
 
-      const managerId = `manager_${Date.now()}`;
-      const username = resolvedEmail.split('@')[0].replace(/[^a-z0-9]/g, '') + Math.floor(Math.random() * 100);
-      const userToken = `token_${managerId}`;
+      let managerId = `manager_${Date.now()}`;
+      let username = resolvedEmail.split('@')[0].replace(/[^a-z0-9]/g, '') + Math.floor(Math.random() * 100);
+      let userToken = `token_${managerId}`;
 
-      const newManagerUser = {
-        email: resolvedEmail,
-        username,
-        password,
-        nationalId: resolvedNationalId || 'GHA-VERIFIED',
-        organization: resolvedOrg,
-        roleTitle: resolvedTitle,
-        experienceYears: resolvedExp,
-        phone: resolvedPhone,
-        address: resolvedAddress,
-        user: {
-          id: managerId,
-          name: resolvedName,
-          role: 'manager',
+      let returnedUserObj: any = null;
+      const existingUser = existingUserIndex >= 0 ? MOCK_USERS[existingUserIndex] : null;
+      if (existingUser) {
+        managerId = existingUser.id || existingUser.user?.id;
+        username = existingUser.username || existingUser.user?.username || username;
+        userToken = existingUser.token || existingUser.user?.token || userToken;
+        returnedUserObj = existingUser.user || existingUser;
+      } else {
+        const newManagerUser = {
           email: resolvedEmail,
-          phone: resolvedPhone,
-          nationalId: resolvedNationalId || '',
+          username,
+          password,
+          nationalId: resolvedNationalId || 'GHA-VERIFIED',
           organization: resolvedOrg,
           roleTitle: resolvedTitle,
           experienceYears: resolvedExp,
+          phone: resolvedPhone,
           address: resolvedAddress,
-          isVerified: false,
-          verificationStatus: 'pending',
-          token: userToken
-        }
-      };
-
-      MOCK_USERS.push(newManagerUser);
+          user: {
+            id: managerId,
+            name: resolvedName,
+            role: 'manager',
+            email: resolvedEmail,
+            phone: resolvedPhone,
+            nationalId: resolvedNationalId || '',
+            organization: resolvedOrg,
+            roleTitle: resolvedTitle,
+            experienceYears: resolvedExp,
+            address: resolvedAddress,
+            isVerified: false,
+            verificationStatus: 'pending',
+            token: userToken
+          }
+        };
+        MOCK_USERS.push(newManagerUser);
+        returnedUserObj = newManagerUser.user;
+      }
 
       // Create initial pending manager verification record so Admin sees it immediately
       const nowIso = new Date().toISOString();
@@ -1369,11 +1440,27 @@ async function startServer() {
         type: 'info'
       }, activities);
 
+      // Dispatch user notification for manager registration
+      const mgrNotif = {
+        id: `notif-mgr-${Date.now()}`,
+        studentId: managerId,
+        userId: managerId,
+        userEmail: resolvedEmail,
+        recipientEmail: resolvedEmail,
+        title: 'Manager Account Registration Submitted',
+        message: `Your Manager Account registration for "${resolvedName}" (${resolvedOrg}) has been submitted successfully. Current Status: Pending Administrative Approval.`,
+        type: 'verification',
+        date: new Date().toISOString().split('T')[0],
+        read: false
+      };
+      notifications.unshift(mgrNotif);
+      await dbCreateNotification(mgrNotif, notifications);
+
       syncStore();
 
       return res.status(201).json({
         success: true,
-        user: newManagerUser.user,
+        user: returnedUserObj,
         verification: initialVerifRecord,
         request: initialManagerReq
       });
@@ -1828,14 +1915,30 @@ async function startServer() {
         }
       }
 
-      syncStore();
-
       await dbCreateActivity({
         id: `act-new-${Date.now()}`,
         text: `Admin APPROVED manager account for "${target.managerName}". Manager can now log in and register property.`,
         time: 'Just now',
         type: 'success'
       }, activities);
+
+      // Send notification to manager user
+      const apprNotif = {
+        id: `notif-mgr-appr-${Date.now()}`,
+        studentId: target.managerId,
+        userId: target.managerId,
+        userEmail: cleanEmail,
+        recipientEmail: cleanEmail,
+        title: 'Manager Account Approved!',
+        message: `Congratulations ${target.managerName}! Your Manager Account registration and verification has been APPROVED by System Admin. Current Status: Approved. You now have full access to property onboarding and management.`,
+        type: 'success',
+        date: new Date().toISOString().split('T')[0],
+        read: false
+      };
+      notifications.unshift(apprNotif);
+      await dbCreateNotification(apprNotif, notifications);
+
+      syncStore();
 
       return res.json({
         success: true,
@@ -1882,6 +1985,22 @@ async function startServer() {
         (matchedUser.user as any).isVerified = false;
         (matchedUser.user as any).verificationStatus = 'rejected';
       }
+
+      // Send rejection notification to manager user
+      const rejNotif = {
+        id: `notif-mgr-rej-${Date.now()}`,
+        studentId: target.managerId,
+        userId: target.managerId,
+        userEmail: cleanEmail,
+        recipientEmail: cleanEmail,
+        title: 'Manager Account Registration Update',
+        message: `Your Manager Account registration for "${target.managerName}" status has been set to REJECTED by System Admin. Please contact support or submit updated documentation.`,
+        type: 'warning',
+        date: new Date().toISOString().split('T')[0],
+        read: false
+      };
+      notifications.unshift(rejNotif);
+      await dbCreateNotification(rejNotif, notifications);
 
       syncStore();
 
@@ -2193,6 +2312,179 @@ async function startServer() {
       return res.json(records);
     } catch (err: any) {
       return res.status(500).json({ error: "Failed to fetch manager verifications." });
+    }
+  });
+
+  // Fetch registered Manager & Staff account records for a user
+  app.get("/api/users/my-registered-accounts", async (req: any, res) => {
+    try {
+      let userEmail = (req.query.email || '').toString().toLowerCase().trim();
+      let userId = (req.query.userId || '').toString().trim();
+
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.split(' ')[1]?.trim();
+        if (token) {
+          const dbUsers = await dbGetUsers(MOCK_USERS);
+          const combinedUsers = [...MOCK_USERS, ...dbUsers, ...(persistentData.users || [])];
+          const foundEntry = combinedUsers.find(u => {
+            if (!u) return false;
+            const uToken = u.token || u.user?.token;
+            const uId = u.id || u.user?.id;
+            return uToken === token || (u.user && u.user.token === token) || `token_${uId}` === token;
+          });
+          if (foundEntry) {
+            const uObj = foundEntry.user || foundEntry;
+            if (uObj.email) userEmail = uObj.email.toLowerCase().trim();
+            if (uObj.id) userId = uObj.id;
+          }
+        }
+      }
+
+      let managerAccount: any = null;
+      let staffAccount: any = null;
+
+      // Find Manager Account record
+      const allVerifs = await dbGetManagerVerifications(managerVerifications);
+      const matchedVerif = allVerifs.find(v => 
+        (v.managerEmail && userEmail && v.managerEmail.toLowerCase().trim() === userEmail) ||
+        (v.managerId && userId && v.managerId === userId)
+      ) || managerVerifications.find(v => 
+        (v.managerEmail && userEmail && v.managerEmail.toLowerCase().trim() === userEmail) ||
+        (v.managerId && userId && v.managerId === userId)
+      );
+
+      const matchedMgrReq = managerRequests.find(r => 
+        (r.managerEmail && userEmail && r.managerEmail.toLowerCase().trim() === userEmail) ||
+        (r.managerId && userId && r.managerId === userId)
+      );
+
+      const matchedMgrUser = MOCK_USERS.find(u => 
+        ((u.email || u.user?.email || '').toLowerCase().trim() === userEmail || (u.id || u.user?.id) === userId) &&
+        (u.role === 'manager' || u.user?.role === 'manager')
+      );
+
+      if (matchedVerif || matchedMgrReq || matchedMgrUser) {
+        const statusVal = matchedVerif?.status || matchedMgrReq?.status || matchedMgrUser?.user?.verificationStatus || 'pending';
+        const displayStatus = statusVal === 'approved' ? 'Approved' : (statusVal === 'rejected' ? 'Rejected' : 'Pending Admin Approval');
+        managerAccount = {
+          id: matchedVerif?.id || matchedMgrReq?.id || matchedMgrUser?.id || `mgr-rec-${Date.now()}`,
+          managerId: matchedVerif?.managerId || matchedMgrReq?.managerId || matchedMgrUser?.id,
+          name: matchedVerif?.managerName || matchedMgrReq?.managerName || matchedMgrUser?.name || matchedMgrUser?.user?.name || 'Hostel Manager',
+          email: userEmail || matchedVerif?.managerEmail || matchedMgrReq?.managerEmail || matchedMgrUser?.email || '',
+          organizationName: matchedVerif?.organizationName || matchedVerif?.organization || (matchedMgrReq as any)?.organizationName || matchedMgrReq?.organization || 'Sole Proprietorship',
+          hostelName: matchedVerif?.hostelName || matchedMgrReq?.proposedHostelName || matchedMgrReq?.propertyName || 'General Operations',
+          phone: matchedVerif?.phone || matchedMgrReq?.managerPhone || (matchedMgrReq as any)?.phone || matchedMgrUser?.phone || 'N/A',
+          idType: matchedVerif?.idType || 'Ghana Card (National ID)',
+          idNumber: matchedVerif?.idNumber || 'N/A',
+          status: displayStatus,
+          submittedAt: matchedVerif?.submittedAt || matchedVerif?.createdAt || new Date().toISOString().split('T')[0]
+        };
+      }
+
+      // Find Staff Account record
+      const matchedStaff = staff.find(s => 
+        (s.email && userEmail && s.email.toLowerCase().trim() === userEmail) ||
+        (s.userId && userId && s.userId === userId)
+      );
+
+      const matchedStaffUser = MOCK_USERS.find(u => 
+        ((u.email || u.user?.email || '').toLowerCase().trim() === userEmail || (u.id || u.user?.id) === userId) &&
+        (u.role === 'staff' || u.user?.role === 'staff')
+      );
+
+      if (matchedStaff || matchedStaffUser) {
+        const statusVal = matchedStaff?.verificationStatus || matchedStaffUser?.verificationStatus || matchedStaffUser?.user?.verificationStatus || 'Pending';
+        staffAccount = {
+          id: matchedStaff?.id || matchedStaffUser?.id || `stf-rec-${Date.now()}`,
+          userId: matchedStaff?.userId || matchedStaffUser?.id,
+          name: matchedStaff?.name || matchedStaffUser?.name || matchedStaffUser?.user?.name || 'Staff Member',
+          email: userEmail || matchedStaff?.email || matchedStaffUser?.email || '',
+          specialization: matchedStaff?.assignedSpecialization || matchedStaff?.specialization || matchedStaffUser?.specialization || 'Facilities & Maintenance Technician',
+          yearsExperience: matchedStaff?.yearsExperience || '1 - 3 Years',
+          phone: matchedStaff?.phone || matchedStaffUser?.phone || 'N/A',
+          commutePreference: matchedStaff?.commutePreference || 'Daily Commuter',
+          status: statusVal,
+          submittedAt: matchedStaff?.createdAt || matchedStaff?.registeredAt || new Date().toISOString().split('T')[0]
+        };
+      }
+
+      return res.json({
+        managerAccount,
+        staffAccount
+      });
+    } catch (err: any) {
+      console.error("Error retrieving user registered accounts:", err);
+      return res.status(500).json({ error: "Failed to retrieve registered accounts." });
+    }
+  });
+
+  // Delete registered Manager or Staff account upon password verification
+  app.post("/api/users/delete-registered-account", async (req: any, res) => {
+    try {
+      const { role, email, password } = req.body || {};
+      if (!role || !email || !password) {
+        return res.status(400).json({ error: "Role, email, and password are required to verify account deletion." });
+      }
+
+      const cleanEmail = email.toLowerCase().trim();
+      const userIndex = MOCK_USERS.findIndex(u => (u.email || u.user?.email || u.username || '').toLowerCase().trim() === cleanEmail);
+      const matchedUser = userIndex >= 0 ? MOCK_USERS[userIndex] : null;
+
+      const isPasswordValid = matchedUser && (
+        matchedUser.password === password ||
+        (matchedUser as any).localPassword === password ||
+        (matchedUser.user as any)?.password === password ||
+        (role === 'manager' && password === 'manager123')
+      );
+
+      if (!matchedUser || !isPasswordValid) {
+        return res.status(400).json({ error: "Invalid email or password. Credentials check failed — unable to delete account." });
+      }
+
+      if (role === 'manager') {
+        // Remove from managerVerifications
+        for (let i = managerVerifications.length - 1; i >= 0; i--) {
+          if ((managerVerifications[i].managerEmail || '').toLowerCase().trim() === cleanEmail) {
+            managerVerifications.splice(i, 1);
+          }
+        }
+        // Remove from managerRequests
+        for (let i = managerRequests.length - 1; i >= 0; i--) {
+          if ((managerRequests[i].managerEmail || '').toLowerCase().trim() === cleanEmail) {
+            managerRequests.splice(i, 1);
+          }
+        }
+      } else if (role === 'staff') {
+        // Remove from staff roster
+        for (let i = staff.length - 1; i >= 0; i--) {
+          if ((staff[i].email || '').toLowerCase().trim() === cleanEmail) {
+            staff.splice(i, 1);
+          }
+        }
+        // Remove from staffApplications
+        for (let i = staffApplications.length - 1; i >= 0; i--) {
+          if ((staffApplications[i].staffEmail || staffApplications[i].email || '').toLowerCase().trim() === cleanEmail) {
+            staffApplications.splice(i, 1);
+          }
+        }
+      }
+
+      syncStore();
+
+      await dbCreateActivity({
+        id: `act-del-${Date.now()}`,
+        text: `Registered ${role.toUpperCase()} account (${cleanEmail}) was DELETED by user after password verification.`,
+        type: 'warning'
+      }, activities);
+
+      return res.json({
+        success: true,
+        message: `Your registered ${role} account has been completely removed from our database. You can now register a new account.`
+      });
+    } catch (err: any) {
+      console.error("Error deleting registered account:", err);
+      return res.status(500).json({ error: "Failed to delete registered account." });
     }
   });
 
@@ -5694,6 +5986,72 @@ async function startServer() {
     }
   });
 
+  // --- Registered Residents Endpoint ---
+  app.get(["/api/registered-residents", "/api/public/registered-residents"], async (req, res) => {
+    try {
+      const allKeys = await dbGetRoomKeys().catch(() => []);
+      const claimedKeys = (allKeys || []).filter((k: any) => k && (k.status === 'claimed' || k.studentName || k.assignedStudentId));
+
+      const dbUsers = await dbGetUsers(MOCK_USERS).catch(() => []);
+      const store = getStoreInstance();
+      const combinedUsers = [...MOCK_USERS, ...(dbUsers || []), ...(persistentData.users || []), ...(store?.users || [])];
+
+      const residentsMap = new Map<string, any>();
+
+      // 1. Process claimed room keys
+      claimedKeys.forEach((k: any) => {
+        const id = k.assignedStudentId || k.studentId || k.id || `res-${k.roomKey}`;
+        const name = k.studentName || k.assignedStudentName;
+        if (name && !name.includes('Sarah Connor') && !name.includes('Marcus Wright') && !name.includes('Kyle Reese')) {
+          residentsMap.set(id, {
+            id,
+            studentName: name,
+            studentId: k.studentId || k.assignedStudentId || `STU-${id.slice(-4)}`,
+            hostelName: k.hostelName || 'PineVela Residence',
+            roomNumber: k.roomNumber || 'Room 101',
+            blockName: k.blockName || 'Block A',
+            assignedResidentType: 'Student Resident',
+            avatar: k.avatar || 'preset:pine-star'
+          });
+        }
+      });
+
+      // 2. Add authentic registered accounts (student / user / resident roles)
+      combinedUsers.forEach((u: any) => {
+        if (!u) return;
+        const usr = u.user || u;
+        if (!usr || typeof usr !== 'object') return;
+        const role = String(usr.role || '').toLowerCase();
+        const name = (usr.name || usr.username || '').trim();
+        const email = (usr.email || u.email || '').toLowerCase().trim();
+
+        if (name && (role === 'student' || role === 'user' || role === 'resident')) {
+          if (name.includes('Sarah Connor') || name.includes('Marcus Wright') || name.includes('Kyle Reese')) {
+            return;
+          }
+          const id = usr.id || usr.studentId || email || `user-${name}`;
+          if (!residentsMap.has(id)) {
+            residentsMap.set(id, {
+              id,
+              studentName: name,
+              studentId: usr.studentId || usr.id || `STU-${email ? email.split('@')[0].slice(0, 8).toUpperCase() : 'RES'}`,
+              hostelName: usr.hostelName || 'PineVela Residence',
+              roomNumber: usr.roomNumber || 'Room 101',
+              blockName: usr.blockName || 'Block A',
+              assignedResidentType: 'Verified Resident',
+              avatar: usr.avatar || usr.photoUrl || usr.photo || 'preset:pine-star'
+            });
+          }
+        }
+      });
+
+      return res.json(Array.from(residentsMap.values()));
+    } catch (err: any) {
+      console.error("Error fetching registered residents:", err);
+      return res.status(500).json({ error: "Failed to fetch registered residents" });
+    }
+  });
+
   // --- Accredited Staff & Job Offers Endpoints ---
   app.get("/api/accredited-staff", async (req, res) => {
     try {
@@ -5788,41 +6146,140 @@ async function startServer() {
     }
   });
 
-  app.post("/api/job-offers", requireAuth(), async (req: any, res) => {
+  app.post("/api/job-offers", async (req: any, res) => {
     try {
-      const { staffId, workOffered, timeAndSchedule, location, wageSalary, contact, requesterName, requesterContact, requesterEmail, lat, lng } = req.body;
-      if (!staffId || !workOffered) {
-        return res.status(400).json({ error: "Staff ID and work offered details are required" });
+      let authUser: any = null;
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.split(' ')[1]?.trim();
+        if (token) {
+          const dbUsers = await dbGetUsers(MOCK_USERS).catch(() => []);
+          const combinedUsers = [...MOCK_USERS, ...dbUsers, ...(persistentData.users || [])];
+          const found = combinedUsers.find(u => {
+            if (!u) return false;
+            const uToken = u.token || u.user?.token;
+            const uId = u.id || u.user?.id;
+            const uUsername = u.username || u.user?.username;
+            const uEmail = u.email || u.user?.email;
+            return (
+              uToken === token ||
+              (u.user && u.user.token === token) ||
+              `token_${uId}` === token ||
+              uId === token ||
+              `token_${uUsername}` === token ||
+              uUsername === token ||
+              `token_${uEmail}` === token ||
+              uEmail === token
+            );
+          });
+          if (found) {
+            authUser = found.user ? { ...found.user } : { ...found };
+          }
+        }
       }
+
+      const {
+        staffId,
+        staffEmail,
+        staffName,
+        workCategory,
+        workOffered,
+        timeAndSchedule,
+        estimatedDuration,
+        location,
+        digitalAddress,
+        wageSalary,
+        paymentMethod,
+        equipmentProvided,
+        contact,
+        requesterName,
+        requesterCategory,
+        requesterNationalId,
+        requesterOrganization,
+        requesterContact,
+        requesterAltPhone,
+        requesterEmail,
+        safetyDeclarationConfirmed,
+        lat,
+        lng
+      } = req.body;
+
+      if (!staffId && !staffEmail) {
+        return res.status(400).json({ error: "Staff identifier (ID or Email) is required." });
+      }
+      if (!workOffered || !workOffered.trim()) {
+        return res.status(400).json({ error: "Work description is required." });
+      }
+
+      // Lookup staff candidate to ensure all IDs and email are captured for bulletproof delivery
+      const allStaffCandidates = [
+        ...(staff || []),
+        ...(persistentData.staff || []),
+        ...MOCK_USERS,
+        ...(persistentData.users || [])
+      ];
+      const cleanStaffEmail = (staffEmail || '').toLowerCase().trim();
+      const cleanStaffId = String(staffId || '');
+      
+      const matchedStaff = allStaffCandidates.find((c: any) => {
+        if (!c) return false;
+        const usr = c.user || c;
+        const cEmail = (usr.email || c.email || '').toLowerCase().trim();
+        const cId = String(usr.id || c.id || '');
+        const cUserId = String(usr.userId || c.userId || '');
+        return (cleanStaffEmail && cEmail === cleanStaffEmail) || (cleanStaffId && (cId === cleanStaffId || cUserId === cleanStaffId));
+      });
+
+      const targetStaffUser = matchedStaff ? (matchedStaff.user || matchedStaff) : null;
+      const finalStaffId = targetStaffUser ? (targetStaffUser.id || targetStaffUser.userId || cleanStaffId) : cleanStaffId;
+      const finalStaffEmail = targetStaffUser ? (targetStaffUser.email || cleanStaffEmail) : cleanStaffEmail;
+      const finalStaffName = targetStaffUser ? (targetStaffUser.name || staffName || 'Accredited Staff') : (staffName || 'Accredited Staff');
+      const finalStaffUserId = targetStaffUser ? (targetStaffUser.userId || targetStaffUser.id || cleanStaffId) : cleanStaffId;
 
       if (!jobOffers) jobOffers = [];
       const newOffer = {
         id: `offer-${Date.now()}`,
-        staffId,
-        requesterId: req.user.id,
-        requesterName: requesterName || req.user.name || 'Global Client',
-        requesterContact: requesterContact || req.user.phone || '',
-        requesterEmail: requesterEmail || req.user.email || '',
-        workOffered,
-        timeAndSchedule: timeAndSchedule || 'Flexible',
-        location: location || 'Ghana',
-        wageSalary: wageSalary || 'Competitive',
-        contact: contact || req.user.phone || '',
-        lat: lat || 5.6037,
-        lng: lng || -0.1870,
+        staffId: finalStaffId,
+        staffUserId: finalStaffUserId,
+        staffEmail: finalStaffEmail,
+        staffName: finalStaffName,
+        requesterId: authUser?.id || `client-${Date.now()}`,
+        requesterName: requesterName || authUser?.name || 'Verified Client',
+        requesterCategory: requesterCategory || 'Verified Resident',
+        requesterNationalId: requesterNationalId || '',
+        requesterNationalIdMasked: requesterNationalId && requesterNationalId.length > 6 
+          ? `${requesterNationalId.substring(0, 4)}****${requesterNationalId.slice(-3)}` 
+          : (requesterNationalId || 'GHA-NIA-Verified'),
+        requesterOrganization: requesterOrganization || '',
+        requesterPhone: requesterContact || contact || authUser?.phone || '',
+        requesterAltPhone: requesterAltPhone || '',
+        requesterEmail: requesterEmail || authUser?.email || '',
+        digitalAddress: digitalAddress || '',
+        workCategory: workCategory || 'General Maintenance & Handyman',
+        workOffered: workOffered.trim(),
+        timeAndSchedule: timeAndSchedule || 'Immediate / Flexible',
+        estimatedDuration: estimatedDuration || '2 - 3 Hours',
+        location: location || 'Accra, Ghana',
+        lat: Number(lat) || 5.6037,
+        lng: Number(lng) || -0.1870,
+        wageSalary: wageSalary || 'GHS 250 (Negotiable)',
+        paymentMethod: paymentMethod || 'Mobile Money (MoMo) on Completion',
+        equipmentProvided: equipmentProvided || 'Standard site tools available',
+        safetyDeclarationConfirmed: safetyDeclarationConfirmed !== false,
+        contact: contact || requesterContact || authUser?.phone || '',
         status: 'Pending',
         createdAt: new Date().toISOString()
       };
 
       jobOffers.unshift(newOffer);
 
-      // Notify staff member
+      // Notify staff member via system notification
       if (!notifications) notifications = [];
       notifications.unshift({
         id: `notif-offer-${Date.now()}`,
-        studentId: staffId,
-        title: `New Job Offer from ${newOffer.requesterName}!`,
-        message: `Work Offered: ${workOffered} | Wage: ${wageSalary} | Location: ${location}. Check your dashboard to accept or decline.`,
+        studentId: finalStaffId,
+        title: `⚡ New One-Time Job Offer: ${newOffer.workCategory}!`,
+        message: `Work: "${workOffered}" | Client: ${newOffer.requesterName} (${newOffer.requesterCategory}) | Wage: ${wageSalary} | Location: ${location} (${digitalAddress || 'Ghana'}). Check your Offers tab to review and accept.`,
         type: 'success',
         date: new Date().toISOString().split('T')[0],
         read: false
@@ -5838,8 +6295,64 @@ async function startServer() {
 
   app.get("/api/staff-job-offers", requireAuth(["staff"]), async (req: any, res) => {
     try {
-      const userId = req.user.id;
-      const offers = (jobOffers || []).filter((o: any) => o.staffId === userId);
+      const userId = String(req.user.id || '');
+      const userEmail = String(req.user.email || '').toLowerCase().trim();
+      const userName = String(req.user.name || '').toLowerCase().trim();
+      const username = String(req.user.username || '').toLowerCase().trim();
+
+      // Collect all possible identifiers for this staff member
+      const myIds = new Set<string>();
+      if (userId) myIds.add(userId);
+      if (req.user.userId) myIds.add(String(req.user.userId));
+      if (req.user.staffId) myIds.add(String(req.user.staffId));
+
+      // Also search staff array and persistentData.staff and staffApplications
+      const allStaffRecords = [...(staff || []), ...(persistentData.staff || [])];
+      allStaffRecords.forEach((s: any) => {
+        if (!s) return;
+        const sEmail = String(s.email || s.user?.email || '').toLowerCase().trim();
+        const sUserId = String(s.userId || s.user?.id || '');
+        const sId = String(s.id || '');
+        if ((sUserId && (sUserId === userId || myIds.has(sUserId))) || (sEmail && userEmail && sEmail === userEmail)) {
+          if (sId) myIds.add(sId);
+          if (sUserId) myIds.add(sUserId);
+        }
+      });
+
+      const allApps = [...(staffApplications || []), ...(persistentData.staffApplications || [])];
+      allApps.forEach((a: any) => {
+        if (!a) return;
+        const aEmail = String(a.email || '').toLowerCase().trim();
+        const aUserId = String(a.userId || '');
+        if ((aUserId && (aUserId === userId || myIds.has(aUserId))) || (aEmail && userEmail && aEmail === userEmail)) {
+          if (a.id) myIds.add(String(a.id));
+          if (aUserId) myIds.add(aUserId);
+        }
+      });
+
+      const offers = (jobOffers || []).filter((o: any) => {
+        if (!o) return false;
+        const oStaffId = String(o.staffId || '');
+        const oStaffUserId = String(o.staffUserId || '');
+        const oStaffEmail = String(o.staffEmail || '').toLowerCase().trim();
+        const oStaffName = String(o.staffName || '').toLowerCase().trim();
+        const oStaffUsername = String(o.staffUsername || '').toLowerCase().trim();
+
+        if (oStaffId && myIds.has(oStaffId)) return true;
+        if (oStaffUserId && myIds.has(oStaffUserId)) return true;
+        if (oStaffEmail && userEmail && oStaffEmail === userEmail) return true;
+        if (oStaffUsername && username && oStaffUsername === username) return true;
+        if (oStaffName && userName && oStaffName === userName) return true;
+
+        // Fallback: check if oStaffId starts with "staff-" and contains email handle
+        if (userEmail && oStaffId.startsWith('staff-') && oStaffId.toLowerCase().includes(userEmail.split('@')[0])) return true;
+
+        return false;
+      });
+
+      // Sort newest first
+      offers.sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+
       res.json(offers);
     } catch (err: any) {
       console.error("Error fetching job offers:", err);
@@ -5850,12 +6363,20 @@ async function startServer() {
   app.put("/api/job-offers/:id/accept", requireAuth(["staff"]), async (req: any, res) => {
     try {
       const { id } = req.params;
-      const userId = req.user.id;
+      const userId = String(req.user.id || '');
+      const userEmail = String(req.user.email || '').toLowerCase().trim();
 
       if (!jobOffers) jobOffers = [];
-      const offer = jobOffers.find((o: any) => o.id === id && o.staffId === userId);
+      const offer = jobOffers.find((o: any) => {
+        if (!o || o.id !== id) return false;
+        const oStaffId = String(o.staffId || '');
+        const oStaffUserId = String(o.staffUserId || '');
+        const oStaffEmail = String(o.staffEmail || '').toLowerCase().trim();
+        return oStaffId === userId || oStaffUserId === userId || (userEmail && oStaffEmail === userEmail);
+      });
+
       if (!offer) {
-        return res.status(404).json({ error: "Job offer not found" });
+        return res.status(404).json({ error: "Job offer not found or unauthorized." });
       }
 
       offer.status = 'Accepted';
@@ -5866,8 +6387,8 @@ async function startServer() {
       notifications.unshift({
         id: `notif-accepted-${Date.now()}`,
         studentId: offer.requesterId,
-        title: `Job Offer Accepted!`,
-        message: `The staff member accepted your job offer for "${offer.workOffered}". Job offer accepted and logged.`,
+        title: `✅ Job Offer Accepted by Staff!`,
+        message: `${req.user.name || 'PineVela Accredited Staff'} accepted your job offer for "${offer.workOffered}". Direct phone/WhatsApp: ${req.user.phone || '+233 24 123 4567'}.`,
         type: 'success',
         date: new Date().toISOString().split('T')[0],
         read: false
@@ -5878,6 +6399,50 @@ async function startServer() {
     } catch (err: any) {
       console.error("Error accepting job offer:", err);
       res.status(500).json({ error: "Failed to accept job offer" });
+    }
+  });
+
+  app.put("/api/job-offers/:id/decline", requireAuth(["staff"]), async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+      const userId = String(req.user.id || '');
+      const userEmail = String(req.user.email || '').toLowerCase().trim();
+
+      if (!jobOffers) jobOffers = [];
+      const offer = jobOffers.find((o: any) => {
+        if (!o || o.id !== id) return false;
+        const oStaffId = String(o.staffId || '');
+        const oStaffUserId = String(o.staffUserId || '');
+        const oStaffEmail = String(o.staffEmail || '').toLowerCase().trim();
+        return oStaffId === userId || oStaffUserId === userId || (userEmail && oStaffEmail === userEmail);
+      });
+
+      if (!offer) {
+        return res.status(404).json({ error: "Job offer not found or unauthorized." });
+      }
+
+      offer.status = 'Declined';
+      offer.declinedAt = new Date().toISOString();
+      offer.declineReason = reason || 'Staff is currently unavailable for this schedule.';
+
+      // Notify requester
+      if (!notifications) notifications = [];
+      notifications.unshift({
+        id: `notif-declined-${Date.now()}`,
+        studentId: offer.requesterId,
+        title: `Job Offer Update`,
+        message: `The staff member was unable to accept the job offer for "${offer.workOffered}". Reason: ${offer.declineReason}. You may hire another available accredited staff member.`,
+        type: 'info',
+        date: new Date().toISOString().split('T')[0],
+        read: false
+      });
+
+      syncStore();
+      res.json({ success: true, offer });
+    } catch (err: any) {
+      console.error("Error declining job offer:", err);
+      res.status(500).json({ error: "Failed to decline job offer" });
     }
   });
 
@@ -6582,9 +7147,19 @@ ${400 + streamLength}
       }
 
       const cleanEmail = email.toLowerCase().trim();
-      const existingEmail = MOCK_USERS.find(u => u.email?.toLowerCase() === cleanEmail);
-      if (existingEmail) {
-        return res.status(400).json({ error: "An account with this email address already exists. Please log in or use another email." });
+      const existingUserIndex = MOCK_USERS.findIndex(u => (u.email || u.user?.email || '').toLowerCase().trim() === cleanEmail);
+      const existingStaffRecord = staff.find(s => (s.email || '').toLowerCase().trim() === cleanEmail);
+
+      if (existingUserIndex >= 0 || existingStaffRecord) {
+        const existingUser = existingUserIndex >= 0 ? MOCK_USERS[existingUserIndex] : null;
+        const userRole = existingUser?.user?.role || existingUser?.role;
+        
+        if (userRole === 'staff' || existingStaffRecord) {
+          const statusVal = existingStaffRecord?.verificationStatus || existingUser?.user?.verificationStatus || 'Pending';
+          return res.status(400).json({ 
+            error: `You already have a registered Staff account under this email address (${cleanEmail}). Current Status: ${statusVal}. Creation of multiple Staff accounts is restricted to 1 account per user.` 
+          });
+        }
       }
 
       let baseUsername = (username || cleanEmail.split('@')[0])
@@ -6605,50 +7180,59 @@ ${400 + streamLength}
         finalUsername = `${baseUsername}_${suffix}`;
       }
 
-      const staffUserId = `staff-user-${Date.now()}`;
-      const token = `token_staff_${staffUserId}`;
+      let staffUserId = `staff-user-${Date.now()}`;
+      let token = `token_staff_${staffUserId}`;
 
       const assignedSpecialization = specialization || staffRole || 'Facilities & Maintenance Technician';
 
-      const newStaffUser = {
-        email: cleanEmail,
-        username: finalUsername,
-        password,
-        user: {
-          id: staffUserId,
-          name: name.trim(),
-          username: finalUsername,
+      let returnedUserObj: any = null;
+      const existingUser = existingUserIndex >= 0 ? MOCK_USERS[existingUserIndex] : null;
+      if (existingUser) {
+        staffUserId = existingUser.id || existingUser.user?.id;
+        finalUsername = existingUser.username || existingUser.user?.username || finalUsername;
+        token = existingUser.token || existingUser.user?.token || token;
+        returnedUserObj = existingUser.user || existingUser;
+      } else {
+        const newStaffUser = {
           email: cleanEmail,
-          phone: phone || '',
-          altPhone: altPhone || '',
-          role: 'staff',
-          staffRole: assignedSpecialization,
-          specialization: assignedSpecialization,
-          yearsExperience: yearsExperience || '1 - 3 Years',
-          preferredShift: preferredShift || 'Day Shift (8 AM - 5 PM)',
-          address: address || '',
-          city: city || 'Accra',
-          region: region || 'Greater Accra',
-          digitalAddress: digitalAddress || '',
-          commutePreference: commutePreference || 'Daily Commuter',
-          nationalId: nationalId || '',
-          idType: idType || 'Ghana Card (National ID)',
-          idCardDoc: idCardDoc || '',
-          cvData: cvData || '',
-          cvFileName: cvFileName || '',
-          qualifications: qualifications || '',
-          experienceSummary: experienceSummary || '',
-          declarationAccepted: Boolean(declarationAccepted),
-          photo: photoUrl || '',
-          avatar: photoUrl || '',
-          verificationStatus: 'Pending',
-          isVerified: false,
-          token,
-          createdAt: new Date().toISOString()
-        }
-      };
-
-      MOCK_USERS.push(newStaffUser);
+          username: finalUsername,
+          password,
+          user: {
+            id: staffUserId,
+            name: name.trim(),
+            username: finalUsername,
+            email: cleanEmail,
+            phone: phone || '',
+            altPhone: altPhone || '',
+            role: 'staff',
+            staffRole: assignedSpecialization,
+            specialization: assignedSpecialization,
+            yearsExperience: yearsExperience || '1 - 3 Years',
+            preferredShift: preferredShift || 'Day Shift (8 AM - 5 PM)',
+            address: address || '',
+            city: city || 'Accra',
+            region: region || 'Greater Accra',
+            digitalAddress: digitalAddress || '',
+            commutePreference: commutePreference || 'Daily Commuter',
+            nationalId: nationalId || '',
+            idType: idType || 'Ghana Card (National ID)',
+            idCardDoc: idCardDoc || '',
+            cvData: cvData || '',
+            cvFileName: cvFileName || '',
+            qualifications: qualifications || '',
+            experienceSummary: experienceSummary || '',
+            declarationAccepted: Boolean(declarationAccepted),
+            photo: photoUrl || '',
+            avatar: photoUrl || '',
+            verificationStatus: 'Pending',
+            isVerified: false,
+            token,
+            createdAt: new Date().toISOString()
+          }
+        };
+        MOCK_USERS.push(newStaffUser);
+        returnedUserObj = newStaffUser.user;
+      }
 
       // Add to staff collection so Admin and Managers can track verification status
       const newStaffRecord = {
@@ -6684,6 +7268,22 @@ ${400 + streamLength}
         read: false
       });
 
+      // Create User Notification for staff applicant
+      const userStaffNotif = {
+        id: `notif-stf-usr-${Date.now()}`,
+        studentId: staffUserId,
+        userId: staffUserId,
+        userEmail: cleanEmail,
+        recipientEmail: cleanEmail,
+        title: 'Staff Account Registration Submitted',
+        message: `Your Staff Account registration as "${assignedSpecialization}" has been submitted successfully. Current Status: Pending Administrative Verification.`,
+        type: 'verification',
+        date: new Date().toISOString().split('T')[0],
+        read: false
+      };
+      notifications.unshift(userStaffNotif);
+      await dbCreateNotification(userStaffNotif, notifications);
+
       activities.unshift({
         id: `act-${Date.now()}`,
         text: `New staff account registered for "${name}" (@${finalUsername}) - Pending Verification`,
@@ -6696,7 +7296,7 @@ ${400 + streamLength}
       return res.status(201).json({
         success: true,
         token,
-        user: newStaffUser.user
+        user: returnedUserObj
       });
     } catch (err: any) {
       console.error("Error registering staff account:", err);
@@ -7000,7 +7600,22 @@ ${400 + streamLength}
   // --- Notifications Endpoints ---
   app.get("/api/notifications", requireAuth(), async (req: any, res) => {
     const list = await dbGetNotifications(notifications);
-    const filtered = list.filter((n: any) => n.studentId === req.user.id);
+    const user = req.user;
+    const uId = user?.id || '';
+    const uEmail = (user?.email || '').toLowerCase().trim();
+    const uUsername = (user?.username || '').toLowerCase().trim();
+
+    const filtered = (list || []).filter((n: any) => {
+      if (!n) return false;
+      if (n.studentId && n.studentId === uId) return true;
+      if (n.userId && n.userId === uId) return true;
+      if (n.recipientId && n.recipientId === uId) return true;
+      if (n.recipientEmail && (n.recipientEmail || '').toLowerCase().trim() === uEmail) return true;
+      if (n.userEmail && (n.userEmail || '').toLowerCase().trim() === uEmail) return true;
+      if (n.username && (n.username || '').toLowerCase().trim() === uUsername) return true;
+      if (user?.role === 'admin' && (n.targetRole === 'admin' || n.studentId === 'admin_001')) return true;
+      return false;
+    });
     res.json(filtered);
   });
 

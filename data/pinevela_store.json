@@ -2,10 +2,106 @@
   "hostels": [],
   "bookingRequests": [],
   "issueReports": [],
-  "activities": [],
+  "activities": [
+    {
+      "id": "act-new-1789401976049",
+      "text": "Admin APPROVED manager account for \"Mr. Charlie Kole\". Manager can now log in and register property.",
+      "time": "Just now",
+      "type": "success",
+      "timestamp": "Just now"
+    },
+    {
+      "id": "act-new-1789401930469",
+      "text": "New Manager \"Mr. Charlie Kole\" registered (Premuim High). Verification & Property request queued for Admin approval.",
+      "time": "Just now",
+      "type": "info",
+      "timestamp": "Just now"
+    },
+    {
+      "id": "act-new-1789399918719",
+      "text": "Admin APPROVED manager account for \"Mrs. Charlie Heller\". Manager can now log in and register property.",
+      "time": "Just now",
+      "type": "success",
+      "timestamp": "Just now"
+    },
+    {
+      "id": "act-new-1789399848282",
+      "text": "New Manager \"Mrs. Charlie Heller\" registered (PineVela Corp). Verification & Property request queued for Admin approval.",
+      "time": "Just now",
+      "type": "info",
+      "timestamp": "Just now"
+    }
+  ],
   "hostelVerifications": [],
   "managerRegistrationRequests": [],
-  "verificationAuditLogs": [],
+  "verificationAuditLogs": [
+    {
+      "id": "val-1789401930698",
+      "action": "MANAGER_VERIFICATION_SUBMITTED",
+      "targetType": "manager",
+      "targetId": "manager_1789401930698",
+      "targetName": "Mr. Charlie Kole",
+      "performedBy": "Mr. Charlie Kole",
+      "role": "manager",
+      "details": {
+        "documentType": "Ghana Card (National ID)",
+        "maskedId": "GHA-*****121-2",
+        "authorityRelationship": "Employed Residence Director",
+        "idVerificationStatus": "verified"
+      },
+      "timestamp": "2026-09-14T16:05:30.698Z",
+      "createdAt": "2026-09-14T16:05:30.699Z"
+    },
+    {
+      "id": "val-1789401930698",
+      "action": "MANAGER_VERIFICATION_SUBMITTED",
+      "targetType": "manager",
+      "targetId": "manager_1789401930698",
+      "targetName": "Mr. Charlie Kole",
+      "performedBy": "Mr. Charlie Kole",
+      "role": "manager",
+      "details": {
+        "documentType": "Ghana Card (National ID)",
+        "maskedId": "GHA-*****121-2",
+        "authorityRelationship": "Employed Residence Director",
+        "idVerificationStatus": "verified"
+      },
+      "timestamp": "2026-09-14T16:05:30.698Z"
+    },
+    {
+      "id": "val-1789399848554",
+      "action": "MANAGER_VERIFICATION_SUBMITTED",
+      "targetType": "manager",
+      "targetId": "manager_1789399848553",
+      "targetName": "Mrs. Charlie Heller",
+      "performedBy": "Mrs. Charlie Heller",
+      "role": "manager",
+      "details": {
+        "documentType": "Ghana Card (National ID)",
+        "maskedId": "GHA-*****323-2",
+        "authorityRelationship": "Co-Owner / Partner",
+        "idVerificationStatus": "verified"
+      },
+      "timestamp": "2026-09-14T15:30:48.553Z",
+      "createdAt": "2026-09-14T15:30:48.554Z"
+    },
+    {
+      "id": "val-1789399848554",
+      "action": "MANAGER_VERIFICATION_SUBMITTED",
+      "targetType": "manager",
+      "targetId": "manager_1789399848553",
+      "targetName": "Mrs. Charlie Heller",
+      "performedBy": "Mrs. Charlie Heller",
+      "role": "manager",
+      "details": {
+        "documentType": "Ghana Card (National ID)",
+        "maskedId": "GHA-*****323-2",
+        "authorityRelationship": "Co-Owner / Partner",
+        "idVerificationStatus": "verified"
+      },
+      "timestamp": "2026-09-14T15:30:48.553Z"
+    }
+  ],
   "users": [
     {
       "email": "andyheller2k@gmail.com",
@@ -32,7 +128,60 @@
       }
     }
   ],
-  "notifications": [],
+  "notifications": [
+    {
+      "id": "notif-mgr-appr-1789401976049",
+      "studentId": "manager_1789401930467",
+      "userId": "manager_1789401930467",
+      "userEmail": "kole2k@gmail.com",
+      "recipientEmail": "kole2k@gmail.com",
+      "title": "Manager Account Approved!",
+      "message": "Congratulations Mr. Charlie Kole! Your Manager Account registration and verification has been APPROVED by System Admin. Current Status: Approved. You now have full access to property onboarding and management.",
+      "type": "success",
+      "date": "2026-09-14",
+      "read": false,
+      "isRead": false,
+      "createdAt": "2026-09-14T16:06:16.049Z"
+    },
+    {
+      "id": "notif-mgr-appr-1789401976049",
+      "studentId": "manager_1789401930467",
+      "userId": "manager_1789401930467",
+      "userEmail": "kole2k@gmail.com",
+      "recipientEmail": "kole2k@gmail.com",
+      "title": "Manager Account Approved!",
+      "message": "Congratulations Mr. Charlie Kole! Your Manager Account registration and verification has been APPROVED by System Admin. Current Status: Approved. You now have full access to property onboarding and management.",
+      "type": "success",
+      "date": "2026-09-14",
+      "read": false
+    },
+    {
+      "id": "notif-mgr-1789401930469",
+      "studentId": "manager_1789401930467",
+      "userId": "manager_1789401930467",
+      "userEmail": "kole2k@gmail.com",
+      "recipientEmail": "kole2k@gmail.com",
+      "title": "Manager Account Registration Submitted",
+      "message": "Your Manager Account registration for \"Mr. Charlie Kole\" (Premuim High) has been submitted successfully. Current Status: Pending Administrative Approval.",
+      "type": "verification",
+      "date": "2026-09-14",
+      "read": false,
+      "isRead": false,
+      "createdAt": "2026-09-14T16:05:30.469Z"
+    },
+    {
+      "id": "notif-mgr-1789401930469",
+      "studentId": "manager_1789401930467",
+      "userId": "manager_1789401930467",
+      "userEmail": "kole2k@gmail.com",
+      "recipientEmail": "kole2k@gmail.com",
+      "title": "Manager Account Registration Submitted",
+      "message": "Your Manager Account registration for \"Mr. Charlie Kole\" (Premuim High) has been submitted successfully. Current Status: Pending Administrative Approval.",
+      "type": "verification",
+      "date": "2026-09-14",
+      "read": false
+    }
+  ],
   "chatMessages": [],
   "dmRooms": [],
   "chatProfiles": [],
@@ -221,25 +370,25 @@
   },
   "managerVerifications": [
     {
-      "id": "mv-1789331116250",
-      "managerId": "manager_1789331116250",
-      "managerName": "Mrs. Courtney Andrea Oppong",
-      "managerEmail": "andyheller3k@gmail.com",
+      "id": "mv-1789401930698",
+      "managerId": "manager_1789401930698",
+      "managerName": "Mr. Charlie Kole",
+      "managerEmail": "kole2k@gmail.com",
       "managerPhone": "0509690121",
       "country": "Ghana",
       "idDocumentType": "Ghana Card (National ID)",
-      "hashedIdNumber": "a3ff829dbbbd1c8033ccc67475338eef147217f967e4f41a77e3173b5797b975",
-      "maskedIdNumber": "GHA-*****777-9",
-      "fullNameOnId": "Mrs. Courtney Andrea Oppong",
+      "hashedIdNumber": "4770bc7d2e495cd009c30c4e80b3e80fd24b24abf101eeb60dc0fc95a5d649f8",
+      "maskedIdNumber": "GHA-*****121-2",
+      "fullNameOnId": "Mr. Charlie Kole",
       "idVerificationStatus": "verified",
-      "authorityRelationship": "Authorized Management Agent",
+      "authorityRelationship": "Employed Residence Director",
       "claimedOwnerName": null,
       "claimedOwnerPhone": null,
       "claimedOwnerEmail": null,
-      "organizationName": "PineVela Inc",
+      "organizationName": "Premuim High",
       "organizationRegNumber": null,
-      "authorityEvidenceDescription": "Attached document: Waiting_Line_Model.pdf",
-      "authorityEvidenceFileName": "Waiting_Line_Model.pdf",
+      "authorityEvidenceDescription": "Attached document: Task1_FetchDecodeExecute.pdf",
+      "authorityEvidenceFileName": "Task1_FetchDecodeExecute.pdf",
       "authorityEvidenceUrl": null,
       "authorityStatus": "pending",
       "systemChecks": {
@@ -253,31 +402,31 @@
       },
       "status": "pending",
       "adminNotes": null,
-      "createdAt": "2026-09-13T20:25:16.250Z",
-      "updatedAt": "2026-09-13T20:25:16.250Z"
+      "createdAt": "2026-09-14T16:05:30.698Z",
+      "updatedAt": "2026-09-14T16:05:30.698Z"
     },
     {
-      "id": "mv-1789331115931",
-      "managerId": "manager_1789331115931",
-      "managerName": "Mrs. Courtney Andrea Oppong",
-      "managerEmail": "andyheller3k@gmail.com",
+      "id": "mv-1789401930467",
+      "managerId": "manager_1789401930467",
+      "managerName": "Mr. Charlie Kole",
+      "managerEmail": "kole2k@gmail.com",
       "managerPhone": "0509690121",
       "country": "Ghana",
       "idDocumentType": "Ghana Card (National ID)",
-      "hashedIdNumber": "hash_GHA-123456777-9",
-      "maskedIdNumber": "GHA-••••77-9",
-      "fullNameOnId": "Mrs. Courtney Andrea Oppong",
+      "hashedIdNumber": "hash_GHA-121212121-2",
+      "maskedIdNumber": "GHA-••••21-2",
+      "fullNameOnId": "Mr. Charlie Kole",
       "dateOfBirth": "1990-01-01",
       "idExpiryDate": "2030-01-01",
       "idVerificationStatus": "verified",
-      "authorityRelationship": "Authorized Management Agent",
+      "authorityRelationship": "Employed Residence Director",
       "claimedOwnerName": null,
       "claimedOwnerPhone": null,
       "claimedOwnerEmail": null,
-      "organizationName": "PineVela Inc",
+      "organizationName": "Premuim High",
       "organizationRegNumber": null,
-      "authorityEvidenceDescription": "Attached document: Waiting_Line_Model.pdf",
-      "authorityEvidenceFileName": "Waiting_Line_Model.pdf",
+      "authorityEvidenceDescription": "Attached document: Task1_FetchDecodeExecute.pdf",
+      "authorityEvidenceFileName": "Task1_FetchDecodeExecute.pdf",
       "authorityEvidenceUrl": null,
       "authorityStatus": "pending",
       "systemChecks": {
@@ -291,24 +440,23 @@
       },
       "status": "approved",
       "adminNotes": "Approved via manager registration requests",
-      "createdAt": "2026-09-13T20:25:15.931Z",
-      "updatedAt": "2026-09-13T20:25:15.931Z"
+      "createdAt": "2026-09-14T16:05:30.467Z",
+      "updatedAt": "2026-09-14T16:05:30.467Z"
     }
   ],
   "managerProfiles": [
     {
-      "id": "manager_1789331116250",
-      "name": "Mrs. Courtney Andrea Oppong",
-      "email": "andyheller3k@gmail.com",
+      "id": "manager_1789401930698",
+      "name": "Mr. Charlie Kole",
+      "email": "kole2k@gmail.com",
       "phone": "0509690121",
-      "nationalId": "GHA-*****777-9",
-      "organization": "PineVela Inc",
-      "roleTitle": "General Property Manager",
+      "nationalId": "GHA-*****121-2",
+      "organization": "Premuim High",
+      "roleTitle": "Residence Director",
       "experienceYears": 1,
-      "address": "Osu Adenta Road,OXFORD ROAD, Accra, Greater Accra",
-      "password": "12345678"
+      "address": "Hse 22, Accra, Greater Accra",
+      "password": "123456789"
     }
   ],
-  "staffBargains": [],
-  "keyDispatches": []
+  "staffBargains": []
 }

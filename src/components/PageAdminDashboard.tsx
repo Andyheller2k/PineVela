@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import PineLogo from './PineLogo';
 import ResidentOnboardingWizard from './ResidentOnboardingWizard';
+import HostelRegistration from './HostelRegistration';
 import EditResidenceModal from './EditResidenceModal';
 import LogoutConfirmationModal from './LogoutConfirmationModal';
 import { getPdfBlobUrl, downloadPdfDocument } from '../utils/pdfHelper';
@@ -102,6 +103,17 @@ export default function PageAdminDashboard() {
   const [newResCapacity, setNewResCapacity] = useState('100');
   const [newResPrice, setNewResPrice] = useState('4000');
   const [newResManager, setNewResManager] = useState('');
+
+  // Ensure every tab change in Admin Dashboard starts strictly from the top
+  useEffect(() => {
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: 'instant'
+    });
+    if (document.body) document.body.scrollTop = 0;
+    if (document.documentElement) document.documentElement.scrollTop = 0;
+  }, [activeTab]);
 
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
@@ -380,10 +392,8 @@ export default function PageAdminDashboard() {
   };
 
   const confirmLogout = () => {
-    navigate('/', { replace: true });
-    setTimeout(() => {
-      logout();
-    }, 50);
+    logout();
+    navigate('/login', { replace: true });
   };
 
   const pendingManagersCount = managerRequests.filter(r => r.status === 'pending' || !r.status).length;
@@ -1927,24 +1937,24 @@ export default function PageAdminDashboard() {
         {activeTab === 'staff_verification' && (
           <div className="space-y-8 animate-fadeIn relative z-10">
             {/* Header Banner */}
-            <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 p-8 rounded-3xl text-white shadow-xl relative overflow-hidden">
-              <div className="absolute right-0 top-0 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+            <div className="bg-gradient-to-br from-sky-100/90 via-blue-100/85 to-indigo-100/60 border border-sky-200/80 p-8 rounded-3xl backdrop-blur-3xl shadow-xl relative overflow-hidden text-slate-900">
+              <div className="absolute right-0 top-0 w-80 h-80 bg-cyan-400/20 rounded-full blur-3xl pointer-events-none" />
               <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <span className="px-3 py-1 rounded-full bg-blue-500/30 text-blue-200 text-xs font-black uppercase tracking-wider border border-blue-400/30">
+                    <span className="px-3 py-1 rounded-full bg-blue-600/15 text-blue-900 text-xs font-black uppercase tracking-wider border border-blue-300/60">
                       Super Admin Desk
                     </span>
                     {pendingStaffCount > 0 && (
-                      <span className="px-3 py-1 rounded-full bg-rose-500 text-white text-xs font-black uppercase tracking-wider animate-pulse">
+                      <span className="px-3 py-1 rounded-full bg-rose-500 text-white text-xs font-black uppercase tracking-wider shadow-sm animate-pulse">
                         {pendingStaffCount} New Applicants Waiting
                       </span>
                     )}
                   </div>
-                  <h2 className="text-2xl lg:text-3xl font-black tracking-tight text-white">
+                  <h2 className="text-2xl lg:text-3xl font-black tracking-tight text-slate-900">
                     Staff Credential Verification Console
                   </h2>
-                  <p className="text-xs text-blue-200 font-medium max-w-2xl leading-relaxed">
+                  <p className="text-xs text-slate-600 font-medium max-w-2xl leading-relaxed mt-1">
                     Review incoming staff registrations, inspect compulsory PDF Curriculum Vitae (CV) and Dual Ghana National ID cards (Front & Back), and approve or reject staff credentials.
                   </p>
                 </div>
@@ -2235,98 +2245,25 @@ export default function PageAdminDashboard() {
         availableManagers={availableManagersList}
       />
 
-      {/* MODAL: MANUALLY REGISTER RESIDENCE */}
+      {/* FULL 10-STEP HOSTEL REGISTRATION WIZARD: MANUALLY REGISTER RESIDENCE */}
       {showAddResidenceModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fadeIn">
-          <div className="bg-white border border-blue-200 p-8 rounded-3xl max-w-lg w-full shadow-2xl space-y-6 relative">
-            <h3 className="text-xl font-bold text-slate-900">Register New Residence</h3>
-            <form onSubmit={handleManualRegisterResidence} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Residence Name</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Sapphire Gardens"
-                  value={newResName}
-                  onChange={(e) => setNewResName(e.target.value)}
-                  className="w-full px-4 py-3 bg-blue-50/60 border border-blue-200 rounded-2xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-600"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Category Type</label>
-                  <select
-                    value={newResType}
-                    onChange={(e) => setNewResType(e.target.value as any)}
-                    className="w-full px-4 py-3 bg-blue-50/60 border border-blue-200 rounded-2xl text-xs text-slate-800 focus:outline-none focus:border-blue-600"
-                  >
-                    <option value="Hostel">Hostel</option>
-                    <option value="Hotel">Hotel</option>
-                    <option value="Lounge">Lounge</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Capacity (Beds/Rooms)</label>
-                  <input
-                    type="number"
-                    value={newResCapacity}
-                    onChange={(e) => setNewResCapacity(e.target.value)}
-                    className="w-full px-4 py-3 bg-blue-50/60 border border-blue-200 rounded-2xl text-xs text-slate-800 focus:outline-none focus:border-blue-600"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Location / Campus Zone</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Legon Campus East Gate, Accra"
-                  value={newResLocation}
-                  onChange={(e) => setNewResLocation(e.target.value)}
-                  className="w-full px-4 py-3 bg-blue-50/60 border border-blue-200 rounded-2xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-600"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Annual Fee (GHS)</label>
-                  <input
-                    type="text"
-                    value={newResPrice}
-                    onChange={(e) => setNewResPrice(e.target.value)}
-                    className="w-full px-4 py-3 bg-blue-50/60 border border-blue-200 rounded-2xl text-xs text-slate-800 focus:outline-none focus:border-blue-600"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Manager Name</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Anthony Davis"
-                    value={newResManager}
-                    onChange={(e) => setNewResManager(e.target.value)}
-                    className="w-full px-4 py-3 bg-blue-50/60 border border-blue-200 rounded-2xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-600"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-3 pt-2">
-                <button
-                  type="submit"
-                  className="flex-1 py-3.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-lg cursor-pointer"
-                >
-                  Register & Approve Residence
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowAddResidenceModal(false)}
-                  className="px-6 py-3.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/70 backdrop-blur-md p-2 sm:p-4 md:p-8 flex items-start justify-center animate-fadeIn">
+          <div className="w-full max-w-5xl bg-white rounded-3xl shadow-2xl overflow-hidden border border-blue-200 my-auto">
+            <HostelRegistration
+              currentUserId={user?.id || 'admin_user'}
+              onSuccess={(newHostel) => {
+                setShowAddResidenceModal(false);
+                const approvedHostel = {
+                  ...newHostel,
+                  isApproved: true,
+                  approvalStatus: 'Approved',
+                  status: 'Approved'
+                };
+                setResidences(prev => [approvedHostel, ...prev.filter(r => r.id !== approvedHostel.id)]);
+                triggerToast(`Residence "${newHostel.name}" registered and approved successfully!`);
+              }}
+              onCancel={() => setShowAddResidenceModal(false)}
+            />
           </div>
         </div>
       )}

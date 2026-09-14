@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Hostel } from '../types';
 import PineLogo from './PineLogo';
-import { Search, MapPin, Phone, Mail, Star, ArrowRight, X, Sparkles, Shield, User, MessageSquare, Landmark, Layers, ChevronDown, HelpCircle, Navigation, LogOut, ShieldCheck, Wifi, Zap, BedDouble, Building2, CheckCircle2, ChevronLeft, ChevronRight, Maximize2, ImageIcon, Briefcase, FileText, UploadCloud, CheckCircle, AlertCircle, RefreshCw, Home, Wrench } from 'lucide-react';
+import { Search, MapPin, Phone, Mail, Star, ArrowRight, X, Sparkles, Shield, User, MessageSquare, Landmark, Layers, ChevronDown, HelpCircle, Navigation, LogOut, ShieldCheck, Wifi, Zap, BedDouble, Building2, CheckCircle2, ChevronLeft, ChevronRight, Maximize2, ImageIcon, Briefcase, FileText, UploadCloud, CheckCircle, AlertCircle, RefreshCw, Home, Wrench, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import FAQAccordion from './FAQAccordion';
 import TestimonialsCarousel from './TestimonialsCarousel';
@@ -91,13 +91,25 @@ export default function Page1Public({
       });
   }, []);
 
-  // Job Offer Form
+  // Job Offer Form States & Client Identity Verification
+  const [jobRequesterName, setJobRequesterName] = useState(user?.name || '');
+  const [jobRequesterCategory, setJobRequesterCategory] = useState('Hostel Resident / Student');
+  const [jobRequesterNationalId, setJobRequesterNationalId] = useState('');
+  const [jobRequesterOrg, setJobRequesterOrg] = useState('');
+  const [jobRequesterPhone, setJobRequesterPhone] = useState(user?.phone || '');
+  const [jobRequesterAltPhone, setJobRequesterAltPhone] = useState('');
+  const [jobRequesterEmail, setJobRequesterEmail] = useState(user?.email || '');
+  const [jobWorkCategory, setJobWorkCategory] = useState('Plumbing & Pipe Fitting');
   const [jobWorkOffered, setJobWorkOffered] = useState('');
   const [jobSchedule, setJobSchedule] = useState('');
+  const [jobEstimatedDuration, setJobEstimatedDuration] = useState('2 - 3 Hours');
   const [jobLocation, setJobLocation] = useState('');
+  const [jobDigitalAddress, setJobDigitalAddress] = useState('');
   const [jobWage, setJobWage] = useState('');
-  const [jobContact, setJobContact] = useState('');
-  const [jobRequesterName, setJobRequesterName] = useState(user?.name || '');
+  const [jobPaymentMethod, setJobPaymentMethod] = useState('Mobile Money (MoMo) on Completion');
+  const [jobEquipment, setJobEquipment] = useState('Basic tools available on site');
+  const [jobSafetyTermsAccepted, setJobSafetyTermsAccepted] = useState(true);
+  const [jobContact, setJobContact] = useState(user?.phone || user?.email || '');
   const [jobLat, setJobLat] = useState(5.6037);
   const [jobLng, setJobLng] = useState(-0.1870);
   const offerMapInstanceRef = React.useRef<any>(null);
@@ -112,6 +124,13 @@ export default function Page1Public({
   const [submittingReview, setSubmittingReview] = useState(false);
   const [reviewToast, setReviewToast] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
+  useEffect(() => {
+    if (user) {
+      if (!jobRequesterName) setJobRequesterName(user.name || '');
+      if (!jobRequesterEmail) setJobRequesterEmail(user.email || '');
+      if (!jobRequesterPhone && user.phone) setJobRequesterPhone(user.phone || '');
+    }
+  }, [user]);
 
   useEffect(() => {
     if (selectedStaffForOffer) {
@@ -178,83 +197,86 @@ export default function Page1Public({
     if (!selectedStaffForOffer) return;
 
     if (!jobRequesterName.trim() || jobRequesterName.trim().length < 2) {
-      setOfferToast({ text: 'Please enter your full name.', type: 'error' });
+      setOfferToast({ text: 'Please enter your full legal name.', type: 'error' });
       return;
     }
-    if (!jobWorkOffered.trim()) {
-      setOfferToast({ text: 'Please describe the work being offered.', type: 'error' });
+    if (!jobRequesterPhone.trim()) {
+      setOfferToast({ text: 'Please enter your contact phone number.', type: 'error' });
+      return;
+    }
+    if (!jobWorkOffered.trim() || jobWorkOffered.trim().length < 5) {
+      setOfferToast({ text: 'Please provide a clear description of the work offered (min 5 chars).', type: 'error' });
       return;
     }
     if (!jobSchedule.trim()) {
-      setOfferToast({ text: 'Please specify the time and schedule.', type: 'error' });
+      setOfferToast({ text: 'Please specify the proposed time and date schedule.', type: 'error' });
       return;
     }
     if (!jobLocation.trim()) {
-      setOfferToast({ text: 'Please specify the job location.', type: 'error' });
+      setOfferToast({ text: 'Please specify the physical location or tap on map.', type: 'error' });
       return;
     }
     if (!jobWage.trim()) {
-      setOfferToast({ text: 'Please specify the wage or salary offered.', type: 'error' });
+      setOfferToast({ text: 'Please specify the proposed wage or compensation in GHS.', type: 'error' });
       return;
     }
-    if (!jobContact.trim()) {
-      setOfferToast({ text: 'Please provide your contact (Phone number or Email).', type: 'error' });
+    if (!jobSafetyTermsAccepted) {
+      setOfferToast({ text: 'Please confirm the security & fair engagement declaration.', type: 'error' });
       return;
-    }
-    if (jobContact.includes('@')) {
-      const emailCheck = validateEmail(jobContact, 'Contact email');
-      if (!emailCheck.isValid) {
-        setOfferToast({ text: emailCheck.error!, type: 'error' });
-        return;
-      }
-    } else {
-      const phoneCheck = validatePhone(jobContact, 'Contact phone');
-      if (!phoneCheck.isValid) {
-        setOfferToast({ text: phoneCheck.error!, type: 'error' });
-        return;
-      }
     }
 
     setSubmittingOffer(true);
     try {
+      const activeToken = localStorage.getItem('token') || localStorage.getItem('pinevela_auth_token') || 'token_admin_andyheller2k';
       const res = await fetch('/api/job-offers', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token') || localStorage.getItem('pinevela_auth_token') || 'token_admin_andyheller2k'}`
+          'Authorization': `Bearer ${activeToken}`
         },
         body: JSON.stringify({
           staffId: selectedStaffForOffer.id,
-          workOffered: jobWorkOffered,
-          timeAndSchedule: jobSchedule,
-          location: jobLocation || 'Accra, Ghana',
-          wageSalary: jobWage,
-          contact: jobContact,
-          requesterName: jobRequesterName || user?.name || 'Global Client',
-          requesterContact: jobContact,
-          requesterEmail: user?.email || '',
+          staffEmail: selectedStaffForOffer.email,
+          staffName: selectedStaffForOffer.name,
+          workCategory: jobWorkCategory,
+          workOffered: jobWorkOffered.trim(),
+          timeAndSchedule: jobSchedule.trim(),
+          estimatedDuration: jobEstimatedDuration,
+          location: jobLocation.trim() || 'Accra, Ghana',
+          digitalAddress: jobDigitalAddress.trim(),
+          wageSalary: jobWage.trim(),
+          paymentMethod: jobPaymentMethod,
+          equipmentProvided: jobEquipment,
+          contact: jobRequesterPhone.trim() || jobRequesterEmail.trim(),
+          requesterName: jobRequesterName.trim(),
+          requesterCategory: jobRequesterCategory,
+          requesterNationalId: jobRequesterNationalId.trim(),
+          requesterOrganization: jobRequesterOrg.trim(),
+          requesterContact: jobRequesterPhone.trim(),
+          requesterAltPhone: jobRequesterAltPhone.trim(),
+          requesterEmail: jobRequesterEmail.trim(),
+          safetyDeclarationConfirmed: jobSafetyTermsAccepted,
           lat: jobLat,
           lng: jobLng
         })
       });
       const data = await res.json();
       if (res.ok) {
-        setOfferToast({ text: 'Job offer sent successfully! Staff notified.', type: 'success' });
+        setOfferToast({ text: `Job offer sent to ${selectedStaffForOffer.name}! They will review and accept in their staff console.`, type: 'success' });
         setTimeout(() => {
           setOfferToast(null);
           setSelectedStaffForOffer(null);
           setJobWorkOffered('');
           setJobSchedule('');
           setJobLocation('');
+          setJobDigitalAddress('');
           setJobWage('');
-          setJobContact('');
-          setJobRequesterName('');
-        }, 2000);
+        }, 2200);
       } else {
-        setOfferToast({ text: data.error || 'Failed to send job offer', type: 'error' });
+        setOfferToast({ text: data.error || 'Failed to send job offer proposal', type: 'error' });
       }
     } catch (err: any) {
-      setOfferToast({ text: err.message || 'Failed to send job offer', type: 'error' });
+      setOfferToast({ text: err.message || 'Failed to send job offer proposal', type: 'error' });
     } finally {
       setSubmittingOffer(false);
     }
@@ -572,8 +594,85 @@ export default function Page1Public({
       <div className="absolute top-0 right-0 w-96 h-96 bg-amber-100 rounded-full blur-3xl opacity-30 -z-10" />
       <div className="absolute top-1/2 left-0 w-80 h-80 bg-blue-100 rounded-full blur-3xl opacity-30 -z-10" />
 
-      {/* Top Section Container holding Header + Welcome Section with Welcome Background Image covering entire top */}
-      <div className="relative overflow-hidden rounded-b-[4.5rem] w-full border-none shadow-none">
+      {/* Fixed Header Bar at top with frost/glassmorphism */}
+      <header id="public-header" className="fixed top-0 left-0 right-0 z-40 px-4 sm:px-6 md:px-12 py-3 bg-white/85 backdrop-blur-xl border-b border-blue-200/50 shadow-md transition-all">
+        <div className="max-w-7xl mx-auto w-full flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4">
+          <div className="cursor-pointer shrink-0" onClick={() => {
+            document.getElementById('welcome-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }}>
+            <PineLogo />
+          </div>
+          
+          {/* Global Search Bar with Search trigger */}
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault();
+              document.getElementById('hostels-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }}
+            className="relative w-full max-w-md flex items-center"
+          >
+            <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+              <Search size={16} />
+            </span>
+            <input
+              type="text"
+              placeholder="Search for hostels or locations..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  document.getElementById('hostels-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+              }}
+              className="w-full pl-10 pr-20 py-2 border border-slate-200/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-900 bg-white/95 text-slate-800 text-xs sm:text-sm font-semibold transition-all shadow-inner"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-14 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                title="Clear search"
+              >
+                <X size={14} />
+              </button>
+            )}
+            <button
+              type="submit"
+              className="absolute right-1 px-3 py-1 bg-blue-900 hover:bg-blue-800 text-white text-xs font-bold rounded-lg transition-all cursor-pointer shadow-xs"
+            >
+              Search
+            </button>
+          </form>
+
+          <div className="flex items-center gap-3 text-sm font-medium shrink-0">
+            {user ? (
+              <div className="flex items-center gap-2 sm:gap-3">
+                <span className="text-xs font-bold text-slate-800 hidden sm:inline">
+                  {user.name} ({user.role})
+                </span>
+                <button
+                  onClick={() => setShowLogoutConfirm(true)}
+                  className="px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-extrabold rounded-xl text-xs shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Logout</span>
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => onNavigate('student-login')}
+                className="px-5 py-2 bg-blue-900 hover:bg-blue-800 text-white font-extrabold rounded-xl text-xs shadow-md transition-all cursor-pointer hover:scale-102 active:scale-98"
+              >
+                Login
+              </button>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {/* Top Section Container holding Welcome Section with Welcome Background Image covering entire top */}
+      <div className="relative overflow-hidden rounded-b-[4.5rem] w-full border-none shadow-none pt-24 sm:pt-28 md:pt-32">
         {/* Background Image covering entire top section */}
         <div className="absolute inset-0 z-0 w-full h-full">
           <img 
@@ -585,57 +684,10 @@ export default function Page1Public({
           <div className="absolute inset-0 bg-gradient-to-tr from-blue-100/40 via-white/50 to-transparent" />
         </div>
 
-
-
-        {/* Header with blue frosty transparent background */}
-        <header id="public-header" className="relative z-30 px-6 md:px-12 pt-6">
-          <div className="w-full bg-blue-50/80 backdrop-blur-lg border border-blue-200/50 shadow-2xl rounded-3xl px-6 md:px-8 py-5 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <PineLogo />
-            
-            {/* Global Search Bar */}
-            <div className="relative w-full max-w-md">
-              <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                <Search size={18} />
-              </span>
-              <input
-                type="text"
-                placeholder="Search for hostels or locations..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-slate-200/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-900 bg-white/90 text-slate-800 text-sm transition-all shadow-inner"
-              />
-            </div>
-
-            <div className="flex items-center gap-4 text-sm font-medium">
-              {user ? (
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-bold text-slate-800 hidden sm:inline">
-                    {user.name} ({user.role})
-                  </span>
-                  <button
-                    onClick={() => setShowLogoutConfirm(true)}
-                    className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-extrabold rounded-xl text-xs shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
-                  >
-                    <LogOut className="w-3.5 h-3.5" />
-                    <span>Logout</span>
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => onNavigate('student-login')}
-                  className="px-5 py-2.5 bg-blue-900 hover:bg-blue-800 text-white font-extrabold rounded-xl text-xs shadow-md transition-all cursor-pointer"
-                >
-                  Login
-                </button>
-              )}
-            </div>
-          </div>
-        </header>
-
         {/* Welcome Section */}
         <section 
           id="welcome-section" 
-          className="relative z-10 w-full py-12 md:py-20 px-6 md:px-12"
+          className="relative z-10 w-full py-8 md:py-16 px-6 md:px-12 scroll-mt-28"
         >
           <div className="max-w-7xl mx-auto w-full relative z-10 grid grid-cols-1 lg:grid-cols-12 items-center gap-12 pb-8">
             <motion.div 
@@ -845,7 +897,7 @@ export default function Page1Public({
         {/* Available Hostels Section */}
         <motion.section 
           id="hostels-section" 
-          className="relative max-w-7xl mx-auto px-6 md:px-12 w-full mt-16 bg-transparent border-none shadow-none"
+          className="relative max-w-7xl mx-auto px-6 md:px-12 w-full mt-16 bg-transparent border-none shadow-none scroll-mt-28"
           initial={{ opacity: 0.3, y: 30 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: false, amount: 0.08 }}
@@ -2134,124 +2186,308 @@ export default function Page1Public({
       {selectedStaffForOffer && (
         <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
           <motion.div 
-            className="bg-white rounded-3xl max-w-lg w-full p-8 shadow-2xl border border-slate-200 space-y-6 max-h-[90vh] overflow-y-auto"
+            className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-slate-200 space-y-6 max-h-[92vh] overflow-y-auto"
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
           >
             <div className="flex items-center justify-between pb-4 border-b border-slate-100">
               <div className="flex items-center gap-3">
-                <img src={selectedStaffForOffer.avatar} alt={selectedStaffForOffer.name} className="w-12 h-12 rounded-xl object-cover" referrerPolicy="no-referrer" />
+                <img src={selectedStaffForOffer.avatar} alt={selectedStaffForOffer.name} className="w-12 h-12 rounded-xl object-cover ring-2 ring-blue-900/10" referrerPolicy="no-referrer" />
                 <div>
-                  <h3 className="text-lg font-black text-slate-900">Suggest Job Offer</h3>
-                  <p className="text-xs text-slate-500">To {selectedStaffForOffer.name} ({selectedStaffForOffer.specialization})</p>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-black text-slate-900">Propose One-Time Job Offer</h3>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-50 text-blue-900 border border-blue-200">
+                      Verified Staff
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 font-medium">To {selectedStaffForOffer.name} • {selectedStaffForOffer.specialization} ({selectedStaffForOffer.rating || '5.0'} ★)</p>
                 </div>
               </div>
               <button 
                 onClick={() => setSelectedStaffForOffer(null)}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 cursor-pointer"
+                className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 cursor-pointer transition-colors"
               >
                 <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleSendJobOffer} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Your Full Name (Global Client) *</label>
-                <input 
-                  type="text" 
-                  required
-                  placeholder="e.g. John Doe"
-                  value={jobRequesterName}
-                  onChange={e => setJobRequesterName(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-900 focus:outline-none"
-                />
+            <form onSubmit={handleSendJobOffer} className="space-y-6 text-xs">
+              {/* Section 1: Requester Verified Identity */}
+              <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/80 space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-slate-200">
+                  <ShieldCheck className="w-4 h-4 text-blue-900" />
+                  <h4 className="font-extrabold text-slate-900 uppercase tracking-wider text-[11px]">1. Client Identity & Verification</h4>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Full Legal Name *</label>
+                    <input 
+                      type="text" 
+                      required
+                      placeholder="e.g. Kwame Mensah"
+                      value={jobRequesterName}
+                      onChange={e => setJobRequesterName(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-blue-900 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Client Profile Category *</label>
+                    <select 
+                      value={jobRequesterCategory}
+                      onChange={e => setJobRequesterCategory(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-blue-900 focus:outline-none font-medium text-slate-800"
+                    >
+                      <option value="Hostel Resident / Student">Hostel Resident / Student</option>
+                      <option value="Hostel Property Manager">Hostel Property Manager</option>
+                      <option value="Private Homeowner / Landlord">Private Homeowner / Landlord</option>
+                      <option value="Commercial Business / Enterprise">Commercial Business / Enterprise</option>
+                      <option value="Verified Public Client">Verified Public Client</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Ghana National ID / NIA Card (Optional)</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. GHA-712891920-3"
+                      value={jobRequesterNationalId}
+                      onChange={e => setJobRequesterNationalId(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-blue-900 focus:outline-none uppercase"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">Enhances staff trust & safe engagement verification</p>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Property / Organization Name</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. PineVela Hall Rm 204 or Private Residence"
+                      value={jobRequesterOrg}
+                      onChange={e => setJobRequesterOrg(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-blue-900 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Primary Phone / WhatsApp *</label>
+                    <input 
+                      type="tel" 
+                      required
+                      placeholder="e.g. 024 123 4567"
+                      value={jobRequesterPhone}
+                      onChange={e => setJobRequesterPhone(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-blue-900 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Official Email Address *</label>
+                    <input 
+                      type="email" 
+                      required
+                      placeholder="e.g. client@gmail.com"
+                      value={jobRequesterEmail}
+                      onChange={e => setJobRequesterEmail(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-blue-900 focus:outline-none"
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Work Offered (One-time Job) *</label>
-                <input 
-                  type="text" 
-                  required
-                  placeholder="e.g. Emergency plumbing repair for hostel apartment"
-                  value={jobWorkOffered}
-                  onChange={e => setJobWorkOffered(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-900 focus:outline-none"
-                />
+              {/* Section 2: Work Scope & Specifications */}
+              <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/80 space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-slate-200">
+                  <Briefcase className="w-4 h-4 text-blue-900" />
+                  <h4 className="font-extrabold text-slate-900 uppercase tracking-wider text-[11px]">2. Job Scope & Work Category</h4>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Work Category *</label>
+                    <select 
+                      value={jobWorkCategory}
+                      onChange={e => setJobWorkCategory(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-blue-900 focus:outline-none font-medium text-slate-800"
+                    >
+                      <option value="Plumbing & Pipe Fitting">Plumbing & Pipe Fitting</option>
+                      <option value="Electrical & Wiring Fixes">Electrical & Wiring Fixes</option>
+                      <option value="Carpentry & Furniture Assembly">Carpentry & Furniture Assembly</option>
+                      <option value="Air Conditioning & Refrigeration">Air Conditioning & Refrigeration</option>
+                      <option value="Deep Cleaning & Sanitation">Deep Cleaning & Sanitation</option>
+                      <option value="Painting & Wall Treatment">Painting & Wall Treatment</option>
+                      <option value="Security & Access Control">Security & Access Control</option>
+                      <option value="General Maintenance & Handyman">General Maintenance & Handyman</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Estimated Duration *</label>
+                    <select 
+                      value={jobEstimatedDuration}
+                      onChange={e => setJobEstimatedDuration(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-blue-900 focus:outline-none font-medium text-slate-800"
+                    >
+                      <option value="1 - 2 Hours">1 - 2 Hours (Quick fix)</option>
+                      <option value="2 - 3 Hours">2 - 3 Hours (Standard job)</option>
+                      <option value="Half Day (4 - 5 Hours)">Half Day (4 - 5 Hours)</option>
+                      <option value="Full Day (8 Hours)">Full Day (8 Hours)</option>
+                      <option value="Multi-day Contract">Multi-day Contract</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Specific Task Scope & Problem Description *</label>
+                  <textarea 
+                    required
+                    rows={3}
+                    placeholder="Describe exactly what needs fixing, tools required, and specific expectations..."
+                    value={jobWorkOffered}
+                    onChange={e => setJobWorkOffered(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-blue-900 focus:outline-none"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Time & Schedule *</label>
-                <input 
-                  type="text" 
-                  required
-                  placeholder="e.g. Today at 2:00 PM (2 hours job)"
-                  value={jobSchedule}
-                  onChange={e => setJobSchedule(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-900 focus:outline-none"
-                />
+              {/* Section 3: Location & Interactive Map Pin */}
+              <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/80 space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-slate-200">
+                  <MapPin className="w-4 h-4 text-blue-900" />
+                  <h4 className="font-extrabold text-slate-900 uppercase tracking-wider text-[11px]">3. Location & GPS Coordinate Pin</h4>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Street Address / Landmark *</label>
+                    <input 
+                      type="text" 
+                      required
+                      placeholder="e.g. Atomic Junction, near Legon Campus, Accra"
+                      value={jobLocation}
+                      onChange={e => setJobLocation(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-blue-900 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Digital GhanaPost GPS (Optional)</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. GA-183-9024"
+                      value={jobDigitalAddress}
+                      onChange={e => setJobDigitalAddress(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-blue-900 focus:outline-none uppercase"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-[11px] text-slate-600 mb-1.5 font-bold">Interactive Job Location Pin (Drag pin or click on map):</p>
+                  <div id="job-offer-map-picker" className="w-full h-44 rounded-xl border border-slate-300 shadow-inner z-0"></div>
+                  <div className="mt-1 flex items-center justify-between text-[10px] text-slate-500 font-mono">
+                    <span>Lat: {jobLat.toFixed(4)}</span>
+                    <span>Lng: {jobLng.toFixed(4)}</span>
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Location & Inbuilt Map Pin *</label>
-                <input 
-                  type="text" 
-                  required
-                  placeholder="e.g. Osu Oxford Street, Accra"
-                  value={jobLocation}
-                  onChange={e => setJobLocation(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-900 focus:outline-none mb-2"
-                />
-                <p className="text-[10px] text-slate-500 mb-2 font-medium">Click on the map or drag the pin to set your exact location for the staff member:</p>
-                <div id="job-offer-map-picker" className="w-full h-48 rounded-xl border border-slate-300 shadow-inner z-0"></div>
+              {/* Section 4: Schedule, Compensation & Payment */}
+              <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/80 space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-slate-200">
+                  <Clock className="w-4 h-4 text-blue-900" />
+                  <h4 className="font-extrabold text-slate-900 uppercase tracking-wider text-[11px]">4. Schedule & Compensation</h4>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Date & Time Schedule *</label>
+                    <input 
+                      type="text" 
+                      required
+                      placeholder="e.g. Tomorrow at 2:00 PM"
+                      value={jobSchedule}
+                      onChange={e => setJobSchedule(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-blue-900 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Offered Compensation / Wage *</label>
+                    <input 
+                      type="text" 
+                      required
+                      placeholder="e.g. GHS 300"
+                      value={jobWage}
+                      onChange={e => setJobWage(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-blue-900 focus:outline-none font-bold text-blue-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Payment Method *</label>
+                    <select 
+                      value={jobPaymentMethod}
+                      onChange={e => setJobPaymentMethod(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-blue-900 focus:outline-none font-medium text-slate-800"
+                    >
+                      <option value="Mobile Money (MoMo) on Completion">Mobile Money (MoMo) on Completion</option>
+                      <option value="Cash on Satisfactory Finish">Cash on Satisfactory Finish</option>
+                      <option value="Direct Bank Instant Pay">Direct Bank Instant Pay</option>
+                      <option value="PineVela Escrow Deposit">PineVela Escrow Deposit</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Equipment / Site Access Note</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. Basic ladder on site; bring multimeter"
+                      value={jobEquipment}
+                      onChange={e => setJobEquipment(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-blue-900 focus:outline-none"
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Wage & Salary *</label>
+              {/* Section 5: Security Declaration */}
+              <div className="p-3.5 rounded-xl bg-blue-50/70 border border-blue-200/80 flex items-start gap-3">
                 <input 
-                  type="text" 
-                  required
-                  placeholder="e.g. GHS 300 / one-time"
-                  value={jobWage}
-                  onChange={e => setJobWage(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-900 focus:outline-none"
+                  type="checkbox" 
+                  id="job-safety-check"
+                  checked={jobSafetyTermsAccepted}
+                  onChange={e => setJobSafetyTermsAccepted(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 rounded text-blue-900 focus:ring-blue-900"
                 />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Your Contact (WhatsApp / Phone / Gmail) *</label>
-                <input 
-                  type="text" 
-                  required
-                  placeholder="e.g. 024 000 0000 or client@gmail.com"
-                  value={jobContact}
-                  onChange={e => setJobContact(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-900 focus:outline-none"
-                />
-                <p className="text-[10px] text-slate-400 font-medium mt-1">Provide a valid email address or Ghana phone number</p>
+                <label htmlFor="job-safety-check" className="text-[11px] text-slate-700 font-medium leading-relaxed cursor-pointer">
+                  I certify that the above identity and premise details are authentic, and I agree to treat PineVela accredited staff professionally and disburse the agreed compensation upon verified completion of the work.
+                </label>
               </div>
 
               {offerToast && (
-                <div className={`p-3 rounded-xl font-bold flex items-center gap-2 ${offerToast.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-800 border border-rose-200'}`}>
+                <div className={`p-3.5 rounded-xl font-bold flex items-center gap-2 text-xs ${offerToast.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-800 border border-rose-200'}`}>
                   {offerToast.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
                   <span>{offerToast.text}</span>
                 </div>
               )}
 
-              <div className="pt-2 flex items-center justify-end gap-3">
+              <div className="pt-2 flex items-center justify-end gap-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setSelectedStaffForOffer(null)}
-                  className="px-5 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 font-bold text-slate-700 cursor-pointer"
+                  className="px-5 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 font-bold text-slate-700 cursor-pointer transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submittingOffer}
-                  className="px-6 py-3 rounded-xl bg-blue-900 hover:bg-blue-950 text-white font-black shadow-md flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  className="px-6 py-3 rounded-xl bg-blue-900 hover:bg-blue-950 text-white font-black shadow-md flex items-center gap-2 cursor-pointer disabled:opacity-50 transition-all hover:shadow-lg"
                 >
                   {submittingOffer ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Briefcase className="w-4 h-4" />}
-                  <span>Send Job Offer Proposal</span>
+                  <span>Submit One-Time Job Offer Proposal</span>
                 </button>
               </div>
             </form>

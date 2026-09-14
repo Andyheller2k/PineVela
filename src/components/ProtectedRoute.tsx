@@ -6,7 +6,7 @@ import LogoutConfirmationModal from './LogoutConfirmationModal';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  allowedRoles?: ('student' | 'manager' | 'admin' | 'staff')[];
+  allowedRoles?: ('student' | 'manager' | 'admin' | 'staff' | 'user')[];
 }
 
 export default function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
@@ -91,11 +91,11 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
 }
 
 // Small helper component to direct users back to their corresponding dashboards
-function NavigateToRoleDashboard({ role }: { role: 'student' | 'manager' | 'admin' | 'staff' }) {
+function NavigateToRoleDashboard({ role }: { role: 'student' | 'manager' | 'admin' | 'staff' | 'user' }) {
   let path = '/';
   let label = 'Return to Portal';
 
-  if (role === 'student') {
+  if (role === 'student' || role === 'user') {
     path = '/student/dashboard';
     label = 'Go to Student Residence Desk';
   } else if (role === 'manager') {

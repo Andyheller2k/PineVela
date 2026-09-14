@@ -1057,48 +1057,22 @@ export default function PageManagerDashboard() {
 
   useEffect(() => {
     if (!loading && user) {
-      const isPropApproved = (p: any) => 
-        Boolean(
-          p && (
-            p.isApproved === true || 
-            p.isApproved === 'true' ||
-            p.approvalStatus === 'Approved' || 
-            p.approvalStatus === 'approved' ||
-            p.status === 'Approved' || 
-            p.status === 'approved' ||
-            p.status === 'Active' || 
-            p.status === 'active' || 
-            p.status === 'Open' ||
-            p.status === 'open'
-          )
-        );
-      const hasApprovedProp = 
-        properties.some(isPropApproved) || 
-        Boolean(properties[0] && isPropApproved(properties[0]));
-
       const hasAnyHostel = properties.length > 0;
-
-      if (!hasApprovedProp) {
-        setActiveTab('notifications');
-        // Welcoming onboarding popup remains persistent on login until manager has registered an approved hostel
-        if (!hasAnyHostel) {
-          setShowWelcomePopup(true);
-        }
+      if (!hasAnyHostel && isPendingOnboarding) {
+        setShowWelcomePopup(true);
       } else {
         setShowWelcomePopup(false);
       }
     }
-  }, [loading, properties, user]);
+  }, [loading]);
 
   const handleLogout = () => {
     setShowLogoutConfirm(true);
   };
 
   const confirmLogout = () => {
-    navigate('/', { replace: true });
-    setTimeout(() => {
-      logout();
-    }, 50);
+    logout();
+    navigate('/login', { replace: true });
   };
 
   // Derived stats
@@ -1357,38 +1331,38 @@ export default function PageManagerDashboard() {
             {activeTab === 'overview' && (
               <div className="space-y-8 animate-fadeIn relative z-10">
                 {/* Welcome banner with verified property spotlight */}
-                <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white p-8 rounded-3xl shadow-2xl relative overflow-hidden">
-                  <div className="absolute right-0 top-0 w-96 h-96 bg-cyan-400/10 rounded-full blur-3xl pointer-events-none" />
+                <div className="bg-gradient-to-br from-sky-100/90 via-blue-100/85 to-indigo-100/60 border border-sky-200/80 text-slate-900 p-8 rounded-3xl backdrop-blur-3xl shadow-xl relative overflow-hidden">
+                  <div className="absolute right-0 top-0 w-96 h-96 bg-cyan-400/20 rounded-full blur-3xl pointer-events-none" />
                   <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
                     <div className="space-y-2 max-w-2xl">
-                      <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 rounded-full text-xs font-bold uppercase tracking-wider">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/15 text-emerald-900 border border-emerald-300/60 rounded-full text-xs font-black uppercase tracking-wider">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                         <span>Official Accredited Residence • Live & Active</span>
                       </div>
-                      <h2 className="text-2xl lg:text-3xl font-extrabold tracking-tight text-white">
-                        {primaryProperty?.name || 'Premuim PineVela'}
+                      <h2 className="text-2xl lg:text-3xl font-black tracking-tight text-slate-900">
+                        {primaryProperty?.name || 'Premium PineVela'}
                       </h2>
-                      <p className="text-sm text-blue-200/90 font-medium flex items-center gap-1.5">
-                        <MapPin className="w-4 h-4 text-cyan-300 shrink-0" />
-                        <span>{primaryProperty?.location || 'Oxford street,Osu, OX-9834, Accra'}</span>
+                      <p className="text-sm text-slate-600 font-medium flex items-center gap-1.5">
+                        <MapPin className="w-4 h-4 text-blue-600 shrink-0" />
+                        <span>{primaryProperty?.location || 'Oxford street, Osu, OX-9834, Accra'}</span>
                       </p>
                     </div>
 
                     <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
                       <button
                         onClick={() => setShowEditProfileModal(true)}
-                        className="bg-white/20 hover:bg-white/30 backdrop-blur-md border border-white/20 px-4 py-3 rounded-2xl text-xs font-bold text-white flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm hover:shadow"
+                        className="bg-white/80 hover:bg-white backdrop-blur-md border border-sky-200/80 px-4 py-3 rounded-2xl text-xs font-bold text-blue-950 flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs hover:shadow-sm"
                       >
-                        <Edit3 className="w-4 h-4 text-cyan-200" />
+                        <Edit3 className="w-4 h-4 text-blue-600" />
                         <span>Edit Manager Profile</span>
                       </button>
 
-                      <div className="bg-white/10 backdrop-blur-md border border-white/15 p-4 rounded-2xl text-center shrink-0 min-w-[180px]">
-                        <span className="text-[10px] uppercase tracking-wider text-cyan-200 font-bold">Standard Student Fee</span>
-                        <div className="text-2xl font-black text-white mt-0.5">
+                      <div className="bg-white/80 backdrop-blur-md border border-sky-200/80 p-4 rounded-2xl text-center shrink-0 min-w-[180px] shadow-xs">
+                        <span className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Standard Student Fee</span>
+                        <div className="text-2xl font-black text-blue-900 mt-0.5">
                           GHS {(primaryProperty?.price || 35000).toLocaleString()}
                         </div>
-                        <span className="text-[10px] text-blue-200">Per Academic Year</span>
+                        <span className="text-[10px] text-slate-500 font-medium">Per Academic Year</span>
                       </div>
                     </div>
                   </div>
