@@ -1776,7 +1776,7 @@ export default function Page1Public({
                     </div>
 
                     <p className="text-xs text-slate-700 font-medium">
-                      Interested in working at <strong>{selectedHostel.name}</strong>? Create a staff account and apply now to initiate the staff registration process!
+                      Interested in working at <strong>{selectedHostel.name}</strong>? Create an account now to begin!!
                     </p>
 
                     {/* Needed Staff Roles */}
@@ -1809,13 +1809,12 @@ export default function Page1Public({
                       onClick={() => {
                         sessionStorage.setItem('preferred_hostel_id', selectedHostel.id || '');
                         sessionStorage.setItem('preferred_hostel_name', selectedHostel.name || '');
-                        sessionStorage.setItem('navigated_to_staff_register', 'true');
-                        navigate('/staff/register');
+                        navigate('/login?mode=register', { state: { mode: 'register' } });
                       }}
                       className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl text-xs flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer transform hover:-translate-y-0.5"
                     >
                       <Briefcase size={14} className="text-slate-950" />
-                      <span>Create Staff Account & Apply Now</span>
+                      <span>Create an account now to begin!!</span>
                     </button>
                   </div>
                 </div>

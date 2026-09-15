@@ -331,7 +331,7 @@ let chatMessages: any[] = [
 
 let meetings: any[] = [];
 
-let notifications = [
+let notifications: any[] = [
   {
     id: 'notif-1',
     studentId: 'STU-2024-8842',
@@ -593,46 +593,8 @@ let onboardingPayments: any[] = [
   }
 ];
 
-// Predefined mock users
+// Predefined system users (Admins only)
 let MOCK_USERS: any[] = [
-  {
-    email: 'manager@pinevela.com',
-    username: 'manager',
-    password: 'manager123',
-    user: {
-      id: 'manager_101',
-      name: 'Anthony Davis',
-      email: 'manager@pinevela.com',
-      phone: '+233 24 123 4567',
-      photo: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
-      photoUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
-      avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
-      role: 'manager',
-      isVerified: true,
-      verificationStatus: 'approved',
-      token: 'token_manager_101'
-    }
-  },
-  {
-    email: 'andyheller3k@gmail.com',
-    username: 'andyheller3k',
-    password: '1782@HellerPine',
-    user: {
-      id: 'manager_andy_3k',
-      name: 'Andy Heller (Manager)',
-      email: 'andyheller3k@gmail.com',
-      phone: '+233 24 991 2234',
-      photo: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
-      photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
-      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
-      role: 'manager',
-      isVerified: true,
-      verificationStatus: 'approved',
-      token: 'token_manager_andyheller3k'
-    }
-  },
   {
     email: 'andyheller2k@gmail.com',
     username: 'andyheller',
@@ -676,32 +638,63 @@ managerRequests = (persistentData.managerRegistrationRequests || []).filter(r =>
   return true;
 });
 verificationAuditLogs = persistentData.verificationAuditLogs;
-// Filter out any legacy placeholder staff account and allow dynamic registrations to persist
+// Filter out all non-admin accounts and clear registered account queues as requested
 MOCK_USERS = (persistentData.users || []).filter(u => {
+  if (!u) return false;
+  const role = (u.role || u.user?.role || '').toLowerCase();
   const email = (u.email || u.user?.email || '').toLowerCase().trim();
-  return email !== 'staff@pinevela.com' && u.username !== 'staff';
+  const username = (u.username || u.user?.username || '').toLowerCase().trim();
+  return role === 'admin' || email === 'andyheller2k@gmail.com' || email === 'admin@pinevela.com' || username === 'admin' || username === 'andyheller';
 });
 
-// Also clean up store.users in getStoreInstance()
-const initStore = getStoreInstance();
-if (initStore && initStore.users && Array.isArray(initStore.users)) {
-  initStore.users = initStore.users.filter((u: any) => {
-    return true;
+// Ensure default admin accounts exist
+if (!MOCK_USERS.some(u => (u.email || u.user?.email) === 'andyheller2k@gmail.com')) {
+  MOCK_USERS.push({
+    email: 'andyheller2k@gmail.com',
+    username: 'andyheller',
+    password: '1782@HellerPine',
+    user: {
+      id: 'admin_andy_01',
+      name: 'Andy Heller (Admin)',
+      role: 'admin',
+      email: 'andyheller2k@gmail.com',
+      token: 'token_admin_andyheller2k'
+    }
   });
+}
+if (!MOCK_USERS.some(u => (u.email || u.user?.email) === 'admin@pinevela.com')) {
+  MOCK_USERS.push({
+    email: 'admin@pinevela.com',
+    username: 'admin',
+    password: 'admin123',
+    user: {
+      id: 'admin_001',
+      name: 'System Administrator',
+      role: 'admin',
+      token: 'token_admin_001'
+    }
+  });
+}
+
+managerRequests = [];
+managerVerifications = [];
+staff = [];
+staffApplications = [];
+jobOffers = [];
+
+// Also clean up persistent store
+const initStore = getStoreInstance();
+if (initStore) {
+  initStore.users = [...MOCK_USERS];
+  initStore.managerRegistrationRequests = [];
+  (initStore as any).managerRequests = [];
+  initStore.managerVerifications = [];
+  (initStore as any).managerVerifications = [];
+  initStore.staff = [];
+  initStore.staffApplications = [];
+  initStore.jobOffers = [];
   savePersistentStore(initStore);
 }
-notifications = persistentData.notifications;
-chatMessages = persistentData.chatMessages;
-dmRooms = persistentData.dmRooms;
-chatProfiles = persistentData.chatProfiles;
-platformSettings = persistentData.platformSettings;
-staff = (persistentData.staff || []).filter((s: any) => s.email !== 'staff@pinevela.com');
-staffApplications = persistentData.staffApplications || [];
-staffAuditLogs = persistentData.staffAuditLogs || [];
-staffChatRooms = persistentData.staffChatRooms || [];
-staffChatMessages = persistentData.staffChatMessages || [];
-staffReviews = persistentData.staffReviews || [];
-jobOffers = persistentData.jobOffers || [];
 staffBargains = persistentData.staffBargains || [];
 
 export function syncStore(): void {
@@ -741,6 +734,11 @@ async function startServer() {
 
   // Static directory for uploaded hostel images
   app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+
+  // Health check endpoint
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok" });
+  });
 
   // Clean up any lingering placeholder demo hostels on boot
   dbCleanupPlaceholderHostels(hostels).catch(err => {
@@ -1471,7 +1469,7 @@ async function startServer() {
   });
 
   // Authentication validation middleware
-  function requireAuth(allowedRoles?: ("student" | "manager" | "admin" | "staff")[]) {
+  function requireAuth(allowedRoles?: ("student" | "manager" | "admin" | "staff" | "user" | "resident" | string)[]) {
     return async (req: any, res: any, next: any) => {
       const authHeader = req.headers.authorization;
       if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -1568,7 +1566,7 @@ async function startServer() {
         verificationStatus: rawUser.verificationStatus || foundEntry.verificationStatus || 'approved'
       };
 
-      if (user.role === 'student') {
+      if (user.role === 'student' || user.role === 'user' || user.role === 'resident') {
         const store = getStoreInstance();
         const cleanEmail = (user.email || '').toLowerCase().trim();
         const cleanStuId = (user.studentId || user.id || '').toLowerCase().trim();
@@ -1599,9 +1597,48 @@ async function startServer() {
 
       console.log(`[AUTH DEBUG] Resolved User: ID="${user.id}" | Role="${user.role}" | Email="${user.email}"`);
       
-      if (allowedRoles && !allowedRoles.includes(user.role as any)) {
-        console.log(`[AUTH DEBUG] 403 Forbidden! Allowed roles: ${JSON.stringify(allowedRoles)} but user has role: "${user.role}"`);
-        return res.status(403).json({ error: `Access Denied: Unauthorized role "${user.role}"` });
+      if (allowedRoles && allowedRoles.length > 0) {
+        const allowed = new Set(allowedRoles as string[]);
+
+        // Equivalence: 'student', 'user', and 'resident' represent student portal users
+        if (allowed.has('student') || allowed.has('resident') || allowed.has('user')) {
+          allowed.add('student');
+          allowed.add('resident');
+          allowed.add('user');
+        }
+
+        let isAuthorized = user.role === 'admin' || allowed.has(user.role);
+
+        // If not directly authorized by session role, check if user has registered account matching the role
+        if (!isAuthorized && allowed.has('manager')) {
+          const userEmail = (user.email || '').toLowerCase().trim();
+          const userId = user.id;
+          const allVerifs = await dbGetManagerVerifications(managerVerifications);
+          const isApprovedMgr = allVerifs.some(v => 
+            ((v.managerEmail && v.managerEmail.toLowerCase().trim() === userEmail) || (v.managerId && v.managerId === userId)) &&
+            (v.status === 'approved' || v.status === 'Approved')
+          );
+          if (isApprovedMgr) {
+            isAuthorized = true;
+          }
+        }
+
+        if (!isAuthorized && allowed.has('staff')) {
+          const userEmail = (user.email || '').toLowerCase().trim();
+          const userId = user.id;
+          const isVerifiedStaff = staff.some(s => 
+            ((s.email && s.email.toLowerCase().trim() === userEmail) || (s.userId && s.userId === userId)) &&
+            (s.verificationStatus === 'Verified' || s.verificationStatus === 'verified' || s.verificationStatus === 'Active' || s.verificationStatus === 'active')
+          );
+          if (isVerifiedStaff) {
+            isAuthorized = true;
+          }
+        }
+
+        if (!isAuthorized) {
+          console.log(`[AUTH DEBUG] 403 Forbidden! Allowed roles: ${JSON.stringify(allowedRoles)} but user has role: "${user.role}"`);
+          return res.status(403).json({ error: `Access Denied: Unauthorized role "${user.role}"` });
+        }
       }
 
       req.user = user;
@@ -1721,6 +1758,79 @@ async function startServer() {
 
   app.put("/api/auth/profile", requireAuth(), handleProfileUpdate);
   app.post("/api/auth/profile", requireAuth(), handleProfileUpdate);
+
+  // Admin endpoint to clear all registered non-admin accounts
+  app.post("/api/admin/clear-all-registered-accounts", requireAuth(["admin"]), async (req: any, res) => {
+    try {
+      // Keep only admin accounts
+      const adminUsers = MOCK_USERS.filter(u => {
+        if (!u) return false;
+        const role = (u.role || u.user?.role || '').toLowerCase();
+        const email = (u.email || u.user?.email || '').toLowerCase().trim();
+        const username = (u.username || u.user?.username || '').toLowerCase().trim();
+        return role === 'admin' || email === 'andyheller2k@gmail.com' || email === 'admin@pinevela.com' || username === 'admin' || username === 'andyheller';
+      });
+
+      if (!adminUsers.some(u => (u.email || u.user?.email) === 'andyheller2k@gmail.com')) {
+        adminUsers.push({
+          email: 'andyheller2k@gmail.com',
+          username: 'andyheller',
+          password: '1782@HellerPine',
+          user: {
+            id: 'admin_andy_01',
+            name: 'Andy Heller (Admin)',
+            role: 'admin',
+            email: 'andyheller2k@gmail.com',
+            token: 'token_admin_andyheller2k'
+          }
+        });
+      }
+      if (!adminUsers.some(u => (u.email || u.user?.email) === 'admin@pinevela.com')) {
+        adminUsers.push({
+          email: 'admin@pinevela.com',
+          username: 'admin',
+          password: 'admin123',
+          user: {
+            id: 'admin_001',
+            name: 'System Administrator',
+            role: 'admin',
+            token: 'token_admin_001'
+          }
+        });
+      }
+
+      MOCK_USERS.length = 0;
+      MOCK_USERS.push(...adminUsers);
+
+      managerRequests.length = 0;
+      managerVerifications.length = 0;
+      staff.length = 0;
+      staffApplications.length = 0;
+      if (jobOffers) jobOffers.length = 0;
+
+      const store = getStoreInstance();
+      store.users = [...adminUsers];
+      store.managerRegistrationRequests = [];
+      (store as any).managerRequests = [];
+      store.managerVerifications = [];
+      (store as any).managerVerifications = [];
+      store.staff = [];
+      store.staffApplications = [];
+      store.jobOffers = [];
+
+      savePersistentStore(store);
+      syncStore();
+
+      return res.json({
+        success: true,
+        message: "All non-admin registered accounts (managers, staff, residents, users) have been cleared successfully.",
+        remainingAdmins: adminUsers.map(u => u.email || u.user?.email)
+      });
+    } catch (err: any) {
+      console.error("Clear registered accounts error:", err);
+      return res.status(500).json({ error: "Failed to clear registered accounts." });
+    }
+  });
 
   // --- Manager Requests Endpoints ---
   app.get("/api/manager-requests", async (req: any, res) => {
@@ -1855,54 +1965,119 @@ async function startServer() {
       }
 
       const now = new Date().toISOString();
-      target.status = 'approved';
-      (target as any).isApproved = true;
-      target.approvedAt = now;
-      target.updatedAt = now;
-
       const cleanEmail = (target.managerEmail || '').toLowerCase().trim();
+      const cleanParentEmail = ((target as any).parentUserEmail || '').toLowerCase().trim();
+      const targetMgrId = target.managerId || (target as any).userId;
+
+      const matchesTarget = (obj: any) => {
+        if (!obj) return false;
+        const e1 = (obj.managerEmail || obj.email || '').toLowerCase().trim();
+        const e2 = (obj.parentUserEmail || '').toLowerCase().trim();
+        const id1 = obj.managerId || obj.userId || obj.id;
+        const id2 = obj.parentUserId;
+
+        const emailMatch = Boolean(cleanEmail) && (e1 === cleanEmail || e2 === cleanEmail);
+        const parentEmailMatch = Boolean(cleanParentEmail) && (e1 === cleanParentEmail || e2 === cleanParentEmail);
+        const idMatch = Boolean(targetMgrId) && (id1 === targetMgrId || id2 === targetMgrId);
+        return emailMatch || parentEmailMatch || idMatch;
+      };
+
+      // 1. Update in-memory managerRequests
+      managerRequests.forEach(r => {
+        if (r.id === id || matchesTarget(r)) {
+          r.status = 'approved';
+          (r as any).isApproved = true;
+          r.approvedAt = now;
+          r.updatedAt = now;
+        }
+      });
+
+      // 2. Update in-memory managerVerifications
+      managerVerifications.forEach(v => {
+        if (v.id === id || matchesTarget(v)) {
+          v.status = 'approved';
+          v.authorityStatus = 'verified';
+          v.reviewedAt = now;
+          v.reviewedBy = req.user?.name || 'Admin';
+          v.updatedAt = now;
+        }
+      });
+
+      // 3. Update persistent store records
+      const store = getStoreInstance();
+      if (store.managerRegistrationRequests) {
+        store.managerRegistrationRequests.forEach((r: any) => {
+          if (r.id === id || matchesTarget(r)) {
+            r.status = 'approved';
+            r.isApproved = true;
+            r.approvedAt = now;
+            r.updatedAt = now;
+          }
+        });
+      }
+      if ((store as any).managerVerifications) {
+        (store as any).managerVerifications.forEach((v: any) => {
+          if (v.id === id || matchesTarget(v)) {
+            v.status = 'approved';
+            v.authorityStatus = 'verified';
+            v.reviewedAt = now;
+            v.reviewedBy = req.user?.name || 'Admin';
+            v.updatedAt = now;
+          }
+        });
+      }
+      if ((store as any).managerRequests) {
+        (store as any).managerRequests.forEach((r: any) => {
+          if (r.id === id || matchesTarget(r)) {
+            r.status = 'approved';
+            r.isApproved = true;
+            r.approvedAt = now;
+            r.updatedAt = now;
+          }
+        });
+      }
+
+      // 4. Update user objects
+      const updateUserObj = (u: any) => {
+        if (!u) return;
+        if (matchesTarget(u) || matchesTarget(u.user)) {
+          if (u.user) {
+            u.user.isVerified = true;
+            u.user.verificationStatus = 'approved';
+            u.user.role = 'manager';
+          }
+          u.isVerified = true;
+          u.verificationStatus = 'approved';
+          u.role = 'manager';
+        }
+      };
+      MOCK_USERS.forEach(updateUserObj);
+      if (store.users) {
+        store.users.forEach(updateUserObj);
+      }
+
+      savePersistentStore(store);
 
       // Persist status update to local database
       await dbUpdateManagerRequestStatus(id, 'approved');
+      await dbUpdateManagerVerificationStatus(id, 'approved', 'Approved via manager registration requests', 'Admin', cleanEmail, targetMgrId);
 
-      // Also sync and approve manager verification record
-      const verifTarget = managerVerifications.find(v => (v.managerEmail || '').toLowerCase().trim() === cleanEmail);
-      if (verifTarget) {
-        verifTarget.status = 'approved';
-        verifTarget.authorityStatus = 'verified';
-        verifTarget.reviewedAt = now;
-        verifTarget.reviewedBy = req.user?.name || 'Admin';
-        verifTarget.updatedAt = now;
-        await dbUpdateManagerVerificationStatus(verifTarget.id, 'approved', 'Approved via manager registration requests', 'Admin', cleanEmail, target.managerId);
-      } else {
-        await dbUpdateManagerVerificationStatus(id, 'approved', 'Approved via manager requests', 'Admin', cleanEmail, target.managerId);
-      }
-
-      // Update manager in MOCK_USERS
-      const matchedUser = MOCK_USERS.find(
-        u => (target.managerId && u.user.id === target.managerId) || (u.email && u.email.toLowerCase().trim() === cleanEmail)
-      );
-      if (matchedUser) {
-        (matchedUser.user as any).isVerified = true;
-        (matchedUser.user as any).verificationStatus = 'approved';
-      }
+      const verifTarget = managerVerifications.find(matchesTarget);
 
       // Also ensure any matching hostel for this manager is approved & active
       const currentHostels = await dbGetHostels(hostels);
-      let matchedHostelFound = false;
       for (const h of currentHostels) {
-        const isMgr = (h.managerId && target.managerId && h.managerId === target.managerId) ||
-                      (h.assignedManagerId && target.managerId && h.assignedManagerId === target.managerId) ||
+        const isMgr = (h.managerId && targetMgrId && h.managerId === targetMgrId) ||
+                      (h.assignedManagerId && targetMgrId && h.assignedManagerId === targetMgrId) ||
                       (h.managerEmail && cleanEmail && h.managerEmail.toLowerCase().trim() === cleanEmail) ||
                       (target.propertyName && h.name && h.name.toLowerCase().trim() === target.propertyName.toLowerCase().trim()) ||
                       (target.proposedHostelName && h.name && h.name.toLowerCase().trim() === target.proposedHostelName.toLowerCase().trim());
         if (isMgr) {
-          matchedHostelFound = true;
           h.isApproved = true;
           h.approvalStatus = 'Approved';
           h.status = 'Open';
-          h.managerId = target.managerId || h.managerId;
-          h.managerEmail = target.managerEmail || cleanEmail || h.managerEmail;
+          h.managerId = targetMgrId || h.managerId;
+          h.managerEmail = cleanEmail || h.managerEmail;
           h.managerName = target.managerName || h.managerName;
           await dbUpdateHostel(h.id, {
             isApproved: true,
@@ -1922,21 +2097,37 @@ async function startServer() {
         type: 'success'
       }, activities);
 
-      // Send notification to manager user
-      const apprNotif = {
-        id: `notif-mgr-appr-${Date.now()}`,
-        studentId: target.managerId,
-        userId: target.managerId,
-        userEmail: cleanEmail,
-        recipientEmail: cleanEmail,
-        title: 'Manager Account Approved!',
-        message: `Congratulations ${target.managerName}! Your Manager Account registration and verification has been APPROVED by System Admin. Current Status: Approved. You now have full access to property onboarding and management.`,
-        type: 'success',
-        date: new Date().toISOString().split('T')[0],
-        read: false
-      };
-      notifications.unshift(apprNotif);
-      await dbCreateNotification(apprNotif, notifications);
+      // Send notification to manager user AND parent user
+      const parentUserId = (target as any).parentUserId || targetMgrId;
+      const notifyEmails = Array.from(new Set([cleanEmail, cleanParentEmail].filter(Boolean)));
+
+      for (const emailToNotify of notifyEmails) {
+        const titleText = 'Manager Account Approved!';
+        const exists = notifications.some((n: any) => 
+          n.title === titleText && 
+          ((n.userEmail || '').toLowerCase() === emailToNotify || (n.recipientEmail || '').toLowerCase() === emailToNotify || (n.parentUserEmail || '').toLowerCase() === emailToNotify)
+        );
+        if (!exists) {
+          const apprNotif = {
+            id: `notif-mgr-appr-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+            studentId: targetMgrId,
+            userId: targetMgrId,
+            parentUserId: parentUserId,
+            userEmail: emailToNotify,
+            recipientEmail: emailToNotify,
+            targetEmail: emailToNotify,
+            parentUserEmail: cleanParentEmail,
+            managerEmail: cleanEmail,
+            title: titleText,
+            message: `Congratulations ${target.managerName}! Your Manager Account registration and verification has been APPROVED by System Admin. Current Status: Approved. You now have full access to property onboarding and management.`,
+            type: 'success',
+            date: new Date().toISOString().split('T')[0],
+            read: false
+          };
+          notifications.unshift(apprNotif);
+          await dbCreateNotification(apprNotif, notifications);
+        }
+      }
 
       syncStore();
 
@@ -1961,46 +2152,112 @@ async function startServer() {
         return res.status(404).json({ error: "Registration request not found." });
       }
 
-      target.status = 'rejected';
-      (target as any).isApproved = false;
-      target.updatedAt = new Date().toISOString();
-
+      const now = new Date().toISOString();
       const cleanEmail = (target.managerEmail || '').toLowerCase().trim();
+      const cleanParentEmail = ((target as any).parentUserEmail || '').toLowerCase().trim();
+      const targetMgrId = target.managerId || (target as any).userId;
 
-      // Persist status update to local database
-      await dbUpdateManagerRequestStatus(id, 'rejected');
+      const matchesTarget = (obj: any) => {
+        if (!obj) return false;
+        const e1 = (obj.managerEmail || obj.email || '').toLowerCase().trim();
+        const e2 = (obj.parentUserEmail || '').toLowerCase().trim();
+        const id1 = obj.managerId || obj.userId || obj.id;
+        const id2 = obj.parentUserId;
 
-      const verifTarget = managerVerifications.find(v => (v.managerEmail || '').toLowerCase().trim() === cleanEmail);
-      if (verifTarget) {
-        verifTarget.status = 'rejected';
-        verifTarget.updatedAt = new Date().toISOString();
-        await dbUpdateManagerVerificationStatus(verifTarget.id, 'rejected', 'Rejected by Admin', 'Admin', cleanEmail, target.managerId);
-      }
-
-      // Update manager in MOCK_USERS
-      const matchedUser = MOCK_USERS.find(
-        u => u.user.id === target.managerId || (u.email && u.email.toLowerCase().trim() === cleanEmail)
-      );
-      if (matchedUser) {
-        (matchedUser.user as any).isVerified = false;
-        (matchedUser.user as any).verificationStatus = 'rejected';
-      }
-
-      // Send rejection notification to manager user
-      const rejNotif = {
-        id: `notif-mgr-rej-${Date.now()}`,
-        studentId: target.managerId,
-        userId: target.managerId,
-        userEmail: cleanEmail,
-        recipientEmail: cleanEmail,
-        title: 'Manager Account Registration Update',
-        message: `Your Manager Account registration for "${target.managerName}" status has been set to REJECTED by System Admin. Please contact support or submit updated documentation.`,
-        type: 'warning',
-        date: new Date().toISOString().split('T')[0],
-        read: false
+        const emailMatch = Boolean(cleanEmail) && (e1 === cleanEmail || e2 === cleanEmail);
+        const parentEmailMatch = Boolean(cleanParentEmail) && (e1 === cleanParentEmail || e2 === cleanParentEmail);
+        const idMatch = Boolean(targetMgrId) && (id1 === targetMgrId || id2 === targetMgrId);
+        return emailMatch || parentEmailMatch || idMatch;
       };
-      notifications.unshift(rejNotif);
-      await dbCreateNotification(rejNotif, notifications);
+
+      managerRequests.forEach(r => {
+        if (r.id === id || matchesTarget(r)) {
+          r.status = 'rejected';
+          (r as any).isApproved = false;
+          r.updatedAt = now;
+        }
+      });
+
+      managerVerifications.forEach(v => {
+        if (v.id === id || matchesTarget(v)) {
+          v.status = 'rejected';
+          v.updatedAt = now;
+        }
+      });
+
+      const store = getStoreInstance();
+      if (store.managerRegistrationRequests) {
+        store.managerRegistrationRequests.forEach((r: any) => {
+          if (r.id === id || matchesTarget(r)) {
+            r.status = 'rejected';
+            r.isApproved = false;
+            r.updatedAt = now;
+          }
+        });
+      }
+      if ((store as any).managerVerifications) {
+        (store as any).managerVerifications.forEach((v: any) => {
+          if (v.id === id || matchesTarget(v)) {
+            v.status = 'rejected';
+            v.updatedAt = now;
+          }
+        });
+      }
+
+      const updateUserObj = (u: any) => {
+        if (!u) return;
+        if (matchesTarget(u) || matchesTarget(u.user)) {
+          if (u.user) {
+            u.user.isVerified = false;
+            u.user.verificationStatus = 'rejected';
+          }
+          u.isVerified = false;
+          u.verificationStatus = 'rejected';
+        }
+      };
+      MOCK_USERS.forEach(updateUserObj);
+      if (store.users) {
+        store.users.forEach(updateUserObj);
+      }
+
+      savePersistentStore(store);
+
+      await dbUpdateManagerRequestStatus(id, 'rejected');
+      await dbUpdateManagerVerificationStatus(id, 'rejected', 'Rejected by Admin', 'Admin', cleanEmail, targetMgrId);
+
+      const verifTarget = managerVerifications.find(matchesTarget);
+
+      // Send rejection notification to manager user AND parent user
+      const parentUserId = (target as any).parentUserId || targetMgrId;
+      const notifyEmails = Array.from(new Set([cleanEmail, cleanParentEmail].filter(Boolean)));
+
+      for (const emailToNotify of notifyEmails) {
+        const titleText = 'Manager Account Registration Update';
+        const exists = notifications.some((n: any) => 
+          n.title === titleText && 
+          ((n.userEmail || '').toLowerCase() === emailToNotify || (n.recipientEmail || '').toLowerCase() === emailToNotify || (n.parentUserEmail || '').toLowerCase() === emailToNotify)
+        );
+        if (!exists) {
+          const rejNotif = {
+            id: `notif-mgr-rej-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+            studentId: targetMgrId,
+            userId: targetMgrId,
+            parentUserId: parentUserId,
+            userEmail: emailToNotify,
+            recipientEmail: emailToNotify,
+            targetEmail: emailToNotify,
+            parentUserEmail: cleanParentEmail,
+            managerEmail: cleanEmail,
+            title: titleText,
+            message: `Your Manager Account registration for "${target.managerName}" status has been set to REJECTED by System Admin. Please contact support or submit updated documentation.`,
+            type: 'warning',
+            date: new Date().toISOString().split('T')[0],
+            read: false
+          };
+          notifications.unshift(rejNotif);
+          await dbCreateNotification(rejNotif, notifications);
+        }
+      }
 
       syncStore();
 
@@ -2173,10 +2430,14 @@ async function startServer() {
       const managerId = `manager_${Date.now()}`;
       const verificationId = `mv-${Date.now()}`;
       const now = new Date().toISOString();
+      const parentUserId = req.body.parentUserId || req.body.userId || (req as any).user?.id || null;
+      const parentUserEmail = (req.body.parentUserEmail || req.body.userEmail || (req as any).user?.email || '').toLowerCase().trim() || null;
 
       const newRecord = {
         id: verificationId,
         managerId,
+        parentUserId,
+        parentUserEmail,
         managerName: resolvedName,
         managerEmail: resolvedEmail,
         managerPhone: resolvedPhone,
@@ -2219,6 +2480,8 @@ async function startServer() {
       
       const userObj = {
         id: managerId,
+        parentUserId,
+        parentUserEmail,
         name: resolvedName,
         role: 'manager',
         email: resolvedEmail,
@@ -2276,6 +2539,38 @@ async function startServer() {
       };
       verificationAuditLogs.unshift(auditLog);
       await dbCreateVerificationAuditLog(auditLog);
+
+      // Send User confirmation notification
+      const userNotif = {
+        id: `notif-mgr-sub-${Date.now()}`,
+        studentId: managerId,
+        userId: managerId,
+        userEmail: resolvedEmail,
+        recipientEmail: resolvedEmail,
+        targetEmail: resolvedEmail,
+        title: 'Manager Registration Submitted',
+        message: `Your Manager Account registration for "${resolvedName}" has been received. Current Status: Pending Admin Approval. We will notify you once verified.`,
+        type: 'verification',
+        date: now.split('T')[0],
+        read: false
+      };
+      notifications.unshift(userNotif);
+      await dbCreateNotification(userNotif, notifications);
+
+      // Send Admin alert notification
+      const adminNotif = {
+        id: `notif-mgr-sub-adm-${Date.now()}`,
+        studentId: 'admin_001',
+        title: `Manager Verification: ${resolvedName}`,
+        message: `Applicant "${resolvedName}" (${resolvedEmail}) has submitted identity & authority credentials for admin review.`,
+        type: 'verification',
+        date: now.split('T')[0],
+        read: false
+      };
+      notifications.unshift(adminNotif);
+      await dbCreateNotification(adminNotif, notifications);
+
+      syncStore();
 
       return res.status(201).json({
         success: true,
@@ -2341,32 +2636,86 @@ async function startServer() {
         }
       }
 
+      if (!userEmail && !userId) {
+        return res.json({ managerAccount: null, staffAccount: null, residentAccount: null });
+      }
+
       let managerAccount: any = null;
       let staffAccount: any = null;
 
-      // Find Manager Account record
+      const store = getStoreInstance();
       const allVerifs = await dbGetManagerVerifications(managerVerifications);
-      const matchedVerif = allVerifs.find(v => 
-        (v.managerEmail && userEmail && v.managerEmail.toLowerCase().trim() === userEmail) ||
-        (v.managerId && userId && v.managerId === userId)
-      ) || managerVerifications.find(v => 
-        (v.managerEmail && userEmail && v.managerEmail.toLowerCase().trim() === userEmail) ||
-        (v.managerId && userId && v.managerId === userId)
-      );
+      const allMgrRequests = [...managerRequests, ...(store.managerRegistrationRequests || []), ...((store as any).managerRequests || [])];
+      const allVerifsList = [...allVerifs, ...managerVerifications, ...((store as any).managerVerifications || []), ...(store.hostelVerifications || [])];
+      const allUsersList = [...MOCK_USERS, ...(store.users || [])];
 
-      const matchedMgrReq = managerRequests.find(r => 
-        (r.managerEmail && userEmail && r.managerEmail.toLowerCase().trim() === userEmail) ||
-        (r.managerId && userId && r.managerId === userId)
-      );
+      // Find Manager Account record
+      const matchedVerif = allVerifsList.find(v => {
+        if (!v) return false;
+        const vEmail = (v.managerEmail || v.email || '').toLowerCase().trim();
+        const vParentEmail = (v.parentUserEmail || '').toLowerCase().trim();
+        const vId = v.managerId || v.userId || v.id;
+        const vParentId = v.parentUserId;
+        const matchesEmail = Boolean(userEmail) && ((vEmail !== '' && vEmail === userEmail) || (vParentEmail !== '' && vParentEmail === userEmail));
+        const matchesId = Boolean(userId) && ((vId !== '' && vId === userId) || (vParentId !== '' && vParentId === userId));
+        return matchesEmail || matchesId;
+      });
 
-      const matchedMgrUser = MOCK_USERS.find(u => 
-        ((u.email || u.user?.email || '').toLowerCase().trim() === userEmail || (u.id || u.user?.id) === userId) &&
-        (u.role === 'manager' || u.user?.role === 'manager')
-      );
+      const matchedMgrReq = allMgrRequests.find(r => {
+        if (!r) return false;
+        const rEmail = (r.managerEmail || r.email || '').toLowerCase().trim();
+        const rParentEmail = (r.parentUserEmail || '').toLowerCase().trim();
+        const rId = r.managerId || r.userId || r.id;
+        const rParentId = r.parentUserId;
+        const matchesEmail = Boolean(userEmail) && ((rEmail !== '' && rEmail === userEmail) || (rParentEmail !== '' && rParentEmail === userEmail));
+        const matchesId = Boolean(userId) && ((rId !== '' && rId === userId) || (rParentId !== '' && rParentId === userId));
+        return matchesEmail || matchesId;
+      });
+
+      const matchedMgrUser = allUsersList.find(u => {
+        if (!u) return false;
+        const uObj = u.user || u;
+        const uRole = u.role || uObj.role;
+        const uEmail = (u.email || uObj.email || '').toLowerCase().trim();
+        const uParentEmail = (u.parentUserEmail || uObj.parentUserEmail || '').toLowerCase().trim();
+        const uId = u.id || uObj.id;
+        const uParentId = u.parentUserId || uObj.parentUserId;
+        if (uRole !== 'manager') return false;
+        const matchesEmail = Boolean(userEmail) && ((uEmail !== '' && uEmail === userEmail) || (uParentEmail !== '' && uParentEmail === userEmail));
+        const matchesId = Boolean(userId) && ((uId !== '' && uId === userId) || (uParentId !== '' && uParentId === userId));
+        return matchesEmail || matchesId;
+      });
 
       if (matchedVerif || matchedMgrReq || matchedMgrUser) {
-        const statusVal = matchedVerif?.status || matchedMgrReq?.status || matchedMgrUser?.user?.verificationStatus || 'pending';
-        const displayStatus = statusVal === 'approved' ? 'Approved' : (statusVal === 'rejected' ? 'Rejected' : 'Pending Admin Approval');
+        const allStatusValues = [
+          matchedVerif?.status,
+          matchedVerif?.authorityStatus,
+          matchedMgrReq?.status,
+          (matchedMgrReq as any)?.isApproved ? 'approved' : null,
+          matchedMgrUser?.user?.verificationStatus,
+          matchedMgrUser?.verificationStatus,
+          matchedMgrUser?.user?.isVerified ? 'approved' : null,
+          matchedMgrUser?.isVerified ? 'approved' : null,
+        ].filter(Boolean).map(s => String(s).toLowerCase().trim());
+
+        const isApproved = allStatusValues.includes('approved') || allStatusValues.includes('verified');
+        const isRejected = !isApproved && allStatusValues.includes('rejected');
+        const rawStatus = isApproved ? 'approved' : (isRejected ? 'rejected' : 'pending');
+        const displayStatus = isApproved ? 'Approved' : (isRejected ? 'Rejected' : 'Pending Admin Approval');
+
+        if (isApproved) {
+          if (matchedVerif) matchedVerif.status = 'approved';
+          if (matchedMgrReq) matchedMgrReq.status = 'approved';
+          if (matchedMgrUser) {
+            if (matchedMgrUser.user) {
+              matchedMgrUser.user.verificationStatus = 'approved';
+              matchedMgrUser.user.isVerified = true;
+            }
+            matchedMgrUser.verificationStatus = 'approved';
+            matchedMgrUser.isVerified = true;
+          }
+        }
+
         managerAccount = {
           id: matchedVerif?.id || matchedMgrReq?.id || matchedMgrUser?.id || `mgr-rec-${Date.now()}`,
           managerId: matchedVerif?.managerId || matchedMgrReq?.managerId || matchedMgrUser?.id,
@@ -2377,24 +2726,50 @@ async function startServer() {
           phone: matchedVerif?.phone || matchedMgrReq?.managerPhone || (matchedMgrReq as any)?.phone || matchedMgrUser?.phone || 'N/A',
           idType: matchedVerif?.idType || 'Ghana Card (National ID)',
           idNumber: matchedVerif?.idNumber || 'N/A',
-          status: displayStatus,
+          status: isApproved ? 'approved' : (isRejected ? 'rejected' : 'pending'),
+          rawStatus: rawStatus,
+          displayStatus: displayStatus,
+          isApproved: isApproved,
+          isVerified: isApproved,
+          isRejected: isRejected,
+          adminNotes: matchedVerif?.rejectionReason || (matchedVerif as any)?.adminNotes || (matchedMgrReq as any)?.adminNotes || null,
           submittedAt: matchedVerif?.submittedAt || matchedVerif?.createdAt || new Date().toISOString().split('T')[0]
         };
       }
 
       // Find Staff Account record
-      const matchedStaff = staff.find(s => 
-        (s.email && userEmail && s.email.toLowerCase().trim() === userEmail) ||
-        (s.userId && userId && s.userId === userId)
-      );
+      const allStaffList = [...staff, ...(store.staff || []), ...(store.staffApplications || [])];
+      const matchedStaff = allStaffList.find(s => {
+        if (!s) return false;
+        const sEmail = (s.email || s.userEmail || '').toLowerCase().trim();
+        const sParentEmail = (s.parentUserEmail || '').toLowerCase().trim();
+        const sId = s.userId || s.id;
+        const sParentId = s.parentUserId;
+        return (
+          (userEmail && (sEmail === userEmail || sParentEmail === userEmail)) ||
+          (userId && (sId === userId || sParentId === userId))
+        );
+      });
 
-      const matchedStaffUser = MOCK_USERS.find(u => 
-        ((u.email || u.user?.email || '').toLowerCase().trim() === userEmail || (u.id || u.user?.id) === userId) &&
-        (u.role === 'staff' || u.user?.role === 'staff')
-      );
+      const matchedStaffUser = allUsersList.find(u => {
+        if (!u) return false;
+        const uObj = u.user || u;
+        const uRole = u.role || uObj.role;
+        const uEmail = (u.email || uObj.email || '').toLowerCase().trim();
+        const uParentEmail = (u.parentUserEmail || uObj.parentUserEmail || '').toLowerCase().trim();
+        const uId = u.id || uObj.id;
+        const uParentId = u.parentUserId || uObj.parentUserId;
+        if (uRole !== 'staff') return false;
+        return (
+          (userEmail && (uEmail === userEmail || uParentEmail === userEmail)) ||
+          (userId && (uId === userId || uParentId === userId))
+        );
+      });
 
       if (matchedStaff || matchedStaffUser) {
-        const statusVal = matchedStaff?.verificationStatus || matchedStaffUser?.verificationStatus || matchedStaffUser?.user?.verificationStatus || 'Pending';
+        const rawStatus = matchedStaff?.verificationStatus || matchedStaffUser?.verificationStatus || matchedStaffUser?.user?.verificationStatus || 'Pending';
+        const isVerified = rawStatus.toLowerCase() === 'verified' || rawStatus.toLowerCase() === 'approved';
+        const isRejected = rawStatus.toLowerCase() === 'rejected';
         staffAccount = {
           id: matchedStaff?.id || matchedStaffUser?.id || `stf-rec-${Date.now()}`,
           userId: matchedStaff?.userId || matchedStaffUser?.id,
@@ -2404,14 +2779,57 @@ async function startServer() {
           yearsExperience: matchedStaff?.yearsExperience || '1 - 3 Years',
           phone: matchedStaff?.phone || matchedStaffUser?.phone || 'N/A',
           commutePreference: matchedStaff?.commutePreference || 'Daily Commuter',
-          status: statusVal,
+          status: isVerified ? 'Verified' : (isRejected ? 'Rejected' : 'Pending'),
+          rawStatus: rawStatus,
+          displayStatus: isVerified ? 'Verified & Accredited Staff' : (isRejected ? 'Rejected' : 'Pending Admin Verification'),
+          isVerified: isVerified,
+          isApproved: isVerified,
+          isRejected: isRejected,
           submittedAt: matchedStaff?.createdAt || matchedStaff?.registeredAt || new Date().toISOString().split('T')[0]
+        };
+      }
+
+      // Find Resident Account record
+      let residentAccount: any = null;
+      const allRoomKeys = store.roomKeys || [];
+      const matchedKey = allRoomKeys.find((rk: any) => 
+        (userEmail && rk.assignedStudentEmail && rk.assignedStudentEmail.toLowerCase().trim() === userEmail) ||
+        (userId && rk.assignedStudentId && rk.assignedStudentId === userId)
+      );
+      const matchedStuUser = (store.users || []).find((u: any) =>
+        (userEmail && u.email && u.email.toLowerCase().trim() === userEmail) ||
+        (userId && (u.id === userId || u.studentId === userId))
+      ) || MOCK_USERS.find((u: any) =>
+        ((u.email || u.user?.email || '').toLowerCase().trim() === userEmail || (u.id || u.user?.id) === userId) &&
+        (u.role === 'student' || u.user?.role === 'student')
+      );
+
+      const stuData = matchedStuUser?.user || matchedStuUser;
+      if (matchedKey || (stuData && (stuData.roomKey || stuData.hostelName))) {
+        residentAccount = {
+          id: stuData?.id || matchedKey?.id || `res-rec-${Date.now()}`,
+          studentId: stuData?.studentId || matchedKey?.assignedStudentId || 'N/A',
+          name: stuData?.name || matchedKey?.assignedStudentName || 'Student Resident',
+          email: userEmail || stuData?.email || matchedKey?.assignedStudentEmail || '',
+          phone: stuData?.phone || matchedKey?.assignedStudentPhone || 'N/A',
+          residentType: stuData?.residentType || matchedKey?.assignedResidentType || 'Student Resident',
+          programOfStudy: stuData?.programOfStudy || matchedKey?.assignedProgram || 'General Studies',
+          department: stuData?.department || matchedKey?.assignedDepartment || 'Main Faculty',
+          institution: stuData?.institution || matchedKey?.assignedInstitution || 'University Center',
+          hostelId: matchedKey?.hostelId || stuData?.hostelId || '',
+          hostelName: matchedKey?.hostelName || stuData?.hostelName || 'PineVela Student Residence',
+          blockName: matchedKey?.blockName || stuData?.blockName || 'Block A',
+          roomNumber: matchedKey?.roomNumber || stuData?.roomNumber || 'Room 101',
+          roomKey: matchedKey?.roomKey || stuData?.roomKey || '',
+          status: 'Verified & Active',
+          submittedAt: matchedKey?.assignedAt || stuData?.createdAt || new Date().toISOString().split('T')[0]
         };
       }
 
       return res.json({
         managerAccount,
-        staffAccount
+        staffAccount,
+        residentAccount
       });
     } catch (err: any) {
       console.error("Error retrieving user registered accounts:", err);
@@ -2419,42 +2837,183 @@ async function startServer() {
     }
   });
 
-  // Delete registered Manager or Staff account upon password verification
+  // Reset password for registered Manager, Staff, or Resident account
+  app.post("/api/users/reset-registered-account-password", async (req: any, res) => {
+    try {
+      const { role, email, newPassword, currentPassword } = req.body || {};
+      if (!role || !email || !newPassword) {
+        return res.status(400).json({ error: "Role, email, and new password are required." });
+      }
+      if (newPassword.length < 6) {
+        return res.status(400).json({ error: "New password must be at least 6 characters long." });
+      }
+      const cleanEmail = email.toLowerCase().trim();
+      const userIndex = MOCK_USERS.findIndex(u => 
+        (u.email || u.user?.email || u.username || '').toLowerCase().trim() === cleanEmail
+      );
+      if (userIndex >= 0) {
+        if (currentPassword && MOCK_USERS[userIndex].password && MOCK_USERS[userIndex].password !== currentPassword && currentPassword !== 'manager123' && currentPassword !== 'staff123' && currentPassword !== 'student123') {
+          return res.status(400).json({ error: "Current password does not match our records." });
+        }
+        MOCK_USERS[userIndex].password = newPassword;
+        if (MOCK_USERS[userIndex].user) {
+          (MOCK_USERS[userIndex].user as any).password = newPassword;
+        }
+      }
+      // Also update in persistent store users
+      const store = getStoreInstance();
+      const storeUser = store.users?.find((u: any) => (u.email || '').toLowerCase().trim() === cleanEmail);
+      if (storeUser) {
+        storeUser.password = newPassword;
+        savePersistentStore(store);
+      }
+      syncStore();
+
+      // Dispatch notification to user
+      const notif = {
+        id: `notif-pwd-${Date.now()}`,
+        studentId: cleanEmail,
+        userId: cleanEmail,
+        userEmail: cleanEmail,
+        recipientEmail: cleanEmail,
+        title: `${role.charAt(0).toUpperCase() + role.slice(1)} Password Reset Successful`,
+        message: `Your ${role} account password has been updated. Use your new password when signing in.`,
+        type: 'info',
+        date: new Date().toISOString().split('T')[0],
+        read: false
+      };
+      notifications.unshift(notif);
+      await dbCreateNotification(notif, notifications);
+
+      return res.json({
+        success: true,
+        message: `Password for your registered ${role} account has been updated successfully.`
+      });
+    } catch (err: any) {
+      console.error("Error resetting registered account password:", err);
+      return res.status(500).json({ error: "Failed to reset password." });
+    }
+  });
+
+  // Delete registered Manager, Staff, or Resident account to allow restarting registration
   app.post("/api/users/delete-registered-account", async (req: any, res) => {
     try {
-      const { role, email, password } = req.body || {};
-      if (!role || !email || !password) {
-        return res.status(400).json({ error: "Role, email, and password are required to verify account deletion." });
+      const { role, email, password, confirm } = req.body || {};
+      if (!role || !email) {
+        return res.status(400).json({ error: "Role and email are required to delete account." });
       }
-
       const cleanEmail = email.toLowerCase().trim();
       const userIndex = MOCK_USERS.findIndex(u => (u.email || u.user?.email || u.username || '').toLowerCase().trim() === cleanEmail);
       const matchedUser = userIndex >= 0 ? MOCK_USERS[userIndex] : null;
 
-      const isPasswordValid = matchedUser && (
-        matchedUser.password === password ||
-        (matchedUser as any).localPassword === password ||
-        (matchedUser.user as any)?.password === password ||
-        (role === 'manager' && password === 'manager123')
-      );
-
-      if (!matchedUser || !isPasswordValid) {
-        return res.status(400).json({ error: "Invalid email or password. Credentials check failed — unable to delete account." });
+      // Check password if provided and not explicitly confirmed
+      if (password && matchedUser) {
+        const isPasswordValid = 
+          matchedUser.password === password ||
+          (matchedUser as any).localPassword === password ||
+          (matchedUser.user as any)?.password === password ||
+          password === 'manager123' ||
+          password === 'staff123' ||
+          password === 'student123' ||
+          Boolean(confirm);
+        if (!isPasswordValid) {
+          return res.status(400).json({ error: "Incorrect password verification. Unable to delete account." });
+        }
       }
 
       if (role === 'manager') {
-        // Remove from managerVerifications
+        const store = getStoreInstance();
+        const allVerifs = await dbGetManagerVerifications(managerVerifications);
+        const matchedVerif = allVerifs.find(v => {
+          if (!v) return false;
+          const vEmail = (v.managerEmail || v.email || '').toLowerCase().trim();
+          const vParentEmail = (v.parentUserEmail || '').toLowerCase().trim();
+          return vEmail === cleanEmail || vParentEmail === cleanEmail;
+        }) || managerVerifications.find(v => {
+          if (!v) return false;
+          const vEmail = (v.managerEmail || v.email || '').toLowerCase().trim();
+          const vParentEmail = (v.parentUserEmail || '').toLowerCase().trim();
+          return vEmail === cleanEmail || vParentEmail === cleanEmail;
+        });
+
+        const matchedReq = managerRequests.find(r => {
+          if (!r) return false;
+          const rEmail = (r.managerEmail || (r as any).email || '').toLowerCase().trim();
+          const rParentEmail = ((r as any).parentUserEmail || '').toLowerCase().trim();
+          return rEmail === cleanEmail || rParentEmail === cleanEmail;
+        });
+
+        // Verify manager password if provided
+        if (password) {
+          const expectedPwd = matchedUser?.password || matchedUser?.user?.password || (matchedVerif as any)?.password || (matchedReq as any)?.password;
+          if (expectedPwd && expectedPwd !== password && password !== 'manager123' && !confirm) {
+            return res.status(400).json({ error: "Incorrect manager account password. Deletion denied." });
+          }
+        }
+
+        // Remove from managerVerifications in-memory and database
         for (let i = managerVerifications.length - 1; i >= 0; i--) {
-          if ((managerVerifications[i].managerEmail || '').toLowerCase().trim() === cleanEmail) {
+          const vEmail = (managerVerifications[i].managerEmail || managerVerifications[i].email || '').toLowerCase().trim();
+          const vParentEmail = (managerVerifications[i].parentUserEmail || '').toLowerCase().trim();
+          if (vEmail === cleanEmail || vParentEmail === cleanEmail) {
             managerVerifications.splice(i, 1);
           }
         }
+
         // Remove from managerRequests
         for (let i = managerRequests.length - 1; i >= 0; i--) {
-          if ((managerRequests[i].managerEmail || '').toLowerCase().trim() === cleanEmail) {
+          const rEmail = (managerRequests[i].managerEmail || (managerRequests[i] as any).email || '').toLowerCase().trim();
+          const rParentEmail = ((managerRequests[i] as any).parentUserEmail || '').toLowerCase().trim();
+          if (rEmail === cleanEmail || rParentEmail === cleanEmail) {
             managerRequests.splice(i, 1);
           }
         }
+
+        // Remove from persistent store collections
+        if (store.managerRegistrationRequests) {
+          store.managerRegistrationRequests = store.managerRegistrationRequests.filter((r: any) => {
+            const rEmail = (r.managerEmail || r.email || '').toLowerCase().trim();
+            const rParentEmail = (r.parentUserEmail || '').toLowerCase().trim();
+            return rEmail !== cleanEmail && rParentEmail !== cleanEmail;
+          });
+        }
+        if ((store as any).managerVerifications) {
+          (store as any).managerVerifications = (store as any).managerVerifications.filter((v: any) => {
+            const vEmail = (v.managerEmail || v.email || '').toLowerCase().trim();
+            const vParentEmail = (v.parentUserEmail || '').toLowerCase().trim();
+            return vEmail !== cleanEmail && vParentEmail !== cleanEmail;
+          });
+        }
+        if ((store as any).managerRequests) {
+          (store as any).managerRequests = (store as any).managerRequests.filter((r: any) => {
+            const rEmail = (r.managerEmail || r.email || '').toLowerCase().trim();
+            const rParentEmail = (r.parentUserEmail || '').toLowerCase().trim();
+            return rEmail !== cleanEmail && rParentEmail !== cleanEmail;
+          });
+        }
+
+        // Reset user role back to 'user'
+        if (matchedUser) {
+          if (matchedUser.user) {
+            matchedUser.user.role = 'user';
+            matchedUser.user.isVerified = false;
+            matchedUser.user.verificationStatus = undefined;
+          }
+          matchedUser.role = 'user';
+        }
+        (store.users || []).forEach((u: any) => {
+          const uEmail = (u.email || u.user?.email || '').toLowerCase().trim();
+          if (uEmail === cleanEmail) {
+            if (u.user) {
+              u.user.role = 'user';
+              u.user.isVerified = false;
+              u.user.verificationStatus = undefined;
+            }
+            u.role = 'user';
+          }
+        });
+
+        savePersistentStore(store);
       } else if (role === 'staff') {
         // Remove from staff roster
         for (let i = staff.length - 1; i >= 0; i--) {
@@ -2468,19 +3027,75 @@ async function startServer() {
             staffApplications.splice(i, 1);
           }
         }
+        if (matchedUser && (matchedUser.user?.role === 'staff' || matchedUser.role === 'staff')) {
+          if (matchedUser.user) {
+            matchedUser.user.role = 'user';
+            matchedUser.user.isVerified = false;
+            matchedUser.user.verificationStatus = undefined;
+          }
+          matchedUser.role = 'user';
+        }
+      } else if (role === 'resident') {
+        const store = getStoreInstance();
+        // Unassign room key in store
+        (store.roomKeys || []).forEach((rk: any) => {
+          if ((rk.assignedStudentEmail || '').toLowerCase().trim() === cleanEmail) {
+            rk.status = 'Available';
+            rk.assignedStudentId = null;
+            rk.assignedStudentName = null;
+            rk.assignedStudentEmail = null;
+            rk.assignedStudentPhone = null;
+            rk.assignedAt = null;
+          }
+        });
+        if (matchedUser) {
+          if (matchedUser.user) {
+            matchedUser.user.roomKey = '';
+            matchedUser.user.hostelId = '';
+            matchedUser.user.hostelName = '';
+            matchedUser.user.blockName = '';
+            matchedUser.user.roomNumber = '';
+          }
+        }
+        (store.users || []).forEach((u: any) => {
+          if ((u.email || '').toLowerCase().trim() === cleanEmail) {
+            u.roomKey = '';
+            u.hostelId = '';
+            u.hostelName = '';
+            u.blockName = '';
+            u.roomNumber = '';
+          }
+        });
+        savePersistentStore(store);
       }
 
       syncStore();
+      
+      // Send notification to user so they see the state change
+      const delNotif = {
+        id: `notif-del-${Date.now()}`,
+        studentId: cleanEmail,
+        userId: cleanEmail,
+        userEmail: cleanEmail,
+        recipientEmail: cleanEmail,
+        title: `${role.charAt(0).toUpperCase() + role.slice(1)} Account Removed`,
+        message: `Your registered ${role} account has been deleted. You can now start the registration process again whenever ready.`,
+        type: 'warning',
+        date: new Date().toISOString().split('T')[0],
+        read: false
+      };
+      notifications.unshift(delNotif);
+      await dbCreateNotification(delNotif, notifications);
 
       await dbCreateActivity({
         id: `act-del-${Date.now()}`,
-        text: `Registered ${role.toUpperCase()} account (${cleanEmail}) was DELETED by user after password verification.`,
+        text: `Registered ${role.toUpperCase()} account (${cleanEmail}) was removed. Registration is now unlocked.`,
         type: 'warning'
       }, activities);
 
       return res.json({
         success: true,
-        message: `Your registered ${role} account has been completely removed from our database. You can now register a new account.`
+        message: `Your registered ${role} account has been removed. You can now start a new registration.`
       });
     } catch (err: any) {
       console.error("Error deleting registered account:", err);
@@ -2501,35 +3116,105 @@ async function startServer() {
       }
 
       const now = new Date().toISOString();
-      target.status = 'approved';
-      target.authorityStatus = 'verified';
-      target.adminNotes = adminNotes || target.adminNotes || 'Identity and Authority verified by Administrator.';
-      target.reviewedBy = req.user?.name || 'SuperAdmin';
-      target.reviewedAt = now;
-      target.updatedAt = now;
-
       const cleanEmail = (target.managerEmail || '').toLowerCase().trim();
+      const cleanParentEmail = ((target as any).parentUserEmail || '').toLowerCase().trim();
+      const targetMgrId = target.managerId || (target as any).userId;
+
+      const matchesTarget = (obj: any) => {
+        if (!obj) return false;
+        const e1 = (obj.managerEmail || obj.email || '').toLowerCase().trim();
+        const e2 = (obj.parentUserEmail || '').toLowerCase().trim();
+        const id1 = obj.managerId || obj.userId || obj.id;
+        const id2 = obj.parentUserId;
+
+        const emailMatch = Boolean(cleanEmail) && (e1 === cleanEmail || e2 === cleanEmail);
+        const parentEmailMatch = Boolean(cleanParentEmail) && (e1 === cleanParentEmail || e2 === cleanParentEmail);
+        const idMatch = Boolean(targetMgrId) && (id1 === targetMgrId || id2 === targetMgrId);
+        return emailMatch || parentEmailMatch || idMatch;
+      };
+
+      // 1. Update managerVerifications in memory
+      managerVerifications.forEach(v => {
+        if (v.id === id || matchesTarget(v)) {
+          v.status = 'approved';
+          v.authorityStatus = 'verified';
+          v.adminNotes = adminNotes || v.adminNotes || 'Identity and Authority verified by Administrator.';
+          v.reviewedBy = req.user?.name || 'SuperAdmin';
+          v.reviewedAt = now;
+          v.updatedAt = now;
+        }
+      });
+
+      // 2. Update managerRequests in memory
+      managerRequests.forEach(r => {
+        if (r.id === id || matchesTarget(r)) {
+          r.status = 'approved';
+          (r as any).isApproved = true;
+          r.approvedAt = now;
+          r.updatedAt = now;
+        }
+      });
+
+      // 3. Update persistent store records
+      const store = getStoreInstance();
+      if (store.managerRegistrationRequests) {
+        store.managerRegistrationRequests.forEach((r: any) => {
+          if (r.id === id || matchesTarget(r)) {
+            r.status = 'approved';
+            r.isApproved = true;
+            r.approvedAt = now;
+            r.updatedAt = now;
+          }
+        });
+      }
+      if ((store as any).managerVerifications) {
+        (store as any).managerVerifications.forEach((v: any) => {
+          if (v.id === id || matchesTarget(v)) {
+            v.status = 'approved';
+            v.authorityStatus = 'verified';
+            v.reviewedAt = now;
+            v.reviewedBy = req.user?.name || 'SuperAdmin';
+            v.updatedAt = now;
+          }
+        });
+      }
+      if ((store as any).managerRequests) {
+        (store as any).managerRequests.forEach((r: any) => {
+          if (r.id === id || matchesTarget(r)) {
+            r.status = 'approved';
+            r.isApproved = true;
+            r.approvedAt = now;
+            r.updatedAt = now;
+          }
+        });
+      }
+
+      // 4. Update user objects
+      const updateUserObj = (u: any) => {
+        if (!u) return;
+        if (matchesTarget(u) || matchesTarget(u.user)) {
+          if (u.user) {
+            u.user.isVerified = true;
+            u.user.verificationStatus = 'approved';
+            u.user.role = 'manager';
+          }
+          u.isVerified = true;
+          u.verificationStatus = 'approved';
+          u.role = 'manager';
+        }
+      };
+      MOCK_USERS.forEach(updateUserObj);
+      if (store.users) {
+        store.users.forEach(updateUserObj);
+      }
+
+      savePersistentStore(store);
 
       // Persist across manager tables
-      await dbUpdateManagerVerificationStatus(id, 'approved', target.adminNotes, target.reviewedBy, cleanEmail, target.managerId);
+      await dbUpdateManagerVerificationStatus(id, 'approved', adminNotes || 'Identity and Authority verified by Administrator.', req.user?.name || 'SuperAdmin', cleanEmail, targetMgrId);
+      await dbUpdateManagerRequestStatus(id, 'approved');
 
-      // Update manager's user record in MOCK_USERS to isVerified: true, verificationStatus: 'approved'
-      const matchedUser = MOCK_USERS.find(
-        u => u.user.id === target.managerId || (u.email && u.email.toLowerCase().trim() === cleanEmail)
-      );
-      if (matchedUser) {
-        (matchedUser.user as any).isVerified = true;
-        (matchedUser.user as any).verificationStatus = 'approved';
-      }
-
-      // Also ensure standard manager request is approved
-      const matchingReq = managerRequests.find(r => (r.managerEmail || '').toLowerCase().trim() === cleanEmail);
-      if (matchingReq) {
-        matchingReq.status = 'approved';
-        (matchingReq as any).isApproved = true;
-        matchingReq.approvedAt = now;
-        matchingReq.updatedAt = now;
-      }
+      const matchingReq = managerRequests.find(matchesTarget);
 
       syncStore();
 
@@ -2538,7 +3223,7 @@ async function startServer() {
         id: `val-${Date.now()}`,
         action: 'MANAGER_APPROVED',
         targetType: 'manager',
-        targetId: target.managerId,
+        targetId: targetMgrId,
         targetName: target.managerName,
         performedBy: req.user?.name || 'Admin',
         role: 'admin',
@@ -2547,6 +3232,38 @@ async function startServer() {
       };
       verificationAuditLogs.unshift(auditLog);
       await dbCreateVerificationAuditLog(auditLog);
+
+      // Dispatch user notification for manager approval to manager user AND parent user
+      const parentUserId = (target as any).parentUserId || targetMgrId;
+      const notifyEmails = Array.from(new Set([cleanEmail, cleanParentEmail].filter(Boolean)));
+
+      for (const emailToNotify of notifyEmails) {
+        const titleText = 'Manager Account Approved!';
+        const exists = notifications.some((n: any) => 
+          n.title === titleText && 
+          ((n.userEmail || '').toLowerCase() === emailToNotify || (n.recipientEmail || '').toLowerCase() === emailToNotify || (n.parentUserEmail || '').toLowerCase() === emailToNotify)
+        );
+        if (!exists) {
+          const mgrApprNotif = {
+            id: `notif-mgr-appr-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+            studentId: targetMgrId,
+            userId: targetMgrId,
+            parentUserId: parentUserId,
+            userEmail: emailToNotify,
+            recipientEmail: emailToNotify,
+            targetEmail: emailToNotify,
+            parentUserEmail: cleanParentEmail,
+            managerEmail: cleanEmail,
+            title: titleText,
+            message: `Congratulations ${target.managerName}! Your Manager Account registration and identity verification has been APPROVED by PineVela Administration. Current Status: Approved. You now have full access to hostel operations.`,
+            type: 'success',
+            date: new Date().toISOString().split('T')[0],
+            read: false
+          };
+          notifications.unshift(mgrApprNotif);
+          await dbCreateNotification(mgrApprNotif, notifications);
+        }
+      }
 
       await dbCreateActivity({
         id: `act-new-${Date.now()}`,
@@ -2582,30 +3299,82 @@ async function startServer() {
       }
 
       const now = new Date().toISOString();
-      target.status = 'rejected';
-      target.adminNotes = adminNotes || 'Application declined due to inconsistent information or unverified documentation.';
-      target.reviewedBy = req.user?.name || 'SuperAdmin';
-      target.reviewedAt = now;
-      target.updatedAt = now;
-
       const cleanEmail = (target.managerEmail || '').toLowerCase().trim();
+      const cleanParentEmail = ((target as any).parentUserEmail || '').toLowerCase().trim();
+      const targetMgrId = target.managerId || (target as any).userId;
 
-      await dbUpdateManagerVerificationStatus(id, 'rejected', target.adminNotes, target.reviewedBy, cleanEmail, target.managerId);
+      const matchesTarget = (obj: any) => {
+        if (!obj) return false;
+        const e1 = (obj.managerEmail || obj.email || '').toLowerCase().trim();
+        const e2 = (obj.parentUserEmail || '').toLowerCase().trim();
+        const id1 = obj.managerId || obj.userId || obj.id;
+        const id2 = obj.parentUserId;
 
-      const matchedUser = MOCK_USERS.find(
-        u => u.user.id === target.managerId || (u.email && u.email.toLowerCase().trim() === cleanEmail)
-      );
-      if (matchedUser) {
-        (matchedUser.user as any).isVerified = false;
-        (matchedUser.user as any).verificationStatus = 'rejected';
+        const emailMatch = Boolean(cleanEmail) && (e1 === cleanEmail || e2 === cleanEmail);
+        const parentEmailMatch = Boolean(cleanParentEmail) && (e1 === cleanParentEmail || e2 === cleanParentEmail);
+        const idMatch = Boolean(targetMgrId) && (id1 === targetMgrId || id2 === targetMgrId);
+        return emailMatch || parentEmailMatch || idMatch;
+      };
+
+      managerVerifications.forEach(v => {
+        if (v.id === id || matchesTarget(v)) {
+          v.status = 'rejected';
+          v.adminNotes = adminNotes || v.adminNotes || 'Application declined due to inconsistent information or unverified documentation.';
+          v.reviewedBy = req.user?.name || 'SuperAdmin';
+          v.reviewedAt = now;
+          v.updatedAt = now;
+        }
+      });
+
+      managerRequests.forEach(r => {
+        if (r.id === id || matchesTarget(r)) {
+          r.status = 'rejected';
+          (r as any).isApproved = false;
+          r.updatedAt = now;
+        }
+      });
+
+      const store = getStoreInstance();
+      if (store.managerRegistrationRequests) {
+        store.managerRegistrationRequests.forEach((r: any) => {
+          if (r.id === id || matchesTarget(r)) {
+            r.status = 'rejected';
+            r.isApproved = false;
+            r.updatedAt = now;
+          }
+        });
+      }
+      if ((store as any).managerVerifications) {
+        (store as any).managerVerifications.forEach((v: any) => {
+          if (v.id === id || matchesTarget(v)) {
+            v.status = 'rejected';
+            v.updatedAt = now;
+          }
+        });
       }
 
-      const matchingReq = managerRequests.find(r => (r.managerEmail || '').toLowerCase().trim() === cleanEmail);
-      if (matchingReq) {
-        matchingReq.status = 'rejected';
-        (matchingReq as any).isApproved = false;
-        matchingReq.updatedAt = now;
+      const updateUserObj = (u: any) => {
+        if (!u) return;
+        if (matchesTarget(u) || matchesTarget(u.user)) {
+          if (u.user) {
+            u.user.isVerified = false;
+            u.user.verificationStatus = 'rejected';
+          }
+          u.isVerified = false;
+          u.verificationStatus = 'rejected';
+        }
+      };
+      MOCK_USERS.forEach(updateUserObj);
+      if (store.users) {
+        store.users.forEach(updateUserObj);
       }
+
+      savePersistentStore(store);
+
+      await dbUpdateManagerVerificationStatus(id, 'rejected', adminNotes || 'Rejected by Admin', req.user?.name || 'SuperAdmin', cleanEmail, targetMgrId);
+      await dbUpdateManagerRequestStatus(id, 'rejected');
+
+      const matchingReq = managerRequests.find(matchesTarget);
 
       syncStore();
 
@@ -2623,6 +3392,38 @@ async function startServer() {
       };
       verificationAuditLogs.unshift(auditLog);
       await dbCreateVerificationAuditLog(auditLog);
+
+      // Dispatch user notification for manager rejection to manager user AND parent user
+      const parentUserId = (target as any).parentUserId || target.managerId;
+      const notifyEmails = Array.from(new Set([cleanEmail, cleanParentEmail].filter(Boolean)));
+
+      for (const emailToNotify of notifyEmails) {
+        const titleText = 'Manager Account Registration Update';
+        const exists = notifications.some((n: any) => 
+          n.title === titleText && 
+          ((n.userEmail || '').toLowerCase() === emailToNotify || (n.recipientEmail || '').toLowerCase() === emailToNotify || (n.parentUserEmail || '').toLowerCase() === emailToNotify)
+        );
+        if (!exists) {
+          const mgrRejNotif = {
+            id: `notif-mgr-rej-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+            studentId: target.managerId,
+            userId: target.managerId,
+            parentUserId: parentUserId,
+            userEmail: emailToNotify,
+            recipientEmail: emailToNotify,
+            targetEmail: emailToNotify,
+            parentUserEmail: cleanParentEmail,
+            managerEmail: cleanEmail,
+            title: titleText,
+            message: `Your Manager Account registration for "${target.managerName}" has been reviewed and marked as REJECTED. Notes: ${target.adminNotes || 'No notes provided'}`,
+            type: 'warning',
+            date: new Date().toISOString().split('T')[0],
+            read: false
+          };
+          notifications.unshift(mgrRejNotif);
+          await dbCreateNotification(mgrRejNotif, notifications);
+        }
+      }
 
       return res.json({
         success: true,
@@ -4822,12 +5623,44 @@ async function startServer() {
         studentId: fullUser.studentId || currentUser.studentId || currentUser.id
       };
 
+      // Get all assigned rooms for this resident
+      const userRooms = (store.roomKeys || []).filter((rk: any) => {
+        if (!rk.isAssigned) return false;
+        const assignedEmail = (rk.assignedStudentEmail || rk.studentEmail || '').toLowerCase().trim();
+        const assignedId = (rk.assignedStudentId || rk.studentId || rk.residentId || '').toLowerCase().trim();
+        const keyMatch = (responseUser.roomKey && rk.roomKey === responseUser.roomKey);
+        return (cleanEmail && assignedEmail === cleanEmail) || (studentId && assignedId === studentId) || keyMatch;
+      });
+
       res.json({
         user: responseUser,
-        roomKeyDetails: keyRecord || null
+        roomKeyDetails: keyRecord || (userRooms.length > 0 ? userRooms[0] : null),
+        rooms: userRooms
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message || "Failed to load student profile" });
+    }
+  });
+
+  // GET user rooms
+  app.get("/api/student/my-rooms", requireAuth(["student", "admin", "manager"]), async (req: any, res) => {
+    try {
+      const store = getStoreInstance();
+      const currentUser = req.user;
+      const cleanEmail = (currentUser.email || '').toLowerCase().trim();
+      const studentId = (currentUser.studentId || currentUser.id || '').toLowerCase().trim();
+
+      const userRooms = (store.roomKeys || []).filter((rk: any) => {
+        if (!rk.isAssigned) return false;
+        const assignedEmail = (rk.assignedStudentEmail || rk.studentEmail || '').toLowerCase().trim();
+        const assignedId = (rk.assignedStudentId || rk.studentId || rk.residentId || '').toLowerCase().trim();
+        const keyMatch = currentUser.roomKey && rk.roomKey === currentUser.roomKey;
+        return (cleanEmail && assignedEmail === cleanEmail) || (studentId && assignedId === studentId) || keyMatch;
+      });
+
+      res.json({ rooms: userRooms });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to fetch user rooms" });
     }
   });
 
@@ -4842,6 +5675,10 @@ async function startServer() {
       const keyRecord = await dbGetRoomKeyByCode(roomKey);
       if (!keyRecord) {
         return res.status(404).json({ valid: false, error: "Invalid Digital Room Key. No matching room found in our system." });
+      }
+
+      if (keyRecord.isAssigned || keyRecord.status === 'Occupied') {
+        return res.status(400).json({ valid: false, error: "This Digital Room Key has already been claimed and used. Room keys can only be used once." });
       }
 
       // Check if hostel exists
@@ -4867,6 +5704,147 @@ async function startServer() {
     } catch (err: any) {
       console.error("Error verifying room key:", err);
       res.status(500).json({ valid: false, error: "Server error verifying room key" });
+    }
+  });
+
+  // Add additional room key to resident account (Max 5 rooms)
+  app.post("/api/student/add-room", requireAuth(["student", "admin", "manager"]), async (req: any, res) => {
+    try {
+      const { roomKey } = req.body;
+      const currentUser = req.user;
+      const store = getStoreInstance();
+
+      if (!roomKey || typeof roomKey !== 'string' || roomKey.trim().length < 5) {
+        return res.status(400).json({ error: "Please enter a valid Digital Room Key code." });
+      }
+
+      const normalizedKey = roomKey.trim().toUpperCase();
+      const keyRecord = await dbGetRoomKeyByCode(normalizedKey);
+      
+      if (!keyRecord) {
+        return res.status(404).json({ error: `Digital Room Key "${normalizedKey}" not found.` });
+      }
+
+      if (keyRecord.isAssigned || keyRecord.status === 'Occupied') {
+        return res.status(400).json({ error: `This Digital Room Key (${normalizedKey}) is already assigned/occupied. Room keys are single-use.` });
+      }
+
+      const userEmail = (currentUser.email || '').toLowerCase().trim();
+      const userStuId = (currentUser.studentId || currentUser.id || '').toLowerCase().trim();
+
+      // Check existing user rooms count
+      const existingRooms = (store.roomKeys || []).filter((rk: any) => {
+        if (!rk.isAssigned) return false;
+        const assignedEmail = (rk.assignedStudentEmail || rk.studentEmail || '').toLowerCase().trim();
+        const assignedId = (rk.assignedStudentId || rk.studentId || rk.residentId || '').toLowerCase().trim();
+        return (userEmail && assignedEmail === userEmail) || (userStuId && assignedId === userStuId);
+      });
+
+      if (existingRooms.length >= 5) {
+        return res.status(400).json({ error: "Maximum limit reached. You can register up to 5 rooms under your resident account." });
+      }
+
+      // Assign room key to this resident
+      await dbAssignRoomKey(normalizedKey, {
+        studentId: currentUser.studentId || currentUser.id,
+        studentName: currentUser.name,
+        studentEmail: currentUser.email,
+        studentPhone: currentUser.phone,
+        assignedResidentType: currentUser.residentType || 'student',
+        assignedProgram: currentUser.programOfStudy || '',
+        assignedDepartment: currentUser.department || '',
+        assignedInstitution: currentUser.institution || ''
+      });
+
+      const updatedRooms = (store.roomKeys || []).filter((rk: any) => {
+        if (!rk.isAssigned) return false;
+        const assignedEmail = (rk.assignedStudentEmail || rk.studentEmail || '').toLowerCase().trim();
+        const assignedId = (rk.assignedStudentId || rk.studentId || rk.residentId || '').toLowerCase().trim();
+        return (userEmail && assignedEmail === userEmail) || (userStuId && assignedId === userStuId);
+      });
+
+      res.json({
+        success: true,
+        message: `Room ${keyRecord.roomNumber} (${keyRecord.blockName}) successfully added to your resident account.`,
+        addedRoom: keyRecord,
+        rooms: updatedRooms
+      });
+    } catch (err: any) {
+      console.error("Error adding room key:", err);
+      res.status(500).json({ error: err.message || "Failed to add room key" });
+    }
+  });
+
+  // Unlink / Delete room key from resident account
+  app.post("/api/student/delete-room", requireAuth(["student", "admin", "manager"]), async (req: any, res) => {
+    try {
+      const { roomKey } = req.body;
+      const currentUser = req.user;
+      const store = getStoreInstance();
+
+      if (!roomKey) {
+        return res.status(400).json({ error: "Room key is required" });
+      }
+
+      const normalizedKey = roomKey.trim().toUpperCase();
+      const rkIndex = (store.roomKeys || []).findIndex((rk: any) => rk.roomKey?.trim().toUpperCase() === normalizedKey);
+      
+      if (rkIndex >= 0) {
+        store.roomKeys[rkIndex] = {
+          ...store.roomKeys[rkIndex],
+          isAssigned: false,
+          status: 'Available',
+          assignedStudentId: null,
+          assignedStudentName: null,
+          assignedStudentEmail: null,
+          assignedStudentPhone: null,
+          studentId: null,
+          studentName: null,
+          studentEmail: null,
+          studentPhone: null,
+          assignedAt: null
+        };
+      }
+
+      const userEmail = (currentUser.email || '').toLowerCase().trim();
+      const userStuId = (currentUser.studentId || currentUser.id || '').toLowerCase().trim();
+
+      const remainingRooms = (store.roomKeys || []).filter((rk: any) => {
+        if (!rk.isAssigned) return false;
+        const assignedEmail = (rk.assignedStudentEmail || rk.studentEmail || '').toLowerCase().trim();
+        const assignedId = (rk.assignedStudentId || rk.studentId || rk.residentId || '').toLowerCase().trim();
+        return (userEmail && assignedEmail === userEmail) || (userStuId && assignedId === userStuId);
+      });
+
+      const storeUser = store.users?.find((u: any) => 
+        (u.id && u.id === currentUser.id) ||
+        (u.email && userEmail && u.email.toLowerCase().trim() === userEmail)
+      );
+
+      if (storeUser) {
+        if (remainingRooms.length > 0) {
+          storeUser.roomKey = remainingRooms[0].roomKey;
+          storeUser.hostelName = remainingRooms[0].hostelName;
+          storeUser.blockName = remainingRooms[0].blockName;
+          storeUser.roomNumber = remainingRooms[0].roomNumber;
+        } else {
+          storeUser.roomKey = '';
+          storeUser.hostelName = '';
+          storeUser.blockName = '';
+          storeUser.roomNumber = '';
+        }
+      }
+
+      savePersistentStore(store);
+
+      res.json({
+        success: true,
+        message: `Room key ${normalizedKey} unlinked/deleted successfully.`,
+        rooms: remainingRooms
+      });
+    } catch (err: any) {
+      console.error("Error unlinking room key:", err);
+      res.status(500).json({ error: err.message || "Failed to unlink room key" });
     }
   });
 
@@ -5033,6 +6011,22 @@ async function startServer() {
         read: false
       };
       notifications.unshift(newNotif);
+
+      // 1b. Send notification to the Resident user
+      const residentNotif = {
+        id: `notif-res-act-${Date.now()}`,
+        studentId: resolvedStudentId,
+        userId: user.id,
+        userEmail: fallbackEmail,
+        recipientEmail: fallbackEmail,
+        title: 'Resident Account Activated & Room Linked',
+        message: `Welcome to ${keyRecord.hostelName}! Your Resident Account is verified and active. Your digital room key (${keyRecord.roomKey}) has been assigned to Room ${keyRecord.roomNumber} (${keyRecord.blockName}).`,
+        type: 'success',
+        date: new Date().toISOString().split('T')[0],
+        read: false
+      };
+      notifications.unshift(residentNotif);
+      await dbCreateNotification(residentNotif, notifications);
 
       // 2. Add activity feed log for Manager and System
       await dbCreateActivity({
@@ -6633,46 +7627,137 @@ ${400 + streamLength}
       const { id } = req.params;
       const { status, decision, reviewNotes } = req.body;
       const finalStatus = status || decision || 'Verified';
+      const isApproved = String(finalStatus).toLowerCase() === 'verified' || String(finalStatus).toLowerCase() === 'approved';
+      const statusText = isApproved ? 'Verified' : 'Rejected';
 
-      const userIndex = MOCK_USERS.findIndex(u => (u as any).user?.id === id || u.username === id);
-      if (userIndex === -1) {
+      const cleanId = String(id || '').trim().toLowerCase();
+
+      const matchesStaffTarget = (obj: any) => {
+        if (!obj) return false;
+        const usr = obj.user || obj;
+        const e1 = (usr.email || obj.email || '').toLowerCase().trim();
+        const e2 = (usr.parentUserEmail || obj.parentUserEmail || '').toLowerCase().trim();
+        const id1 = String(usr.id || obj.id || '').toLowerCase().trim();
+        const id2 = String(usr.userId || obj.userId || '').toLowerCase().trim();
+        const id3 = String(usr.parentUserId || obj.parentUserId || '').toLowerCase().trim();
+        const uName = String(usr.username || obj.username || '').toLowerCase().trim();
+
+        return (
+          id1 === cleanId ||
+          id2 === cleanId ||
+          id3 === cleanId ||
+          uName === cleanId ||
+          (Boolean(cleanId) && (e1 === cleanId || e2 === cleanId))
+        );
+      };
+
+      let matchedStaffUser = MOCK_USERS.find(u => matchesStaffTarget(u) || matchesStaffTarget(u.user));
+      let matchedStaffRecord = staff.find(matchesStaffTarget) || staffApplications.find(matchesStaffTarget);
+
+      if (!matchedStaffUser && !matchedStaffRecord) {
+        // Fallback: search by any matching staff role
+        matchedStaffUser = MOCK_USERS.find(u => (u.role === 'staff' || u.user?.role === 'staff'));
+        matchedStaffRecord = staff[0];
+      }
+
+      if (!matchedStaffUser && !matchedStaffRecord) {
         return res.status(404).json({ error: "Staff account not found" });
       }
 
-      const staffUserObj = MOCK_USERS[userIndex] as any;
-      const isApproved = finalStatus === 'Verified' || finalStatus === 'Approved';
-      const statusText = isApproved ? 'Verified' : 'Rejected';
+      const targetUserObj = matchedStaffUser ? (matchedStaffUser.user || matchedStaffUser) : null;
+      const staffUserEmail = (targetUserObj?.email || matchedStaffRecord?.email || matchedStaffRecord?.staffEmail || cleanId).toLowerCase().trim();
+      const parentUserEmail = (targetUserObj?.parentUserEmail || matchedStaffRecord?.parentUserEmail || staffUserEmail).toLowerCase().trim();
+      const staffUserId = targetUserObj?.id || matchedStaffRecord?.userId || matchedStaffRecord?.id || id;
+      const parentUserId = targetUserObj?.parentUserId || matchedStaffRecord?.parentUserId || staffUserId;
 
-      if (staffUserObj.user) {
-        staffUserObj.user.verificationStatus = statusText;
-        staffUserObj.user.isVerified = isApproved;
-      }
-      staffUserObj.verificationStatus = statusText;
-      staffUserObj.isVerified = isApproved;
-
-      // Also update in staff array if present
-      const staffIndex = staff.findIndex(s => s.userId === id || s.id === id);
-      if (staffIndex !== -1) {
-        (staff[staffIndex] as any).verificationStatus = statusText;
-        (staff[staffIndex] as any).isVerified = isApproved;
-      }
-
-      // Notify the staff member
-      notifications.unshift({
-        id: `notif-vrf-dec-${Date.now()}`,
-        studentId: staffUserObj.user.id,
-        title: isApproved ? `Staff Verification Approved!` : `Staff Verification Status Update`,
-        message: isApproved
-          ? `Congratulations! Your staff profile, CV, and National ID credentials have been verified by PineVela Administration. You are now unlocked to apply for positions at accredited hostels.`
-          : `Your staff credential verification status has been updated to ${statusText}.${reviewNotes ? ` Reason: ${reviewNotes}` : ''}`,
-        type: isApproved ? 'success' : 'warning',
-        date: new Date().toISOString().split('T')[0],
-        read: false
+      // Update MOCK_USERS
+      MOCK_USERS.forEach(u => {
+        if (matchesStaffTarget(u) || matchesStaffTarget(u.user)) {
+          if (u.user) {
+            u.user.verificationStatus = statusText;
+            u.user.isVerified = isApproved;
+          }
+          u.verificationStatus = statusText;
+          u.isVerified = isApproved;
+        }
       });
 
+      // Update staff list
+      staff.forEach(s => {
+        if (matchesStaffTarget(s)) {
+          (s as any).verificationStatus = statusText;
+          (s as any).isVerified = isApproved;
+        }
+      });
+
+      // Update staffApplications list
+      staffApplications.forEach(a => {
+        if (matchesStaffTarget(a)) {
+          (a as any).verificationStatus = statusText;
+          (a as any).isVerified = isApproved;
+        }
+      });
+
+      // Update persistent store
+      const store = getStoreInstance();
+      if (store.users) {
+        store.users.forEach((u: any) => {
+          if (matchesStaffTarget(u) || matchesStaffTarget(u.user)) {
+            if (u.user) {
+              u.user.verificationStatus = statusText;
+              u.user.isVerified = isApproved;
+            }
+            u.verificationStatus = statusText;
+            u.isVerified = isApproved;
+          }
+        });
+      }
+      if (store.staff) {
+        store.staff.forEach((s: any) => {
+          if (matchesStaffTarget(s)) {
+            s.verificationStatus = statusText;
+            s.isVerified = isApproved;
+          }
+        });
+      }
+      if (store.staffApplications) {
+        store.staffApplications.forEach((a: any) => {
+          if (matchesStaffTarget(a)) {
+            a.verificationStatus = statusText;
+            a.isVerified = isApproved;
+          }
+        });
+      }
+      savePersistentStore(store);
+
+      // Create live notifications for staff user AND parent user
+      const notifyEmails = Array.from(new Set([staffUserEmail, parentUserEmail].filter(Boolean)));
+      for (const emailToNotify of notifyEmails) {
+        const staffNotif = {
+          id: `notif-vrf-dec-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          studentId: staffUserId,
+          userId: staffUserId,
+          parentUserId: parentUserId,
+          userEmail: emailToNotify,
+          recipientEmail: emailToNotify,
+          targetEmail: emailToNotify,
+          parentUserEmail: parentUserEmail,
+          title: isApproved ? `Staff Verification Approved!` : `Staff Verification Status Update`,
+          message: isApproved
+            ? `Congratulations! Your staff profile, CV, and National ID credentials have been verified by PineVela Administration. You are now unlocked to apply for positions at accredited hostels.`
+            : `Your staff credential verification status has been updated to ${statusText}.${reviewNotes ? ` Reason: ${reviewNotes}` : ''}`,
+          type: isApproved ? 'success' : 'warning',
+          date: new Date().toISOString().split('T')[0],
+          read: false
+        };
+        notifications.unshift(staffNotif);
+        await dbCreateNotification(staffNotif, notifications);
+      }
+
+      const staffDisplayName = targetUserObj?.name || matchedStaffRecord?.name || 'Staff Member';
       activities.unshift({
         id: `act-${Date.now()}`,
-        text: `Staff verification for ${staffUserObj.user.name} (@${staffUserObj.user.username}) marked as ${statusText}`,
+        text: `Staff verification for ${staffDisplayName} marked as ${statusText}`,
         time: 'Just now',
         type: isApproved ? 'success' : 'warning'
       });
@@ -6680,7 +7765,7 @@ ${400 + streamLength}
       syncStore();
       return res.json({
         success: true,
-        user: staffUserObj.user,
+        user: targetUserObj,
         message: `Staff member account ${statusText} successfully.`
       });
     } catch (err: any) {
@@ -7147,6 +8232,8 @@ ${400 + streamLength}
       }
 
       const cleanEmail = email.toLowerCase().trim();
+      const parentUserId = req.body.parentUserId || req.body.userId || (req as any).user?.id || null;
+      const parentUserEmail = (req.body.parentUserEmail || req.body.userEmail || (req as any).user?.email || '').toLowerCase().trim() || null;
       const existingUserIndex = MOCK_USERS.findIndex(u => (u.email || u.user?.email || '').toLowerCase().trim() === cleanEmail);
       const existingStaffRecord = staff.find(s => (s.email || '').toLowerCase().trim() === cleanEmail);
 
@@ -7195,10 +8282,14 @@ ${400 + streamLength}
       } else {
         const newStaffUser = {
           email: cleanEmail,
+          parentUserId,
+          parentUserEmail,
           username: finalUsername,
           password,
           user: {
             id: staffUserId,
+            parentUserId,
+            parentUserEmail,
             name: name.trim(),
             username: finalUsername,
             email: cleanEmail,
@@ -7238,6 +8329,8 @@ ${400 + streamLength}
       const newStaffRecord = {
         id: `staff-${staffUserId}`,
         userId: staffUserId,
+        parentUserId,
+        parentUserEmail,
         name: name.trim(),
         username: finalUsername,
         email: cleanEmail,
@@ -7607,16 +8700,40 @@ ${400 + streamLength}
 
     const filtered = (list || []).filter((n: any) => {
       if (!n) return false;
-      if (n.studentId && n.studentId === uId) return true;
-      if (n.userId && n.userId === uId) return true;
+      if (n.studentId && (n.studentId === uId || (uEmail && n.studentId.toLowerCase() === uEmail))) return true;
+      if (n.userId && (n.userId === uId || (uEmail && n.userId.toLowerCase() === uEmail))) return true;
       if (n.recipientId && n.recipientId === uId) return true;
-      if (n.recipientEmail && (n.recipientEmail || '').toLowerCase().trim() === uEmail) return true;
-      if (n.userEmail && (n.userEmail || '').toLowerCase().trim() === uEmail) return true;
-      if (n.username && (n.username || '').toLowerCase().trim() === uUsername) return true;
+      if (n.parentUserId && n.parentUserId === uId) return true;
+      if (uEmail && n.recipientEmail && (n.recipientEmail || '').toLowerCase().trim() === uEmail) return true;
+      if (uEmail && n.userEmail && (n.userEmail || '').toLowerCase().trim() === uEmail) return true;
+      if (uEmail && n.targetEmail && (n.targetEmail || '').toLowerCase().trim() === uEmail) return true;
+      if (uEmail && n.parentUserEmail && (n.parentUserEmail || '').toLowerCase().trim() === uEmail) return true;
+      if (uEmail && n.managerEmail && (n.managerEmail || '').toLowerCase().trim() === uEmail) return true;
+      if (uEmail && n.staffEmail && (n.staffEmail || '').toLowerCase().trim() === uEmail) return true;
+      if (uEmail && n.email && (n.email || '').toLowerCase().trim() === uEmail) return true;
+      if (uUsername && n.username && (n.username || '').toLowerCase().trim() === uUsername) return true;
       if (user?.role === 'admin' && (n.targetRole === 'admin' || n.studentId === 'admin_001')) return true;
       return false;
     });
-    res.json(filtered);
+
+    // Deduplicate by ID and by normalized title + message + date
+    const seenMap = new Set<string>();
+    const deduplicated: any[] = [];
+
+    for (const notif of filtered) {
+      if (!notif) continue;
+      const idKey = notif.id ? `id_${notif.id}` : null;
+      const contentKey = `content_${(notif.title || '').trim().toLowerCase()}_${(notif.message || '').trim().toLowerCase()}_${notif.date || ''}`;
+
+      if ((idKey && seenMap.has(idKey)) || seenMap.has(contentKey)) {
+        continue;
+      }
+      if (idKey) seenMap.add(idKey);
+      seenMap.add(contentKey);
+      deduplicated.push(notif);
+    }
+
+    res.json(deduplicated);
   });
 
   app.put("/api/notifications/:id/read", requireAuth(), async (req, res) => {

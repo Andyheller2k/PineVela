@@ -6,24 +6,14 @@ import {
   RotateCcw, 
   User, 
   Sparkles, 
-  GraduationCap, 
-  ShieldCheck, 
-  Crown, 
-  Zap, 
-  Heart, 
-  Compass, 
-  Key, 
-  Building2, 
-  Feather,
   Smile,
   X,
   AlertCircle
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-
 import PineLogo from './PineLogo';
 
-// System-provided avatar presets with custom styles
+// System-provided avatar presets with custom styles (PineVela logo in varied colors)
 export interface PresetAvatar {
   id: string;
   name: string;
@@ -34,12 +24,16 @@ export interface PresetAvatar {
 }
 
 export const PRESET_AVATARS: PresetAvatar[] = [
-  { id: 'pine-classic', name: 'Classic Avatar', bgColor: 'bg-gradient-to-br from-blue-700 to-indigo-800', textColor: 'text-white', iconName: 'Pine' },
+  { id: 'pine-classic', name: 'Classic Avatar', bgColor: 'bg-gradient-to-br from-blue-700 to-indigo-900', textColor: 'text-white', iconName: 'Pine' },
   { id: 'pine-emerald', name: 'Emerald Pine', bgColor: 'bg-gradient-to-br from-emerald-600 to-teal-800', textColor: 'text-emerald-100', iconName: 'Pine' },
   { id: 'pine-amber', name: 'Amber Pine', bgColor: 'bg-gradient-to-br from-amber-500 to-orange-600', textColor: 'text-amber-100', iconName: 'Pine' },
   { id: 'pine-rose', name: 'Rose Pine', bgColor: 'bg-gradient-to-br from-rose-500 to-red-600', textColor: 'text-rose-100', iconName: 'Pine' },
   { id: 'pine-violet', name: 'Violet Pine', bgColor: 'bg-gradient-to-br from-violet-600 to-indigo-800', textColor: 'text-violet-200', iconName: 'Pine' },
   { id: 'pine-dark', name: 'Midnight Pine', bgColor: 'bg-gradient-to-br from-slate-800 to-slate-950', textColor: 'text-slate-200', iconName: 'Pine' },
+  { id: 'pine-cyan', name: 'Ocean Cyan Pine', bgColor: 'bg-gradient-to-br from-cyan-600 to-blue-700', textColor: 'text-cyan-100', iconName: 'Pine' },
+  { id: 'pine-golden', name: 'Golden Sun Pine', bgColor: 'bg-gradient-to-br from-yellow-500 to-amber-700', textColor: 'text-amber-50', iconName: 'Pine' },
+  { id: 'pine-crimson', name: 'Crimson Ruby Pine', bgColor: 'bg-gradient-to-br from-rose-700 to-red-900', textColor: 'text-rose-100', iconName: 'Pine' },
+  { id: 'pine-forest', name: 'Deep Forest Pine', bgColor: 'bg-gradient-to-br from-green-700 to-emerald-950', textColor: 'text-emerald-100', iconName: 'Pine' }
 ];
 
 interface UserAvatarSelectorProps {
@@ -53,7 +47,7 @@ export const renderAvatarGraphic = (avatarStr: string | null | undefined, sizeCl
       <img 
         src={avatarStr} 
         alt="Profile Avatar" 
-        className={`${sizeClass} rounded-full object-cover border-4 border-white shadow-md`} 
+        className={`${sizeClass} rounded-full object-cover border-2 border-white shadow-md shrink-0`} 
       />
     );
   }
@@ -61,29 +55,14 @@ export const renderAvatarGraphic = (avatarStr: string | null | undefined, sizeCl
   const presetId = avatarStr.replace('preset:', '');
   const preset = PRESET_AVATARS.find(p => p.id === presetId) || PRESET_AVATARS[0];
   
-  // Inline the icon render helper since we exported this function
-  const renderIcon = (iconName: string, cls: string) => {
-    switch (iconName) {
-      case 'GraduationCap': return <GraduationCap className={cls} />;
-      case 'ShieldCheck': return <ShieldCheck className={cls} />;
-      case 'Crown': return <Crown className={cls} />;
-      case 'Zap': return <Zap className={cls} />;
-      case 'Heart': return <Heart className={cls} />;
-      case 'Compass': return <Compass className={cls} />;
-      case 'Key': return <Key className={cls} />;
-      case 'Feather': return <Feather className={cls} />;
-      case 'Building2': return <Building2 className={cls} />;
-      case 'Pine': return <PineLogo size={parseInt(cls.match(/w-(\d+)/)?.[1] || '6') * 4} hideText={true} />;
-      case 'User': return <User className={cls} />;
-      default: return <Sparkles className={cls} />;
-    }
-  };
-
-  const iconSizeClass = sizeClass.includes('w-10') ? 'w-5 h-5' : 'w-10 h-10';
+  // Calculate pixel size for PineLogo inside the avatar
+  const numMatch = sizeClass.match(/w-(\d+)/);
+  const sizeNum = numMatch ? parseInt(numMatch[1], 10) : 10;
+  const pxSize = Math.max(16, Math.min(80, Math.round(sizeNum * 2.6)));
 
   return (
-    <div className={`${sizeClass} rounded-full ${preset.bgColor} ${preset.textColor} flex items-center justify-center border-4 border-white shadow-md`}>
-      {renderIcon(preset.iconName, iconSizeClass)}
+    <div className={`${sizeClass} rounded-full ${preset.bgColor} ${preset.textColor} flex items-center justify-center border-2 border-white shadow-md shrink-0 overflow-hidden`}>
+      <PineLogo size={pxSize} hideText={true} />
     </div>
   );
 };
@@ -238,21 +217,10 @@ export default function UserAvatarSelector({ onAvatarSave }: UserAvatarSelectorP
   };
 
   // Render Preset Icon helper
-  const renderPresetIcon = (iconName: string, className = "w-6 h-6") => {
-    switch (iconName) {
-      case 'GraduationCap': return <GraduationCap className={className} />;
-      case 'ShieldCheck': return <ShieldCheck className={className} />;
-      case 'Crown': return <Crown className={className} />;
-      case 'Zap': return <Zap className={className} />;
-      case 'Heart': return <Heart className={className} />;
-      case 'Compass': return <Compass className={className} />;
-      case 'Key': return <Key className={className} />;
-      case 'Feather': return <Feather className={className} />;
-      case 'Building2': return <Building2 className={className} />;
-      case 'Pine': return <PineLogo size={parseInt(className.match(/w-(\d+)/)?.[1] || '6') * 4} hideText={true} />;
-      case 'User': return <User className={className} />;
-      default: return <Sparkles className={className} />;
-    }
+  const renderPresetIcon = (_iconName: string, className = "w-6 h-6") => {
+    const numMatch = className.match(/w-(\d+)/);
+    const sizeNum = numMatch ? parseInt(numMatch[1], 10) : 6;
+    return <PineLogo size={Math.max(16, sizeNum * 4)} hideText={true} />;
   };
 
   return (

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { NotificationProvider, useNotifications } from './context/NotificationContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import { Hostel, BookingRequest, IssueReport } from './types';
 import { motion, AnimatePresence } from 'motion/react';
@@ -410,14 +411,16 @@ function BubbleBackground() {
 export default function App() {
   return (
     <AuthProvider>
-      <HashRouter>
-        <div className="min-h-screen flex flex-col relative overflow-hidden bg-slate-50">
-          <BubbleBackground />
-          <div className="flex-1 z-10 flex flex-col">
-            <AppContent />
+      <NotificationProvider>
+        <HashRouter>
+          <div className="min-h-screen flex flex-col relative overflow-hidden bg-slate-50">
+            <BubbleBackground />
+            <div className="flex-1 z-10 flex flex-col">
+              <AppContent />
+            </div>
           </div>
-        </div>
-      </HashRouter>
+        </HashRouter>
+      </NotificationProvider>
     </AuthProvider>
   );
 }

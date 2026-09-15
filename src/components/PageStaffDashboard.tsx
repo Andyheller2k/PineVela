@@ -453,7 +453,22 @@ export default function PageStaffDashboard() {
 
   useEffect(() => {
     loadData();
-  }, [user?.id]);
+
+    // Fast real-time polling to catch admin verifications/approvals and status updates
+    const interval = setInterval(() => {
+      loadData();
+    }, 3000);
+
+    const onFocus = () => loadData();
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
+  }, [user?.id, isStaffVerified]);
 
   // Sync settings inputs when user changes
   useEffect(() => {

@@ -45,7 +45,7 @@ const slides = [
 ];
 
 export default function PageUnifiedLogin() {
-  const { login, user } = useAuth();
+  const { login, user, setSessionUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -146,6 +146,13 @@ export default function PageUnifiedLogin() {
   useEffect(() => {
     loadRegisteredManagers();
   }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('mode') === 'register' || (location.state as any)?.mode === 'register') {
+      setActiveTab('register');
+    }
+  }, [location]);
 
   // Extended Manager Verification States (Phase 1)
   const [regCountry, setRegCountry] = useState('Ghana');
@@ -2568,18 +2575,30 @@ export default function PageUnifiedLogin() {
                   type="button"
                   onClick={() => {
                     setShowStudentKeyModal(false);
-                    if (stuId) {
-                      setUsernameOrEmail(stuId);
-                    } else if (stuEmail) {
-                      setUsernameOrEmail(stuEmail);
+                    if (claimedUserData?.user) {
+                      setSessionUser(claimedUserData.user);
+                      if (claimedUserData.token) {
+                        localStorage.setItem('pinevela_token', claimedUserData.token);
+                        localStorage.setItem('pinevela_user', JSON.stringify(claimedUserData.user));
+                      }
+                      triggerToast(`Welcome ${claimedUserData.user.name || 'Resident'}! Logged in successfully.`, 'success');
+                      navigate('/dashboard');
+                    } else if (stuPassword && (stuId || stuEmail)) {
+                      login(stuId || stuEmail, stuPassword)
+                        .then(() => navigate('/dashboard'))
+                        .catch(() => {
+                          setStudentKeyStep(1);
+                          triggerToast('Please sign in with your new email/ID and password.', 'info');
+                        });
+                    } else {
+                      setStudentKeyStep(1);
+                      triggerToast('Please sign in with your credentials.', 'info');
                     }
-                    setStudentKeyStep(1);
-                    triggerToast('Registration complete! Please log in with your credentials.', 'success');
                   }}
                   className="w-full max-w-md mx-auto py-3.5 bg-gradient-to-r from-blue-900 to-indigo-900 hover:from-blue-850 hover:to-indigo-850 text-white font-black text-sm rounded-2xl shadow-xl shadow-blue-900/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <LogIn size={18} />
-                  <span>Return to Login to Sign In</span>
+                  <span>Enter Resident Portal & Dashboard</span>
                 </button>
               </div>
             )}

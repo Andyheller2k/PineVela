@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useNotifications } from '../context/NotificationContext';
 import PineLogo from './PineLogo';
 import ResidentOnboardingWizard from './ResidentOnboardingWizard';
 import HostelRegistration from './HostelRegistration';
@@ -18,6 +19,7 @@ import { motion, AnimatePresence } from 'motion/react';
 
 export default function PageAdminDashboard() {
   const { user, logout, apiFetch } = useAuth();
+  const { refreshNotifications } = useNotifications();
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<'overview' | 'residences' | 'managers' | 'staff_verification' | 'notifications' | 'settings'>('overview');
@@ -196,6 +198,7 @@ export default function PageAdminDashboard() {
       setRejectStaffModal(null);
       setRejectionReasonText('');
       fetchAdminData();
+      refreshNotifications();
     } catch (err: any) {
       triggerToast(err.message || 'Failed to update staff verification status.');
     }
@@ -274,6 +277,7 @@ export default function PageAdminDashboard() {
 
       setManagerRequests(prev => prev.map(r => r.id === reqId ? { ...r, status: 'approved' } : r));
       triggerToast(`Manager account for ${managerEmail} approved successfully!`);
+      refreshNotifications();
     } catch (err) {
       console.error(err);
       triggerToast('Failed to approve manager.');

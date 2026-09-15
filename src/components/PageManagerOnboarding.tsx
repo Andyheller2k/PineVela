@@ -57,19 +57,25 @@ export default function PageManagerOnboarding() {
   const [showDelPassword, setShowDelPassword] = useState<boolean>(false);
 
   // Fetch and check if user already has a recorded Manager account
-  const fetchMyManagerAccount = async () => {
+  const fetchMyManagerAccount = async (isSilent = false) => {
     try {
-      setCheckingExisting(true);
+      if (!isSilent) setCheckingExisting(true);
       const queryEmail = user?.email || '';
+      const queryId = user?.id || '';
       const token = localStorage.getItem('pinevela_auth_token') || (user as any)?.token;
       const headers: any = {};
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      const res = await fetch(`/api/users/my-registered-accounts?email=${encodeURIComponent(queryEmail)}`, { headers });
+      const res = await fetch(`/api/users/my-registered-accounts?email=${encodeURIComponent(queryEmail)}&userId=${encodeURIComponent(queryId)}`, { headers });
       if (res.ok) {
         const data = await res.json();
         if (data.managerAccount) {
-          setExistingManagerRecord(data.managerAccount);
+          setExistingManagerRecord((prev: any) => {
+            if (prev && prev.status !== data.managerAccount.status) {
+              triggerToast(`Manager approval status updated: ${data.managerAccount.displayStatus || data.managerAccount.status}`, 'info');
+            }
+            return data.managerAccount;
+          });
           setDelEmail(data.managerAccount.email || queryEmail);
         } else {
           setExistingManagerRecord(null);
@@ -78,13 +84,27 @@ export default function PageManagerOnboarding() {
     } catch (err) {
       console.warn("Could not check registered manager account status:", err);
     } finally {
-      setCheckingExisting(false);
+      if (!isSilent) setCheckingExisting(false);
     }
   };
 
   React.useEffect(() => {
     fetchMyManagerAccount();
-  }, [user]);
+
+    const interval = setInterval(() => {
+      fetchMyManagerAccount(true);
+    }, 2500);
+
+    const onFocus = () => fetchMyManagerAccount(true);
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
+  }, [user?.email, user?.id]);
 
   // Pre-populate fields from logged-in user if available
   React.useEffect(() => {
@@ -171,7 +191,6 @@ export default function PageManagerOnboarding() {
 
   // Phase 4: Account Credentials
   const [email, setEmail] = useState('');
-  const [hostelName, setHostelName] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
@@ -282,10 +301,6 @@ export default function PageManagerOnboarding() {
         triggerToast(emailCheck.error!, 'error');
         return;
       }
-      if (!hostelName.trim() || hostelName.trim().length < 3) {
-        triggerToast('Please enter your proposed Hostel or Property name (min 3 characters).', 'error');
-        return;
-      }
       if (!password || password.length < 6) {
         triggerToast('Password must be at least 6 characters long.', 'error');
         return;
@@ -348,8 +363,8 @@ export default function PageManagerOnboarding() {
       const formattedName = `${title} ${fullName.trim()}`;
       const cleanEmail = email.trim().toLowerCase();
       const cleanPhone = phone.trim();
-      const cleanHostelName = hostelName.trim();
       const finalRegion = region === 'Other / International' ? customRegion.trim() : region;
+      const orgName = organization.trim() || 'PineVela Operations';
 
       // 1. Unified payload for Manager Account & Verification Dossier
       const verifPayload = {
@@ -357,13 +372,17 @@ export default function PageManagerOnboarding() {
         name: formattedName,
         managerEmail: cleanEmail,
         email: cleanEmail,
+        parentUserId: user?.id || undefined,
+        parentUserEmail: user?.email || undefined,
+        userId: user?.id || undefined,
+        userEmail: user?.email || undefined,
         password: password,
         managerPhone: cleanPhone,
         phone: cleanPhone,
         altPhone: altPhone.trim() || undefined,
-        hostelName: cleanHostelName,
-        proposedHostelName: cleanHostelName,
-        propertyName: cleanHostelName,
+        hostelName: orgName,
+        proposedHostelName: orgName,
+        propertyName: orgName,
         physicalAddress: `${address.trim()}, ${city.trim()}, ${finalRegion}`,
         address: `${address.trim()}, ${city.trim()}, ${finalRegion}`,
         operatingAddress: `${address.trim()}, ${city.trim()}, ${finalRegion}`,
@@ -375,8 +394,8 @@ export default function PageManagerOnboarding() {
         nationalId: idNumber.trim(),
         authorityRole,
         authorityRelationship: authorityRole,
-        organizationName: organization.trim() || cleanHostelName,
-        organization: organization.trim() || cleanHostelName,
+        organizationName: orgName,
+        organization: orgName,
         roleTitle: roleTitle,
         authorityEvidenceDescription: docFileName ? `Attached document: ${docFileName}` : 'Manager verification details provided.',
         authorityEvidenceFileName: docFileName || undefined,
@@ -432,7 +451,7 @@ export default function PageManagerOnboarding() {
           name: formattedName,
           email: cleanEmail,
           password: password,
-          organization: organization.trim() || cleanHostelName,
+          organization: organization.trim() || 'Independent Management',
           savedAt: new Date().toISOString()
         };
         const updated = [...existing.filter((m: any) => m && m.email !== cleanEmail), newManagerEntry];
@@ -443,6 +462,9 @@ export default function PageManagerOnboarding() {
 
       setPhase(6); // Step 6: Success Confirmation View
       triggerToast('Manager Verification Dossier Submitted Successfully!', 'success');
+      setTimeout(() => {
+        fetchMyManagerAccount(false);
+      }, 300);
     } catch (err: any) {
       console.error("Submission error:", err);
       triggerToast(err.message || 'An error occurred during manager verification submission.', 'error');
@@ -569,8 +591,8 @@ export default function PageManagerOnboarding() {
                   <p className="text-sm font-black text-slate-800">{existingManagerRecord.organizationName}</p>
                 </div>
                 <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
-                  <span className="text-[10px] uppercase tracking-wider font-extrabold text-slate-400">Designated Hostel</span>
-                  <p className="text-sm font-black text-slate-800">{existingManagerRecord.hostelName}</p>
+                  <span className="text-[10px] uppercase tracking-wider font-extrabold text-slate-400">Authority Designation</span>
+                  <p className="text-sm font-black text-slate-800">{existingManagerRecord.authorityRole || existingManagerRecord.organizationName || 'Property Manager'}</p>
                 </div>
                 <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
                   <span className="text-[10px] uppercase tracking-wider font-extrabold text-slate-400">National ID Document</span>
@@ -1099,24 +1121,7 @@ export default function PageManagerOnboarding() {
                       </div>
                     </div>
 
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-700 block">
-                        Proposed Primary Hostel / Residence Name <span className="text-rose-500">*</span>
-                      </label>
-                      <div className="relative">
-                        <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400 pointer-events-none">
-                          <Building size={18} />
-                        </span>
-                        <input
-                          type="text"
-                          required
-                          placeholder="e.g. Pine Crest Residency"
-                          value={hostelName}
-                          onChange={(e) => setHostelName(e.target.value)}
-                          className="w-full pl-11 pr-4 py-3 border border-slate-200 rounded-2xl bg-slate-50 text-slate-800 text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-900"
-                        />
-                      </div>
-                    </div>
+
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       
@@ -1274,22 +1279,22 @@ export default function PageManagerOnboarding() {
                         </div>
 
                         <div className="space-y-1">
-                          <span className="text-slate-400 font-bold block">Proposed Property:</span>
-                          <span className="font-extrabold text-slate-800">{hostelName}</span>
+                          <span className="text-slate-400 font-bold block">Organization / Authority:</span>
+                          <span className="font-extrabold text-slate-800">{organization || 'Independent Management'}</span>
                         </div>
                       </div>
                     </div>
 
-                    {/* Legal Declaration Checkbox */}
-                    <label className="flex items-start gap-3 p-4 bg-amber-50/70 rounded-2xl border border-amber-200/80 cursor-pointer">
+                    {/* Legal Declaration Checkbox - Blue and Highly Visible */}
+                    <label className="flex items-start gap-3.5 p-4 sm:p-5 bg-blue-50/90 rounded-2xl border-2 border-blue-400 shadow-md cursor-pointer hover:bg-blue-100/90 transition-all">
                       <input
                         type="checkbox"
                         checked={declarationAccepted}
                         onChange={(e) => setDeclarationAccepted(e.target.checked)}
-                        className="mt-1 w-4 h-4 rounded text-blue-900 focus:ring-blue-900"
+                        className="mt-1 w-5 h-5 rounded-lg border-2 border-blue-600 text-blue-700 focus:ring-blue-600 cursor-pointer accent-blue-600"
                       />
-                      <span className="text-xs text-slate-700 font-semibold leading-relaxed">
-                        I hereby declare that all submitted personal identification, residential address details, and property ownership credentials are complete, accurate, and legally binding under PineVela Verification Policy.
+                      <span className="text-xs sm:text-sm text-blue-950 font-bold leading-relaxed">
+                        I hereby declare that all submitted personal identification, residential address details, and property management credentials are complete, accurate, and legally binding under PineVela Verification Policy.
                       </span>
                     </label>
                   </motion.div>
@@ -1369,14 +1374,14 @@ export default function PageManagerOnboarding() {
                 Verification Dossier Submitted!
               </h2>
               <p className="text-xs sm:text-sm text-slate-500 font-medium max-w-md mx-auto">
-                Welcome, <strong className="text-slate-800">{fullName}</strong>. Your manager profile for <strong className="text-slate-800">{hostelName}</strong> has been created and submitted to the System Admin for approval.
+                Welcome, <strong className="text-slate-800">{fullName}</strong>. Your manager verification profile has been created and submitted to the System Admin for approval.
               </p>
             </div>
 
             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-left text-xs text-slate-600 space-y-1.5 font-medium">
               <p className="font-bold text-slate-800">Your Credentials:</p>
               <p>• Email: <span className="font-mono font-bold text-blue-900">{email}</span></p>
-              <p>• Assigned Hostel: <span className="font-bold text-slate-800">{hostelName}</span></p>
+              <p>• Organization: <span className="font-bold text-slate-800">{organization || 'Independent Management'}</span></p>
             </div>
 
             <button

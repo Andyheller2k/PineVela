@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useNotifications } from '../context/NotificationContext';
 import PineLogo from './PineLogo';
 import UserAvatarSelector, { renderAvatarGraphic } from './UserAvatarSelector';
 import { 
@@ -41,29 +42,46 @@ import {
   Landmark,
   Users,
   Star,
-  Briefcase
+  Briefcase,
+  Trash2,
+  KeyRound,
+  Lock,
+  ShieldAlert
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { IssueReport, HostelRoomKey, StudentDirectMessage } from '../types';
 
 export default function PageStudentDashboard() {
-  const { user, logout, apiFetch } = useAuth();
+  const { user, logout, apiFetch, updateUser } = useAuth();
+  const { notifications, unreadCount, registeredAccounts, markAsRead, pushToast } = useNotifications();
   const navigate = useNavigate();
 
   // Navigation tabs
-  const [activeTab, setActiveTab] = useState<'home' | 'notifications' | 'options' | 'overview' | 'issues' | 'messages' | 'announcements' | 'settings' | 'register-resident' | 'become-staff'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'notifications' | 'options' | 'overview' | 'issues' | 'messages' | 'announcements' | 'settings' | 'register-resident' | 'become-staff' | 'login-room'>('home');
 
   // Data states
   const [issueReports, setIssueReports] = useState<IssueReport[]>([]);
   const [messages, setMessages] = useState<StudentDirectMessage[]>([]);
-  const [notifications, setNotifications] = useState<any[]>([]);
   const [roomKeyDetails, setRoomKeyDetails] = useState<HostelRoomKey | null>(null);
+  const [userRooms, setUserRooms] = useState<any[]>([]);
   const [studentUser, setStudentUser] = useState<any>(null);
   const [loadingData, setLoadingData] = useState<boolean>(true);
   const [accreditedStaff, setAccreditedStaff] = useState<any[]>([]);
   const [registeredResidents, setRegisteredResidents] = useState<any[]>([]);
   const [availableHostels, setAvailableHostels] = useState<any[]>([]);
   const [viewingHostelModal, setViewingHostelModal] = useState<any | null>(null);
+
+  // Add Room Modal states (Up to 5 rooms)
+  const [showAddRoomModal, setShowAddRoomModal] = useState<boolean>(false);
+  const [addRoomKeyInput, setAddRoomKeyInput] = useState<string>('');
+  const [verifyingAddKey, setVerifyingAddKey] = useState<boolean>(false);
+  const [verifiedAddKeyInfo, setVerifiedAddKeyInfo] = useState<any | null>(null);
+  const [addRoomError, setAddRoomError] = useState<string | null>(null);
+  const [submittingAddRoom, setSubmittingAddRoom] = useState<boolean>(false);
+
+  // Delete Room Modal state
+  const [deletingRoomTarget, setDeletingRoomTarget] = useState<any | null>(null);
+  const [submittingDeleteRoom, setSubmittingDeleteRoom] = useState<boolean>(false);
 
   const currentUser = studentUser || user;
 
@@ -93,7 +111,7 @@ export default function PageStudentDashboard() {
   const [newMessageText, setNewMessageText] = useState<string>('');
   const [sendingMessage, setSendingMessage] = useState<boolean>(false);
 
-  // Room Key Claim Modal (if student entered without room key)
+  // Room Key Claim Modal & Resident Account Creation states
   const [showClaimModal, setShowClaimModal] = useState<boolean>(false);
   const [showWelcomePopup, setShowWelcomePopup] = useState<boolean>(false);
   const [claimRoomKeyInput, setClaimRoomKeyInput] = useState<string>('');
@@ -101,6 +119,32 @@ export default function PageStudentDashboard() {
   const [verifiedKeyInfo, setVerifiedKeyInfo] = useState<any | null>(null);
   const [claimError, setClaimError] = useState<string | null>(null);
   const [submittingClaim, setSubmittingClaim] = useState<boolean>(false);
+
+  // Resident Account Creation fields on key claim
+  const [claimStudentName, setClaimStudentName] = useState<string>('');
+  const [claimStudentId, setClaimStudentId] = useState<string>('');
+  const [claimResidentType, setClaimResidentType] = useState<string>('student');
+  const [claimInstitution, setClaimInstitution] = useState<string>('');
+  const [claimProgram, setClaimProgram] = useState<string>('');
+  const [claimStudentPhone, setClaimStudentPhone] = useState<string>('');
+  const [claimPassword, setClaimPassword] = useState<string>('');
+
+  // Reset Password Modal states
+  const [showResetPasswordModal, setShowResetPasswordModal] = useState<boolean>(false);
+  const [resetTargetRole, setResetTargetRole] = useState<'manager' | 'staff' | 'resident'>('manager');
+  const [resetTargetEmail, setResetTargetEmail] = useState<string>('');
+  const [newPasswordInput, setNewPasswordInput] = useState<string>('');
+  const [confirmPasswordInput, setConfirmPasswordInput] = useState<string>('');
+  const [resetPasswordError, setResetPasswordError] = useState<string | null>(null);
+  const [resettingPassword, setResettingPassword] = useState<boolean>(false);
+
+  // Delete Account Modal states
+  const [showDeleteAccountModal, setShowDeleteAccountModal] = useState<boolean>(false);
+  const [deleteTargetRole, setDeleteTargetRole] = useState<'manager' | 'staff' | 'resident'>('manager');
+  const [deleteTargetEmail, setDeleteTargetEmail] = useState<string>('');
+  const [deletePasswordInput, setDeletePasswordInput] = useState<string>('');
+  const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
+  const [deletingAccount, setDeletingAccount] = useState<boolean>(false);
 
   useEffect(() => {
     if (user && user.id) {
@@ -117,30 +161,163 @@ export default function PageStudentDashboard() {
 
   // Toast feedback
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [registeredAccounts, setRegisteredAccounts] = useState<{ managerAccount: any; staffAccount: any }>({ managerAccount: null, staffAccount: null });
 
-  const triggerToast = (msg: string) => {
+  const triggerToast = (msg: string, type: 'success' | 'warning' | 'info' | 'error' = 'info') => {
+    pushToast(msg, undefined, type);
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 1500);
+    setTimeout(() => setToastMessage(null), 2500);
   };
 
   // Fetch student & users portal data on mount
   const loadStudentData = async (isSilent = false) => {
     if (!isSilent) setLoadingData(true);
     try {
-      // Fetch user registered Manager/Staff accounts
+      // Fetch user registered Manager/Staff/Resident accounts
       try {
         const token = localStorage.getItem('pinevela_auth_token') || (currentUser as any)?.token;
         const headers: any = {};
         if (token) headers['Authorization'] = `Bearer ${token}`;
-        const regRes = await fetch(`/api/users/my-registered-accounts?email=${encodeURIComponent(currentUser?.email || '')}`, { headers });
+        const uEmail = (currentUser?.email || '').toLowerCase().trim();
+        const uId = currentUser?.id || '';
+        const regRes = await fetch(`/api/users/my-registered-accounts?email=${encodeURIComponent(uEmail)}&userId=${encodeURIComponent(uId)}`, { headers });
         if (regRes.ok) {
           const regData = await regRes.json();
-          setRegisteredAccounts(regData);
+          
+          if (regData.managerAccount && uEmail) {
+            try {
+              const localMgrs = JSON.parse(localStorage.getItem('pinevela_registered_managers') || '[]');
+              let updated = false;
+              const syncedMgrs = localMgrs.map((m: any) => {
+                const mEmail = (m.email || '').toLowerCase().trim();
+                const mParentEmail = (m.parentUserEmail || '').toLowerCase().trim();
+                if ((mEmail !== '' && mEmail === uEmail) || (mParentEmail !== '' && mParentEmail === uEmail)) {
+                  updated = true;
+                  return {
+                    ...m,
+                    status: regData.managerAccount.status,
+                    isApproved: regData.managerAccount.isApproved,
+                    isVerified: regData.managerAccount.isVerified
+                  };
+                }
+                return m;
+              });
+              if (updated) {
+                localStorage.setItem('pinevela_registered_managers', JSON.stringify(syncedMgrs));
+              }
+            } catch (storageErr) {
+              console.warn("Storage sync error:", storageErr);
+            }
+          }
+
+          if (regData.staffAccount && uEmail) {
+            try {
+              const localStaff = JSON.parse(localStorage.getItem('pinevela_registered_staff') || '[]');
+              let updated = false;
+              const syncedStaff = localStaff.map((s: any) => {
+                const sEmail = (s.email || '').toLowerCase().trim();
+                const sParentEmail = (s.parentUserEmail || '').toLowerCase().trim();
+                if ((sEmail !== '' && sEmail === uEmail) || (sParentEmail !== '' && sParentEmail === uEmail)) {
+                  updated = true;
+                  return {
+                    ...s,
+                    status: regData.staffAccount.status,
+                    isApproved: regData.staffAccount.isApproved,
+                    isVerified: regData.staffAccount.isVerified
+                  };
+                }
+                return s;
+              });
+              if (updated) {
+                localStorage.setItem('pinevela_registered_staff', JSON.stringify(syncedStaff));
+              }
+            } catch (storageErr) {
+              console.warn("Staff storage sync error:", storageErr);
+            }
+          }
+
+          // Check local fallbacks if server is still indexing
+          if (!regData.managerAccount && uEmail) {
+            try {
+              const localMgrs = JSON.parse(localStorage.getItem('pinevela_registered_managers') || '[]');
+              const matchedLocalMgr = localMgrs.find((m: any) => {
+                const mEmail = (m.email || '').toLowerCase().trim();
+                const mParentEmail = (m.parentUserEmail || '').toLowerCase().trim();
+                return Boolean(uEmail) && ((mEmail !== '' && mEmail === uEmail) || (mParentEmail !== '' && mParentEmail === uEmail));
+              });
+              if (matchedLocalMgr) {
+                const isAppr = matchedLocalMgr.status === 'approved' || matchedLocalMgr.isApproved === true;
+                const isRej = matchedLocalMgr.status === 'rejected' || matchedLocalMgr.isRejected === true;
+                regData.managerAccount = {
+                  id: `local-mgr-${Date.now()}`,
+                  name: matchedLocalMgr.name || 'Hostel Manager',
+                  email: matchedLocalMgr.email || uEmail,
+                  organizationName: matchedLocalMgr.organization || 'PineVela Operations',
+                  status: isAppr ? 'approved' : (isRej ? 'rejected' : 'pending'),
+                  displayStatus: isAppr ? 'Approved' : (isRej ? 'Rejected' : 'Pending Admin Approval'),
+                  isApproved: isAppr,
+                  isVerified: isAppr,
+                  isRejected: isRej,
+                  submittedAt: matchedLocalMgr.savedAt || new Date().toISOString()
+                };
+              }
+            } catch (storageErr) {
+              console.warn("Storage fallback error:", storageErr);
+            }
+          }
+
+          if (!regData.staffAccount && uEmail) {
+            try {
+              const localStaff = JSON.parse(localStorage.getItem('pinevela_registered_staff') || '[]');
+              const matchedLocalStaff = localStaff.find((s: any) => {
+                const sEmail = (s.email || '').toLowerCase().trim();
+                const sParentEmail = (s.parentUserEmail || '').toLowerCase().trim();
+                return Boolean(uEmail) && ((sEmail !== '' && sEmail === uEmail) || (sParentEmail !== '' && sParentEmail === uEmail));
+              });
+              if (matchedLocalStaff) {
+                const isVer = matchedLocalStaff.status === 'Verified' || matchedLocalStaff.status === 'approved' || matchedLocalStaff.isVerified === true;
+                const isRej = matchedLocalStaff.status === 'rejected' || matchedLocalStaff.isRejected === true;
+                regData.staffAccount = {
+                  id: `local-stf-${Date.now()}`,
+                  name: matchedLocalStaff.name || 'Accredited Staff Member',
+                  email: matchedLocalStaff.email || uEmail,
+                  specialization: matchedLocalStaff.specialization || 'Maintenance Specialist',
+                  status: isVer ? 'Verified' : (isRej ? 'Rejected' : 'Pending'),
+                  displayStatus: isVer ? 'Verified & Accredited Staff' : (isRej ? 'Rejected' : 'Pending Admin Verification'),
+                  isVerified: isVer,
+                  isApproved: isVer,
+                  isRejected: isRej,
+                  submittedAt: matchedLocalStaff.savedAt || new Date().toISOString()
+                };
+              }
+            } catch (storageErr) {
+              console.warn("Staff storage fallback error:", storageErr);
+            }
+          }
+
+          if (regData.residentAccount && !roomKeyDetails) {
+            setRoomKeyDetails({
+              id: regData.residentAccount.roomKey,
+              hostelId: regData.residentAccount.hostelId || '',
+              hostelName: regData.residentAccount.hostelName || 'PineVela Student Residence',
+              blockName: regData.residentAccount.blockName || 'Block A',
+              blockInitial: ((regData.residentAccount.blockName || 'A')[0] || 'A').toUpperCase(),
+              roomNumber: regData.residentAccount.roomNumber || '101',
+              roomKey: regData.residentAccount.roomKey,
+              status: 'Occupied',
+              isAssigned: true,
+              assignedStudentId: regData.residentAccount.studentId,
+              assignedStudentName: regData.residentAccount.name,
+              assignedStudentEmail: regData.residentAccount.email,
+              assignedStudentPhone: regData.residentAccount.phone,
+              assignedAt: regData.residentAccount.claimedAt || new Date().toISOString(),
+              createdAt: regData.residentAccount.claimedAt || new Date().toISOString()
+            });
+          }
         }
       } catch (e) {
         console.warn("Notice loading registered accounts status:", e);
       }
+
       // 1. Fetch accredited staff
       try {
         const staffRes = await fetch('/api/accredited-staff').then(r => r.json()).catch(() => []);
@@ -161,30 +338,7 @@ export default function PageStudentDashboard() {
         console.warn("Notice loading available hostels:", e);
       }
 
-      if (currentUser?.role === 'user') {
-        if (!isSilent) setLoadingData(false);
-        return;
-      }
-
-      // 3. Fetch student's issue reports
-      const issues = await apiFetch('/api/issue-reports').catch(() => []);
-      if (Array.isArray(issues)) {
-        setIssueReports(issues);
-      }
-
-      // 4. Fetch direct messages with manager
-      const msgs = await apiFetch('/api/student-messages').catch(() => []);
-      if (Array.isArray(msgs)) {
-        setMessages(msgs);
-      }
-
-      // Fetch Notifications
-      const notifs = await apiFetch('/api/notifications').catch(() => []);
-      if (Array.isArray(notifs)) {
-        setNotifications(notifs);
-      }
-
-      // 5. Fetch room key record and profile details
+      // 4. Fetch room key record and profile details
       try {
         const profileData = await apiFetch('/api/student/my-profile').catch(() => null);
         if (profileData && profileData.roomKeyDetails) {
@@ -193,8 +347,30 @@ export default function PageStudentDashboard() {
         if (profileData && profileData.user) {
           setStudentUser(profileData.user);
         }
+        if (profileData && Array.isArray(profileData.rooms)) {
+          setUserRooms(profileData.rooms);
+        } else if (profileData && profileData.roomKeyDetails) {
+          setUserRooms([profileData.roomKeyDetails]);
+        }
       } catch (e) {
         console.warn("Notice loading student profile:", e);
+      }
+
+      if (currentUser?.role === 'user') {
+        if (!isSilent) setLoadingData(false);
+        return;
+      }
+
+      // 5. Fetch student's issue reports
+      const issues = await apiFetch('/api/issue-reports').catch(() => []);
+      if (Array.isArray(issues)) {
+        setIssueReports(issues);
+      }
+
+      // 6. Fetch direct messages with manager
+      const msgs = await apiFetch('/api/student-messages').catch(() => []);
+      if (Array.isArray(msgs)) {
+        setMessages(msgs);
       }
     } catch (err) {
       console.error("Error loading student dashboard data:", err);
@@ -205,8 +381,17 @@ export default function PageStudentDashboard() {
 
   useEffect(() => {
     loadStudentData(false);
-    const interval = setInterval(() => loadStudentData(true), 25000);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => loadStudentData(true), 2500);
+
+    const onFocus = () => loadStudentData(true);
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
   }, [currentUser?.id, currentUser?.email]);
 
   // Copy room key helper
@@ -374,6 +559,11 @@ export default function PageStudentDashboard() {
       } else {
         setVerifiedKeyInfo(data);
         setClaimError(null);
+        setClaimStudentName(currentUser?.name || data.assignedStudentName || '');
+        setClaimStudentId(currentUser?.studentId || data.assignedStudentId || `STU-${Date.now().toString().slice(-4)}`);
+        setClaimStudentPhone(currentUser?.phone || data.assignedStudentPhone || '');
+        setClaimInstitution(currentUser?.institution || 'University Center');
+        setClaimProgram(currentUser?.programOfStudy || 'Undergraduate Resident');
       }
     } catch (err: any) {
       setClaimError("Could not verify key. Check network connection.");
@@ -382,9 +572,13 @@ export default function PageStudentDashboard() {
     }
   };
 
-  // Confirm claim room key
+  // Confirm claim room key & initiate resident/student account creation
   const handleClaimRoomKey = async () => {
     if (!verifiedKeyInfo) return;
+    if (!claimStudentName.trim()) {
+      setClaimError("Please enter your full legal name for your resident account.");
+      return;
+    }
     setSubmittingClaim(true);
     try {
       const res = await fetch('/api/room-keys/claim', {
@@ -392,25 +586,148 @@ export default function PageStudentDashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           roomKey: verifiedKeyInfo.roomKey,
-          studentId: currentUser?.studentId || currentUser?.id || `STU-${Date.now().toString().slice(-4)}`,
-          studentName: currentUser?.name || 'Student Resident',
+          studentId: claimStudentId.trim() || currentUser?.studentId || currentUser?.id || `STU-${Date.now().toString().slice(-4)}`,
+          studentName: claimStudentName.trim() || currentUser?.name || 'Student Resident',
           studentEmail: currentUser?.email || '',
-          studentPhone: currentUser?.phone || ''
+          studentPhone: claimStudentPhone.trim() || currentUser?.phone || '',
+          institution: claimInstitution.trim(),
+          programOfStudy: claimProgram.trim(),
+          residentType: claimResidentType || 'student',
+          password: claimPassword.trim() || undefined
         })
       });
       const data = await res.json();
       if (res.ok && data.success) {
         setShowClaimModal(false);
         setRoomKeyDetails(verifiedKeyInfo);
-        triggerToast(`Room Key Activated! Connected to ${verifiedKeyInfo.hostelName} (${verifiedKeyInfo.blockName}, ${verifiedKeyInfo.roomNumber})`);
-        loadStudentData();
+        triggerToast(`Resident Account Created & Room Key Activated! Connected to ${verifiedKeyInfo.hostelName} (${verifiedKeyInfo.blockName}, Room ${verifiedKeyInfo.roomNumber})`);
+        if (updateUser) {
+          updateUser({
+            role: 'student',
+            name: claimStudentName.trim() || currentUser?.name,
+            studentId: claimStudentId.trim() || currentUser?.studentId,
+            roomKey: verifiedKeyInfo.roomKey,
+            hostelId: verifiedKeyInfo.hostelId,
+            hostelName: verifiedKeyInfo.hostelName,
+            blockName: verifiedKeyInfo.blockName,
+            roomNumber: verifiedKeyInfo.roomNumber,
+            phone: claimStudentPhone.trim() || currentUser?.phone,
+            institution: claimInstitution.trim(),
+            programOfStudy: claimProgram.trim(),
+            residentType: claimResidentType
+          });
+        }
+        await loadStudentData();
       } else {
-        setClaimError(data.error || "Failed to link room key");
+        setClaimError(data.error || "Failed to link room key and create resident account");
       }
     } catch (err: any) {
-      setClaimError("Failed to claim room key");
+      setClaimError("Failed to claim room key and create resident account");
     } finally {
       setSubmittingClaim(false);
+    }
+  };
+
+  // Open reset password modal
+  const openResetPasswordModal = (role: 'manager' | 'staff' | 'resident', email: string) => {
+    setResetTargetRole(role);
+    setResetTargetEmail(email);
+    setNewPasswordInput('');
+    setConfirmPasswordInput('');
+    setResetPasswordError(null);
+    setShowResetPasswordModal(true);
+  };
+
+  // Submit password reset
+  const handleResetRegisteredAccountPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPasswordInput || newPasswordInput.length < 6) {
+      setResetPasswordError("Password must be at least 6 characters long.");
+      return;
+    }
+    if (newPasswordInput !== confirmPasswordInput) {
+      setResetPasswordError("Passwords do not match. Please verify.");
+      return;
+    }
+
+    setResettingPassword(true);
+    setResetPasswordError(null);
+    try {
+      const res = await fetch('/api/users/reset-registered-account-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          role: resetTargetRole,
+          email: resetTargetEmail,
+          newPassword: newPasswordInput
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setResetPasswordError(data.error || "Failed to reset password.");
+      } else {
+        setShowResetPasswordModal(false);
+        setNewPasswordInput('');
+        setConfirmPasswordInput('');
+        triggerToast(`Password reset successfully for your registered ${resetTargetRole} account!`);
+      }
+    } catch (err: any) {
+      setResetPasswordError(err.message || "Failed to reset password. Check connection.");
+    } finally {
+      setResettingPassword(false);
+    }
+  };
+
+  // Open delete account modal
+  const openDeleteAccountModal = (role: 'manager' | 'staff' | 'resident', email: string) => {
+    setDeleteTargetRole(role);
+    setDeleteTargetEmail(email);
+    setDeletePasswordInput('');
+    setDeleteAccountError(null);
+    setShowDeleteAccountModal(true);
+  };
+
+  // Submit account deletion (unlocks registration)
+  const handleDeleteRegisteredAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setDeletingAccount(true);
+    setDeleteAccountError(null);
+    try {
+      const res = await fetch('/api/users/delete-registered-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          role: deleteTargetRole,
+          email: deleteTargetEmail,
+          password: deletePasswordInput
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setDeleteAccountError(data.error || "Failed to delete account.");
+      } else {
+        setShowDeleteAccountModal(false);
+        setDeletePasswordInput('');
+        triggerToast(`${deleteTargetRole.toUpperCase()} account deleted. You can now start the registration process again.`);
+        if (deleteTargetRole === 'resident') {
+          setRoomKeyDetails(null);
+          if (updateUser) {
+            updateUser({
+              role: 'user',
+              roomKey: '',
+              hostelId: '',
+              hostelName: '',
+              blockName: '',
+              roomNumber: ''
+            });
+          }
+        }
+        await loadStudentData();
+      }
+    } catch (err: any) {
+      setDeleteAccountError(err.message || "Failed to delete account.");
+    } finally {
+      setDeletingAccount(false);
     }
   };
 
@@ -439,13 +756,34 @@ export default function PageStudentDashboard() {
     return true;
   });
 
+  const unreadNotificationsCount = notifications.filter(n => !n.read).length;
+
   const navItems = [
     { id: 'home', label: 'Home Tab', sub: 'Residents & Staff Hire', icon: Home },
-    { id: 'notifications', label: 'Notifications Tab', sub: 'Bulletins & Alerts', icon: Bell },
+    { id: 'notifications', label: 'Notifications Tab', sub: `${unreadNotificationsCount > 0 ? `${unreadNotificationsCount} New Alert${unreadNotificationsCount > 1 ? 's' : ''}` : 'Bulletins & Alerts'}`, icon: Bell },
     { id: 'options', label: 'Options Tab', sub: 'Profile & Settings', icon: Settings },
-    { id: 'register-resident', label: 'Register Your Resident', sub: 'Hostel Manager Gateway', icon: Building2 },
-    { id: 'become-staff', label: 'Become a Staff', sub: 'Staff & Artisan Gateway', icon: Wrench },
-    { id: 'login-room', label: 'Log Into Your Room', sub: 'Activate Digital Room Key', icon: Key }
+    { 
+      id: 'register-resident', 
+      label: registeredAccounts.managerAccount ? 'Hostel Manager' : 'Register Your Resident', 
+      sub: registeredAccounts.managerAccount 
+        ? ((registeredAccounts.managerAccount.status?.toLowerCase() === 'approved') ? 'Verified Account' : (registeredAccounts.managerAccount.status?.toLowerCase() === 'rejected') ? 'Rejected' : 'Pending Approval') 
+        : 'Hostel Manager Gateway', 
+      icon: Building2 
+    },
+    { 
+      id: 'become-staff', 
+      label: registeredAccounts.staffAccount ? 'Staff & Artisan' : 'Become a Staff', 
+      sub: registeredAccounts.staffAccount 
+        ? ((registeredAccounts.staffAccount.status?.toLowerCase() === 'verified' || registeredAccounts.staffAccount.status?.toLowerCase() === 'approved') ? 'Verified Account' : 'Pending Verification') 
+        : 'Staff & Artisan Gateway', 
+      icon: Wrench 
+    },
+    { 
+      id: 'login-room', 
+      label: (roomKeyDetails || currentUser?.roomKey) ? 'Resident Room' : 'Log Into Your Room', 
+      sub: (roomKeyDetails || currentUser?.roomKey) ? `${roomKeyDetails?.blockName || 'Block'} - Room ${roomKeyDetails?.roomNumber || currentUser?.roomNumber || ''}` : 'Activate Digital Room Key', 
+      icon: Key 
+    }
   ];
 
   const handleNavClick = (tabId: string) => {
@@ -454,7 +792,7 @@ export default function PageStudentDashboard() {
     } else if (tabId === 'become-staff') {
       setActiveTab('become-staff' as any);
     } else if (tabId === 'login-room') {
-      setShowClaimModal(true);
+      setActiveTab('login-room' as any);
     } else {
       setActiveTab(tabId as any);
     }
@@ -750,8 +1088,8 @@ export default function PageStudentDashboard() {
          {showSignoutConfirmModal && (
            <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4">
              <div className="bg-white rounded-3xl max-w-sm w-full p-6 text-center space-y-5 border border-slate-100 shadow-2xl">
-               <div className="w-14 h-14 bg-rose-50 text-rose-600 rounded-2xl mx-auto flex items-center justify-center border border-rose-100">
-                 <LogOut className="w-7 h-7" />
+               <div className="w-16 h-16 rounded-2xl bg-amber-50 border border-amber-200/60 flex items-center justify-center shadow-xs mx-auto">
+                 <PineLogo size={36} hideText={true} />
                </div>
                <div className="space-y-1.5">
                  <h3 className="text-lg font-black text-slate-900 tracking-tight">Sign Out Confirmation</h3>
@@ -814,6 +1152,13 @@ export default function PageStudentDashboard() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setActiveTab('options')}
+            className="flex items-center gap-1.5 p-1 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
+            title="Account Options & Profile"
+          >
+            {renderAvatarGraphic(currentUser?.avatar, "w-7 h-7 text-[10px]")}
+          </button>
           <button 
             onClick={() => setShowSignoutConfirmModal(true)} 
             className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
@@ -939,6 +1284,63 @@ export default function PageStudentDashboard() {
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden z-0">
           <div className="transform scale-[4.5] opacity-[0.14] blur-[0.4px]">
             <PineLogo size={180} hideText={true} />
+          </div>
+        </div>
+
+        {/* TOP USERS BAR: Profile Picture Avatar + Name + Role + Quick Status + Alerts & Settings */}
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white/85 backdrop-blur-xl border border-sky-200/80 p-4 sm:px-6 rounded-3xl shadow-sm">
+          <div className="flex items-center gap-3.5">
+            <div 
+              className="relative cursor-pointer group shrink-0" 
+              onClick={() => setActiveTab('options')}
+              title="Click to view Account Options & Profile"
+            >
+              {renderAvatarGraphic(currentUser?.avatar, "w-12 h-12 text-sm ring-2 ring-blue-500/20 shadow-xs")}
+              <div className="absolute -bottom-0.5 -right-0.5 p-1 bg-emerald-500 text-white rounded-full border-2 border-white shadow-xs">
+                <CheckCircle2 className="w-2.5 h-2.5" />
+              </div>
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
+                  {currentUser?.name || 'PineVela User'}
+                </h2>
+                <span className="px-2 py-0.5 bg-blue-100 text-blue-900 border border-blue-200 rounded-full text-[10px] font-black uppercase tracking-wider">
+                  {currentUser?.role === 'student' ? 'Resident Account' : currentUser?.role === 'manager' ? 'Hostel Manager' : currentUser?.role === 'staff' ? 'Staff Specialist' : 'PineVela User'}
+                </span>
+                {(roomKeyDetails || currentUser?.roomKey) && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-900 border border-emerald-200 rounded-full text-[10px] font-bold">
+                    <Key className="w-2.5 h-2.5" />
+                    <span>Room: {roomKeyDetails?.blockName || 'Block'} {roomKeyDetails?.roomNumber || currentUser?.roomNumber || ''}</span>
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-500 font-medium truncate max-w-xs sm:max-w-md mt-0.5">
+                {currentUser?.email || 'Logged In Account'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setActiveTab('notifications')}
+              className={`px-3 py-2 ${activeTab === 'notifications' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white hover:bg-blue-50 text-slate-700 hover:text-blue-700 border-slate-200'} border rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-xs`}
+            >
+              <Bell className="w-3.5 h-3.5" />
+              <span>Alerts</span>
+              {unreadNotificationsCount > 0 && (
+                <span className="px-1.5 py-0.5 bg-rose-500 text-white text-[10px] font-black rounded-full leading-none">
+                  {unreadNotificationsCount}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab('options')}
+              className={`px-3 py-2 ${activeTab === 'options' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'} border rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-xs`}
+            >
+              <Settings className="w-3.5 h-3.5" />
+              <span>Options</span>
+            </button>
           </div>
         </div>
 
@@ -1146,67 +1548,470 @@ export default function PageStudentDashboard() {
           </div>
         )}
 
-        {/* TAB 3: REGISTER RESIDENT TAB */}
+        {/* TAB 3: REGISTER RESIDENT / MANAGER TAB */}
         {activeTab === 'register-resident' && (
           <div className="space-y-6 animate-fadeIn relative z-10 max-w-4xl">
-            <div className="bg-white/90 border border-emerald-200/80 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6 backdrop-blur-md">
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-900 flex items-center justify-center font-bold">
-                  <Building2 className="w-8 h-8" />
+            {registeredAccounts.managerAccount ? (
+              <div className="bg-white/95 border border-emerald-300 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6 backdrop-blur-md">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-emerald-100">
+                  <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-900 flex items-center justify-center font-bold shadow-xs">
+                      <Building2 className="w-8 h-8" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-black text-slate-900">
+                        {registeredAccounts.managerAccount.name}
+                      </h3>
+                      <p className="text-xs text-slate-500 font-semibold mt-0.5">
+                        {registeredAccounts.managerAccount.organizationName || 'PineVela Property Manager'}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    {(registeredAccounts.managerAccount.status?.toLowerCase() === 'approved') ? (
+                      <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-full text-xs font-black">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                        <span>Approved & Verified Manager</span>
+                      </span>
+                    ) : (registeredAccounts.managerAccount.status?.toLowerCase() === 'rejected') ? (
+                      <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-rose-100 text-rose-800 border border-rose-300 rounded-full text-xs font-black">
+                        <AlertTriangle className="w-4 h-4 text-rose-600" />
+                        <span>Registration Rejected</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-100 text-amber-900 border border-amber-300 rounded-full text-xs font-black">
+                        <Clock className="w-4 h-4 text-amber-600 animate-spin" />
+                        <span>Pending Admin Approval</span>
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-xl font-black text-slate-900">
-                    {registeredAccounts.managerAccount ? 'Registered Manager Account' : 'Register Your Resident'}
-                  </h3>
-                  <p className="text-sm text-slate-600 font-medium leading-relaxed mt-1">
-                    {registeredAccounts.managerAccount 
-                      ? `You already have a registered manager account. Organization: ${registeredAccounts.managerAccount.organizationName} (${registeredAccounts.managerAccount.status}).`
-                      : 'Initiate the hostel manager creation account flow to list and manage student residences on PineVela. Register your property securely and gain access to the powerful Manager Console.'}
-                  </p>
+
+                <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-5 space-y-3">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-500">Official Manager Credentials & Details</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-xs">
+                    <div>
+                      <span className="text-slate-400 block font-medium">Full Name</span>
+                      <span className="font-bold text-slate-800">{registeredAccounts.managerAccount.name}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block font-medium">Organization / Property</span>
+                      <span className="font-bold text-slate-800">{registeredAccounts.managerAccount.organizationName || 'PineVela'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block font-medium">Official Contact Email</span>
+                      <span className="font-bold text-slate-800 break-all">{registeredAccounts.managerAccount.email}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block font-medium">Phone Number</span>
+                      <span className="font-bold text-slate-800">{registeredAccounts.managerAccount.phone || 'Provided'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block font-medium">National / Org ID</span>
+                      <span className="font-bold text-slate-800 font-mono">
+                        {registeredAccounts.managerAccount.idNumber ? `••••${registeredAccounts.managerAccount.idNumber.slice(-4)}` : 'Verified Document'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block font-medium">Registration Date</span>
+                      <span className="font-bold text-slate-800">
+                        {registeredAccounts.managerAccount.createdAt ? new Date(registeredAccounts.managerAccount.createdAt).toLocaleDateString() : 'Active'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {registeredAccounts.managerAccount.adminNotes && (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-950 font-medium space-y-1">
+                    <span className="font-black text-amber-900 block">Administrator Review Feedback:</span>
+                    <p>{registeredAccounts.managerAccount.adminNotes}</p>
+                  </div>
+                )}
+
+                <div className="p-3 bg-blue-50/70 border border-blue-200/80 rounded-xl text-xs text-blue-900 flex items-center gap-2">
+                  <Bell className="w-4 h-4 text-blue-600 shrink-0" />
+                  <span>Real-time status updates are sent directly to your Alerts feed. You cannot create a duplicate manager account while this registration is active.</span>
+                </div>
+
+                <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openResetPasswordModal('manager', registeredAccounts.managerAccount.email)}
+                      className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <KeyRound className="w-3.5 h-3.5" />
+                      <span>Reset Password</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openDeleteAccountModal('manager', registeredAccounts.managerAccount.email)}
+                      className="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Delete Account & Restart Registration</span>
+                    </button>
+                  </div>
+
+                  {(registeredAccounts.managerAccount.status?.toLowerCase() === 'approved') && (
+                    <button
+                      type="button"
+                      onClick={() => navigate('/manager/dashboard')}
+                      className="px-6 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-black text-xs rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                    >
+                      <span>Enter Manager Console</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
-              <div className="pt-4 border-t border-slate-100 flex items-center justify-end">
-                <button
-                  onClick={() => navigate('/register-manager')}
-                  className="px-8 py-3 bg-emerald-700 hover:bg-emerald-800 text-white font-black text-sm rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
-                >
-                  <span>{registeredAccounts.managerAccount ? 'Manage Manager Account' : 'Start Registration Process'}</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
+            ) : (
+              <div className="bg-white/90 border border-emerald-200/80 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6 backdrop-blur-md">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-900 flex items-center justify-center font-bold">
+                    <Building2 className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-slate-900">
+                      Register Your Resident
+                    </h3>
+                    <p className="text-sm text-slate-600 font-medium leading-relaxed mt-1">
+                      Initiate the hostel manager creation account flow to list and manage student residences on PineVela. Register your property securely and gain access to the powerful Manager Console.
+                    </p>
+                  </div>
+                </div>
+                <div className="pt-4 border-t border-slate-100 flex items-center justify-end">
+                  <button
+                    onClick={() => navigate('/register-manager')}
+                    className="px-8 py-3 bg-emerald-700 hover:bg-emerald-800 text-white font-black text-sm rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                  >
+                    <span>Start Registration Process</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
 
         {/* TAB 4: BECOME A STAFF TAB */}
         {activeTab === 'become-staff' && (
           <div className="space-y-6 animate-fadeIn relative z-10 max-w-4xl">
-            <div className="bg-white/90 border border-amber-200/80 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6 backdrop-blur-md">
+            {registeredAccounts.staffAccount ? (
+              <div className="bg-white/95 border border-amber-300 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6 backdrop-blur-md">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-amber-100">
+                  <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-900 flex items-center justify-center font-bold shadow-xs">
+                      <Wrench className="w-8 h-8" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-black text-slate-900">
+                        {registeredAccounts.staffAccount.name}
+                      </h3>
+                      <p className="text-xs text-slate-500 font-semibold mt-0.5">
+                        {registeredAccounts.staffAccount.specialization || 'Accredited Maintenance Specialist'}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    {(registeredAccounts.staffAccount.status?.toLowerCase() === 'verified' || registeredAccounts.staffAccount.status?.toLowerCase() === 'approved' || registeredAccounts.staffAccount.isVerified) ? (
+                      <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-full text-xs font-black">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                        <span>Verified & Accredited Staff</span>
+                      </span>
+                    ) : (registeredAccounts.staffAccount.status?.toLowerCase() === 'rejected' || registeredAccounts.staffAccount.isRejected) ? (
+                      <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-rose-100 text-rose-800 border border-rose-300 rounded-full text-xs font-black">
+                        <AlertTriangle className="w-4 h-4 text-rose-600" />
+                        <span>Verification Rejected</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-100 text-amber-900 border border-amber-300 rounded-full text-xs font-black">
+                        <Clock className="w-4 h-4 text-amber-600 animate-spin" />
+                        <span>Pending Admin Verification</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-5 space-y-3">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-500">Accredited Staff Profile & Credentials</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-xs">
+                    <div>
+                      <span className="text-slate-400 block font-medium">Full Name</span>
+                      <span className="font-bold text-slate-800">{registeredAccounts.staffAccount.name}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block font-medium">Specialization & Trade</span>
+                      <span className="font-bold text-slate-800">{registeredAccounts.staffAccount.specialization || 'General Maintenance'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block font-medium">Years of Experience</span>
+                      <span className="font-bold text-slate-800">{registeredAccounts.staffAccount.experienceYears || registeredAccounts.staffAccount.yearsExperience || '1'} Years</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block font-medium">Contact Email</span>
+                      <span className="font-bold text-slate-800 break-all">{registeredAccounts.staffAccount.email}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block font-medium">Phone Number</span>
+                      <span className="font-bold text-slate-800">{registeredAccounts.staffAccount.phone || 'Provided'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block font-medium">Commute Availability</span>
+                      <span className="font-bold text-slate-800">{registeredAccounts.staffAccount.commutePreference || 'All Campuses'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-blue-50/70 border border-blue-200/80 rounded-xl text-xs text-blue-900 flex items-center gap-2">
+                  <Bell className="w-4 h-4 text-blue-600 shrink-0" />
+                  <span>Real-time verification alerts will update your account. You cannot create a duplicate staff account while this registration is active.</span>
+                </div>
+
+                <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openResetPasswordModal('staff', registeredAccounts.staffAccount.email)}
+                      className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <KeyRound className="w-3.5 h-3.5" />
+                      <span>Reset Password</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openDeleteAccountModal('staff', registeredAccounts.staffAccount.email)}
+                      className="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Delete Account & Restart Registration</span>
+                    </button>
+                  </div>
+
+                  {(registeredAccounts.staffAccount.status?.toLowerCase() === 'verified' || registeredAccounts.staffAccount.status?.toLowerCase() === 'approved' || registeredAccounts.staffAccount.isVerified) && (
+                    <button
+                      type="button"
+                      onClick={() => navigate('/staff/dashboard')}
+                      className="px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-black text-xs rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                    >
+                      <span>Open Staff Operations</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white/90 border border-amber-200/80 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6 backdrop-blur-md">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-900 flex items-center justify-center font-bold">
+                    <Wrench className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-slate-900">
+                      Become a Staff
+                    </h3>
+                    <p className="text-sm text-slate-600 font-medium leading-relaxed mt-1">
+                      Initiate the staff creation account flow to offer accredited maintenance and artisan services across residences. Join our network of verified professionals.
+                    </p>
+                  </div>
+                </div>
+                <div className="pt-4 border-t border-slate-100 flex items-center justify-end">
+                  <button
+                    onClick={() => navigate('/staff/register')}
+                    className="px-8 py-3 bg-amber-600 hover:bg-amber-700 text-white font-black text-sm rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                  >
+                    <span>Start Registration Process</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+                {/* TAB 5: RESIDENT ROOM TAB (SUPPORTS UP TO 5 REGISTERED ROOMS & DELETION) */}
+        {activeTab === 'login-room' && (
+          <div className="space-y-6 animate-fadeIn relative z-10 max-w-5xl">
+            {/* TOP BAR / ACTION HEADER */}
+            <div className="bg-white/95 border border-slate-200/80 rounded-3xl p-6 shadow-xl backdrop-blur-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-900 flex items-center justify-center font-bold">
-                  <Wrench className="w-8 h-8" />
+                <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-900 flex items-center justify-center font-bold shadow-xs">
+                  <Key className="w-6 h-6 text-blue-700" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-black text-slate-900">
-                    {registeredAccounts.staffAccount ? 'Registered Staff Account' : 'Become a Staff'}
+                  <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                    Resident Room Management
+                    <span className="text-xs font-black px-2.5 py-0.5 bg-blue-100 text-blue-900 border border-blue-200 rounded-full">
+                      {userRooms.length} / 5 Registered Rooms
+                    </span>
                   </h3>
-                  <p className="text-sm text-slate-600 font-medium leading-relaxed mt-1">
-                    {registeredAccounts.staffAccount
-                      ? `You already have a registered staff account. Role: ${registeredAccounts.staffAccount.specialization} (${registeredAccounts.staffAccount.status}).`
-                      : 'Initiate the staff creation account flow to offer accredited maintenance and artisan services across residences. Join our network of verified professionals.'}
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    View your active digital room keys, manage hostel rooms, delete unneeded rooms, or register additional rooms (up to 5 max).
                   </p>
                 </div>
               </div>
-              <div className="pt-4 border-t border-slate-100 flex items-center justify-end">
-                <button
-                  onClick={() => navigate('/staff/register')}
-                  className="px-8 py-3 bg-amber-600 hover:bg-amber-700 text-white font-black text-sm rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
-                >
-                  <span>{registeredAccounts.staffAccount ? 'Manage Staff Account' : 'Start Registration Process'}</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
+
+              <div>
+                {userRooms.length < 5 ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddRoomModal(true);
+                      setAddRoomKeyInput('');
+                      setVerifiedAddKeyInfo(null);
+                      setAddRoomError(null);
+                    }}
+                    className="w-full sm:w-auto px-5 py-3 bg-gradient-to-r from-blue-900 to-indigo-900 hover:from-blue-850 hover:to-indigo-850 text-white font-black text-xs rounded-2xl shadow-lg shadow-blue-900/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4 text-emerald-400" />
+                    <span>Register Additional Room</span>
+                  </button>
+                ) : (
+                  <div className="px-4 py-2 bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold rounded-xl flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-amber-600" />
+                    <span>Max Capacity (5 Rooms) Reached</span>
+                  </div>
+                )}
               </div>
             </div>
+
+            {/* ROOM CARDS LIST */}
+            {userRooms.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {userRooms.map((roomItem: any, idx: number) => {
+                  const rKey = roomItem.roomKey || roomItem.id;
+                  const hostelName = roomItem.hostelName || registeredAccounts.residentAccount?.hostelName || currentUser?.hostelName || 'PineVela Residence';
+                  const blockName = roomItem.blockName || currentUser?.blockName || 'Block A';
+                  const roomNum = roomItem.roomNumber || currentUser?.roomNumber || '101';
+                  const resName = roomItem.assignedStudentName || registeredAccounts.residentAccount?.name || currentUser?.name || 'Resident';
+                  const resId = roomItem.assignedStudentId || registeredAccounts.residentAccount?.studentId || currentUser?.studentId || 'N/A';
+                  const prog = roomItem.assignedProgram || registeredAccounts.residentAccount?.programOfStudy || currentUser?.programOfStudy || 'General Studies';
+                  const managerName = roomItem.managerName || 'Hostel Operations Manager';
+                  const managerPhone = roomItem.managerPhone || '+233 24 000 0000';
+
+                  return (
+                    <div
+                      key={rKey || idx}
+                      className="bg-white/95 border border-blue-200/90 hover:border-blue-400 rounded-3xl p-6 shadow-xl space-y-5 backdrop-blur-md transition-all flex flex-col justify-between"
+                    >
+                      <div className="space-y-4">
+                        <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-800 flex items-center justify-center font-extrabold text-sm">
+                              {idx + 1}
+                            </div>
+                            <div>
+                              <h4 className="text-base font-black text-slate-900 leading-tight">
+                                {hostelName}
+                              </h4>
+                              <span className="text-xs font-bold text-blue-700">
+                                {blockName} • Room {roomNum}
+                              </span>
+                            </div>
+                          </div>
+
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-full text-[10px] font-black shrink-0">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                            <span>Active</span>
+                          </span>
+                        </div>
+
+                        {/* DOSSIER DETAILS */}
+                        <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-4 space-y-2.5 text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-400 font-medium">Digital Room Key:</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono font-black text-blue-900 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                                {rKey}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(rKey);
+                                  triggerToast(`Copied Room Key ${rKey}`, 'success');
+                                }}
+                                className="p-1 rounded bg-slate-200 hover:bg-slate-300 text-slate-700 cursor-pointer"
+                                title="Copy Key"
+                              >
+                                <Copy className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/60">
+                            <div>
+                              <span className="text-slate-400 block font-medium text-[10px]">Resident Name</span>
+                              <span className="font-bold text-slate-800">{resName}</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block font-medium text-[10px]">Student / Resident ID</span>
+                              <span className="font-bold text-slate-800 font-mono">{resId}</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block font-medium text-[10px]">Program / Role</span>
+                              <span className="font-bold text-slate-800 truncate block">{prog}</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block font-medium text-[10px]">Hostel Manager</span>
+                              <span className="font-bold text-slate-800 truncate block">{managerName} ({managerPhone})</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* CARD ACTIONS */}
+                      <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDeletingRoomTarget(roomItem)}
+                          className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                          <span>Delete Room</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('home')}
+                          className="px-4 py-2 bg-blue-900 hover:bg-blue-850 text-white font-black text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <span>Room Portal</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="bg-white/90 border border-blue-200/80 rounded-3xl p-8 shadow-xl space-y-6 text-center backdrop-blur-md">
+                <div className="w-16 h-16 rounded-3xl bg-blue-100 text-blue-900 flex items-center justify-center font-bold mx-auto">
+                  <Key className="w-8 h-8 text-blue-700" />
+                </div>
+                <div className="space-y-1.5 max-w-md mx-auto">
+                  <h3 className="text-xl font-black text-slate-900">
+                    No Registered Rooms Found
+                  </h3>
+                  <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                    You have not linked any digital room keys yet. Use a digital room key provided by your hostel manager to claim your room.
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowAddRoomModal(true);
+                    setAddRoomKeyInput('');
+                    setVerifiedAddKeyInfo(null);
+                    setAddRoomError(null);
+                  }}
+                  className="px-8 py-3 bg-blue-900 hover:bg-blue-850 text-white font-black text-xs rounded-xl shadow-lg transition-all inline-flex items-center gap-2 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Register Digital Room Key Now</span>
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -1221,7 +2026,7 @@ export default function PageStudentDashboard() {
                     User Options & Account Preferences
                   </h3>
                   <p className="text-xs text-slate-500 font-semibold mt-0.5">
-                    Manage your resident profile, avatar, security credentials, and session options.
+                    Manage your resident profile, avatar, registered accounts, security credentials, and session options.
                   </p>
                 </div>
               </div>
@@ -1241,9 +2046,65 @@ export default function PageStudentDashboard() {
                   <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase rounded-lg">Verified Account</span>
                 </div>
 
+                {/* REGISTERED RESIDENT ACCOUNT MANAGEMENT */}
+                {(roomKeyDetails || currentUser?.roomKey || registeredAccounts.residentAccount) && (
+                  <div className="p-5 bg-gradient-to-br from-blue-50/80 to-indigo-50/60 border border-blue-200 rounded-2xl space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 rounded-xl bg-blue-600 text-white">
+                          <Key className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-black text-slate-900">Registered Resident Account</h4>
+                          <p className="text-[10px] text-blue-700 font-bold">
+                            {roomKeyDetails?.hostelName || registeredAccounts.residentAccount?.hostelName || 'PineVela Student Residence'}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-full text-[10px] font-black">
+                        Room Active
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs bg-white/70 p-3 rounded-xl border border-blue-100">
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Room & Block</span>
+                        <span className="font-bold text-slate-800">{roomKeyDetails?.blockName || 'Block A'}, Room {roomKeyDetails?.roomNumber || '101'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Digital Room Key</span>
+                        <span className="font-bold text-slate-800 font-mono text-[11px]">{roomKeyDetails?.roomKey || currentUser?.roomKey}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Student / Resident ID</span>
+                        <span className="font-bold text-slate-800">{roomKeyDetails?.assignedStudentId || currentUser?.studentId || 'Resident'}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-blue-100">
+                      <button
+                        type="button"
+                        onClick={() => openResetPasswordModal('resident', registeredAccounts.residentAccount?.email || currentUser?.email || '')}
+                        className="px-3.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-bold text-xs rounded-xl transition-all flex items-center gap-1 cursor-pointer"
+                      >
+                        <KeyRound className="w-3.5 h-3.5" />
+                        <span>Reset Resident Password</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openDeleteAccountModal('resident', registeredAccounts.residentAccount?.email || currentUser?.email || '')}
+                        className="px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs rounded-xl transition-all flex items-center gap-1 cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Unlink & Delete Resident Account</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="p-4 bg-white border border-slate-200 rounded-2xl space-y-2">
-                    <h4 className="text-xs font-black text-slate-900">Digital Room Key Status</h4>
+                    <h4 className="text-xs font-black text-slate-900">Digital Room Key Activation</h4>
                     <p className="text-xs text-slate-600 font-medium">
                       {roomKeyDetails ? `${roomKeyDetails.hostelName} (${roomKeyDetails.blockName}, ${roomKeyDetails.roomNumber})` : 'Not linked to a room key yet.'}
                     </p>
@@ -1696,30 +2557,276 @@ export default function PageStudentDashboard() {
               )}
 
               {verifiedKeyInfo && (
-                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-2 text-xs text-emerald-950">
-                  <div className="font-black flex items-center gap-1.5 text-emerald-800">
+                <div className="p-4 bg-emerald-50/90 border border-emerald-300 rounded-2xl space-y-3.5 text-xs text-emerald-950">
+                  <div className="font-black flex items-center gap-1.5 text-emerald-800 pb-2 border-b border-emerald-200">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                    <span>Verified Room Match!</span>
+                    <span>Verified Room Assignment Match!</span>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-[11px] font-semibold">
-                    <div>Hostel: <strong>{verifiedKeyInfo.hostelName}</strong></div>
-                    <div>Block: <strong>{verifiedKeyInfo.blockName}</strong></div>
-                    <div>Room: <strong>{verifiedKeyInfo.roomNumber}</strong></div>
-                    <div>Status: <strong>{verifiedKeyInfo.status}</strong></div>
+                  <div className="grid grid-cols-2 gap-2 text-[11px] font-semibold bg-white/70 p-2.5 rounded-xl border border-emerald-100">
+                    <div>Hostel: <strong className="text-slate-900">{verifiedKeyInfo.hostelName}</strong></div>
+                    <div>Block: <strong className="text-slate-900">{verifiedKeyInfo.blockName}</strong></div>
+                    <div>Room: <strong className="text-slate-900">{verifiedKeyInfo.roomNumber}</strong></div>
+                    <div>Key Status: <strong className="text-emerald-700 font-bold">{verifiedKeyInfo.status}</strong></div>
+                  </div>
+
+                  <div className="space-y-2 pt-1 border-t border-emerald-200/80">
+                    <h5 className="font-black text-slate-800 text-[11px] uppercase tracking-wider">Complete Resident Registration</h5>
+                    
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-700 block">Full Legal Name *</label>
+                      <input
+                        type="text"
+                        value={claimStudentName}
+                        onChange={(e) => setClaimStudentName(e.target.value)}
+                        placeholder="e.g. Kwesi Mensah"
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
+                        required
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-slate-700 block">Student / Resident ID</label>
+                        <input
+                          type="text"
+                          value={claimStudentId}
+                          onChange={(e) => setClaimStudentId(e.target.value)}
+                          placeholder="e.g. STU-2026-904"
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-slate-700 block">Contact Phone</label>
+                        <input
+                          type="tel"
+                          value={claimStudentPhone}
+                          onChange={(e) => setClaimStudentPhone(e.target.value)}
+                          placeholder="e.g. +233 24 000 0000"
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-slate-700 block">Institution / University</label>
+                        <input
+                          type="text"
+                          value={claimInstitution}
+                          onChange={(e) => setClaimInstitution(e.target.value)}
+                          placeholder="e.g. University of Ghana"
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-slate-700 block">Program of Study</label>
+                        <input
+                          type="text"
+                          value={claimProgram}
+                          onChange={(e) => setClaimProgram(e.target.value)}
+                          placeholder="e.g. Computer Science"
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-700 block">Resident Account Password / Security PIN</label>
+                      <input
+                        type="password"
+                        value={claimPassword}
+                        onChange={(e) => setClaimPassword(e.target.value)}
+                        placeholder="Create resident account password (min 6 characters)"
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
+                      />
+                    </div>
                   </div>
 
                   <button
                     type="button"
                     onClick={handleClaimRoomKey}
                     disabled={submittingClaim}
-                    className="w-full mt-2 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full mt-2 py-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-black text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                   >
                     {submittingClaim ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                    <span>Confirm & Activate Room Access</span>
+                    <span>Complete Resident Registration & Activate Key</span>
                   </button>
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: RESET REGISTERED ACCOUNT PASSWORD */}
+      {/* ========================================================================= */}
+      {showResetPasswordModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-slate-200 space-y-5">
+            <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-100">
+              <div className="flex items-start gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-600/30">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">
+                    Reset {resetTargetRole === 'manager' ? 'Manager' : resetTargetRole === 'staff' ? 'Staff' : 'Resident'} Password
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium truncate max-w-xs">{resetTargetEmail}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowResetPasswordModal(false)}
+                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-xl hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleResetRegisteredAccountPassword} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-black text-slate-800 block">New Password</label>
+                <input
+                  type="password"
+                  value={newPasswordInput}
+                  onChange={(e) => setNewPasswordInput(e.target.value)}
+                  placeholder="Enter new password (at least 6 characters)"
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-black text-slate-800 block">Confirm New Password</label>
+                <input
+                  type="password"
+                  value={confirmPasswordInput}
+                  onChange={(e) => setConfirmPasswordInput(e.target.value)}
+                  placeholder="Re-enter new password"
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
+                  required
+                />
+              </div>
+
+              {resetPasswordError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 font-semibold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{resetPasswordError}</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowResetPasswordModal(false)}
+                  className="py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs rounded-xl transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={resettingPassword}
+                  className="py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  {resettingPassword ? <RefreshCw className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+                  <span>Update Password</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: DELETE REGISTERED ACCOUNT (ALLOWS RE-REGISTRATION) */}
+      {/* ========================================================================= */}
+      {showDeleteAccountModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-rose-200 space-y-5">
+            <div className="flex items-start justify-between gap-3 pb-3 border-b border-rose-100">
+              <div className="flex items-start gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-rose-50 text-rose-600 border border-rose-100 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">
+                    Delete {deleteTargetRole === 'manager' ? 'Hostel Manager' : deleteTargetRole === 'staff' ? 'Staff Specialist' : 'Resident'} Account
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium truncate max-w-xs">{deleteTargetEmail}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDeleteAccountModal(false)}
+                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-xl hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 bg-rose-50/70 border border-rose-200 rounded-2xl text-xs text-rose-950 space-y-1 leading-relaxed">
+              <span className="font-black text-rose-900 block">Are you sure you want to delete this account?</span>
+              <p>
+                This will delete your registered credentials and status from the system, giving you the option to start the registration process again from scratch.
+              </p>
+            </div>
+
+            <form onSubmit={handleDeleteRegisteredAccount} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-black text-slate-800 block">
+                  {deleteTargetRole === 'manager' ? 'Manager Account Email' : 'Account Email'}
+                </label>
+                <input
+                  type="email"
+                  value={deleteTargetEmail}
+                  onChange={(e) => setDeleteTargetEmail(e.target.value)}
+                  placeholder="Enter registered manager account email"
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-rose-600"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-black text-slate-800 block">
+                  {deleteTargetRole === 'manager' ? 'Manager Account Password' : 'Confirm Password'}
+                </label>
+                <input
+                  type="password"
+                  value={deletePasswordInput}
+                  onChange={(e) => setDeletePasswordInput(e.target.value)}
+                  placeholder={deleteTargetRole === 'manager' ? "Enter password used when creating manager account" : "Enter account password to confirm"}
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-rose-600"
+                  required
+                />
+              </div>
+
+              {deleteAccountError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 font-semibold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{deleteAccountError}</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteAccountModal(false)}
+                  className="py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs rounded-xl transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={deletingAccount}
+                  className="py-2.5 px-4 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  {deletingAccount ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  <span>Delete & Restart</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -1749,8 +2856,8 @@ export default function PageStudentDashboard() {
       {showSignoutConfirmModal && (
         <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-sm w-full p-6 text-center space-y-5 border border-slate-100 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
-            <div className="w-14 h-14 bg-rose-50 text-rose-600 rounded-2xl mx-auto flex items-center justify-center border border-rose-100">
-              <LogOut className="w-7 h-7" />
+            <div className="w-16 h-16 rounded-2xl bg-amber-50 border border-amber-200/60 flex items-center justify-center shadow-xs mx-auto">
+              <PineLogo size={36} hideText={true} />
             </div>
 
             <div className="space-y-1.5">
@@ -1857,6 +2964,239 @@ export default function PageStudentDashboard() {
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ADD ADDITIONAL ROOM MODAL */}
+      {showAddRoomModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl border border-slate-200 space-y-5 animate-scaleUp">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-2xl bg-blue-100 text-blue-900 font-bold">
+                  <Plus className="w-5 h-5 text-blue-700" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-900">Register Additional Room</h3>
+                  <p className="text-xs text-slate-500 font-medium">Add up to 5 rooms under your resident account.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddRoomModal(false)}
+                className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!addRoomKeyInput.trim()) return;
+                setSubmittingAddRoom(true);
+                setAddRoomError(null);
+                try {
+                  const res = await apiFetch('/api/student/add-room', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ roomKey: addRoomKeyInput.trim() })
+                  });
+                  if (res && res.success) {
+                    triggerToast(res.message || "Room added successfully!", 'success');
+                    setUserRooms(res.rooms || []);
+                    setShowAddRoomModal(false);
+                    setAddRoomKeyInput('');
+                    setVerifiedAddKeyInfo(null);
+                  } else {
+                    setAddRoomError(res?.error || "Failed to register room key.");
+                  }
+                } catch (err: any) {
+                  setAddRoomError(err.message || "Error adding room key.");
+                } finally {
+                  setSubmittingAddRoom(false);
+                }
+              }}
+              className="space-y-4"
+            >
+              <div className="space-y-1.5">
+                <label className="text-xs font-black uppercase tracking-wider text-slate-600 block">
+                  Digital Room Key Code
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={addRoomKeyInput}
+                    onChange={(e) => {
+                      setAddRoomKeyInput(e.target.value.toUpperCase());
+                      setAddRoomError(null);
+                      setVerifiedAddKeyInfo(null);
+                    }}
+                    placeholder="e.g. MAZE-B-204123"
+                    className="flex-1 px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl font-mono text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-900 uppercase"
+                  />
+                  <button
+                    type="button"
+                    disabled={verifyingAddKey || !addRoomKeyInput.trim()}
+                    onClick={async () => {
+                      if (!addRoomKeyInput.trim() || addRoomKeyInput.trim().length < 5) {
+                        setAddRoomError("Please enter a valid digital room key format.");
+                        return;
+                      }
+                      setVerifyingAddKey(true);
+                      setAddRoomError(null);
+                      try {
+                        const res = await apiFetch('/api/room-keys/verify', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ roomKey: addRoomKeyInput.trim() })
+                        });
+                        if (res && res.valid) {
+                          setVerifiedAddKeyInfo(res);
+                          setAddRoomError(null);
+                          triggerToast(`Room Found: ${res.hostelName} (${res.blockName}, Room ${res.roomNumber})`, 'success');
+                        } else {
+                          setVerifiedAddKeyInfo(null);
+                          setAddRoomError(res?.error || "Invalid room key or already used.");
+                        }
+                      } catch (err: any) {
+                        setVerifiedAddKeyInfo(null);
+                        setAddRoomError(err.message || "Failed to verify key.");
+                      } finally {
+                        setVerifyingAddKey(false);
+                      }
+                    }}
+                    className="px-4 py-3 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shrink-0"
+                  >
+                    {verifyingAddKey ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Search className="w-3.5 h-3.5" />
+                    )}
+                    <span>Verify</span>
+                  </button>
+                </div>
+              </div>
+
+              {addRoomError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold rounded-xl flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                  <span>{addRoomError}</span>
+                </div>
+              )}
+
+              {verifiedAddKeyInfo && (
+                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-2 text-xs">
+                  <div className="flex items-center gap-2 text-emerald-900 font-black">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>Digital Room Key Verified!</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-slate-700 font-medium">
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">Hostel</span>
+                      <span className="font-bold text-slate-900">{verifiedAddKeyInfo.hostelName}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">Room & Block</span>
+                      <span className="font-bold text-slate-900">{verifiedAddKeyInfo.blockName}, Room {verifiedAddKeyInfo.roomNumber}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowAddRoomModal(false)}
+                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingAddRoom || !addRoomKeyInput.trim()}
+                  className="px-6 py-2.5 bg-blue-900 hover:bg-blue-850 text-white font-black text-xs rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {submittingAddRoom ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Plus className="w-3.5 h-3.5" />
+                  )}
+                  <span>Claim & Register Room</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE / UNLINK ROOM CONFIRMATION MODAL */}
+      {deletingRoomTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-slate-200 space-y-5 animate-scaleUp">
+            <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
+              <div className="p-3 rounded-2xl bg-rose-100 text-rose-700 font-bold">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-slate-900">Delete / Unlink Room</h3>
+                <p className="text-xs text-slate-500 font-medium">Remove room assignment from account.</p>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs text-slate-600 font-medium">
+              <p>
+                Are you sure you want to delete/unlink <strong className="text-slate-900">{deletingRoomTarget.hostelName} ({deletingRoomTarget.blockName}, Room {deletingRoomTarget.roomNumber})</strong>?
+              </p>
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-[11px] font-bold">
+                This will release digital room key <code className="font-mono bg-amber-100 px-1 py-0.5 rounded">{deletingRoomTarget.roomKey}</code> and free up space in your account.
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDeletingRoomTarget(null)}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={submittingDeleteRoom}
+                onClick={async () => {
+                  if (!deletingRoomTarget) return;
+                  setSubmittingDeleteRoom(true);
+                  try {
+                    const res = await apiFetch('/api/student/delete-room', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ roomKey: deletingRoomTarget.roomKey })
+                    });
+                    if (res && res.success) {
+                      triggerToast(res.message || "Room unlinked successfully!", 'success');
+                      setUserRooms(res.rooms || []);
+                      setDeletingRoomTarget(null);
+                    } else {
+                      triggerToast(res?.error || "Failed to delete room.", 'error');
+                    }
+                  } catch (err: any) {
+                    triggerToast(err.message || "Error unlinking room.", 'error');
+                  } finally {
+                    setSubmittingDeleteRoom(false);
+                  }
+                }}
+                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {submittingDeleteRoom ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="w-3.5 h-3.5" />
+                )}
+                <span>Confirm Delete Room</span>
+              </button>
             </div>
           </div>
         </div>

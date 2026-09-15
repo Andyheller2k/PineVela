@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { LogOut, X } from 'lucide-react';
+import PineLogo from './PineLogo';
 
 interface LogoutConfirmationModalProps {
   isOpen: boolean;
@@ -26,12 +27,12 @@ export default function LogoutConfirmationModal({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 10 }}
           transition={{ duration: 0.2, ease: "easeOut" }}
-          className="relative w-full max-w-md bg-blue-50/70 backdrop-blur-2xl rounded-3xl shadow-2xl shadow-blue-950/20 border border-white/80 overflow-hidden"
+          className="relative w-full max-w-md bg-white/95 backdrop-blur-2xl rounded-3xl shadow-2xl shadow-blue-950/20 border border-slate-100 overflow-hidden"
         >
           {/* Header Bar */}
           <div className="flex items-center justify-between px-6 pt-6 pb-2">
-            <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-600 shadow-xs">
-              <LogOut className="w-6 h-6 stroke-[2.5]" />
+            <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-200/60 flex items-center justify-center shadow-xs">
+              <PineLogo size={32} hideText={true} />
             </div>
             <button
               onClick={onClose}
@@ -47,15 +48,15 @@ export default function LogoutConfirmationModal({
               Confirm Sign Out
             </h3>
             <p className="text-sm font-medium text-slate-700 leading-relaxed">
-              Are you sure you want to sign out{userName ? `, ${userName}` : ''}? You can sign back in at any time.
+              Are you sure you want to sign out{userName ? `, ${userName}` : ''}? You can sign back in to PineVela at any time.
             </p>
           </div>
 
           {/* Actions */}
-          <div className="px-6 pb-6 pt-4 bg-white/40 border-t border-white/60 flex items-center justify-end gap-3">
+          <div className="px-6 pb-6 pt-4 bg-slate-50/70 border-t border-slate-100 flex items-center justify-end gap-3">
             <button
               onClick={onClose}
-              className="px-5 py-2.5 bg-white/80 hover:bg-white text-blue-900 border border-slate-200/90 font-extrabold rounded-xl text-xs transition-all shadow-xs cursor-pointer"
+              className="px-5 py-2.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-extrabold rounded-xl text-xs transition-all shadow-xs cursor-pointer"
             >
               Cancel
             </button>

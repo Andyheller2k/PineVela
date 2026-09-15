@@ -8,6 +8,8 @@ export interface PersistentStore {
   activities: any[];
   hostelVerifications: any[];
   managerRegistrationRequests: any[];
+  managerVerifications?: any[];
+  managerRequests?: any[];
   verificationAuditLogs: any[];
   users: any[];
   notifications: any[];
@@ -73,6 +75,8 @@ export function loadPersistentStore(defaultStore: PersistentStore): PersistentSt
       activities: Array.isArray(parsed.activities) ? parsed.activities : defaultStore.activities,
       hostelVerifications: Array.isArray(parsed.hostelVerifications) ? parsed.hostelVerifications : defaultStore.hostelVerifications,
       managerRegistrationRequests: Array.isArray(parsed.managerRegistrationRequests) ? parsed.managerRegistrationRequests : defaultStore.managerRegistrationRequests,
+      managerVerifications: Array.isArray(parsed.managerVerifications) ? parsed.managerVerifications : (defaultStore.managerVerifications || []),
+      managerRequests: Array.isArray(parsed.managerRequests) ? parsed.managerRequests : (defaultStore.managerRequests || []),
       verificationAuditLogs: Array.isArray(parsed.verificationAuditLogs) ? parsed.verificationAuditLogs : defaultStore.verificationAuditLogs,
       users: (Array.isArray(parsed.users) ? parsed.users : defaultStore.users).filter((u: any) => u.email !== 'staff@pinevela.com' && u.username !== 'staff'),
       notifications: Array.isArray(parsed.notifications) ? parsed.notifications : defaultStore.notifications,

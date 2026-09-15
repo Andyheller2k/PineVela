@@ -63,19 +63,27 @@ export default function PageStaffRegister() {
   const [showDelPassword, setShowDelPassword] = useState<boolean>(false);
 
   // Fetch and check if user already has a recorded Staff account
-  const fetchMyStaffAccount = async () => {
+  const fetchMyStaffAccount = async (isSilent = false) => {
     try {
-      setCheckingExisting(true);
+      if (!isSilent) setCheckingExisting(true);
       const queryEmail = user?.email || '';
+      const queryId = user?.id || '';
       const token = localStorage.getItem('pinevela_auth_token') || (user as any)?.token;
       const headers: any = {};
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      const res = await fetch(`/api/users/my-registered-accounts?email=${encodeURIComponent(queryEmail)}`, { headers });
+      const res = await fetch(`/api/users/my-registered-accounts?email=${encodeURIComponent(queryEmail)}&userId=${encodeURIComponent(queryId)}`, { headers });
       if (res.ok) {
         const data = await res.json();
         if (data.staffAccount) {
-          setExistingStaffRecord(data.staffAccount);
+          setExistingStaffRecord((prev: any) => {
+            if (prev && prev.status !== data.staffAccount.status) {
+              setToastMessage(`Staff account status updated: ${data.staffAccount.displayStatus || data.staffAccount.status}`);
+              setToastType('info');
+              setTimeout(() => setToastMessage(null), 3500);
+            }
+            return data.staffAccount;
+          });
           setDelEmail(data.staffAccount.email || queryEmail);
         } else {
           setExistingStaffRecord(null);
@@ -84,13 +92,27 @@ export default function PageStaffRegister() {
     } catch (err) {
       console.warn("Could not check registered staff account status:", err);
     } finally {
-      setCheckingExisting(false);
+      if (!isSilent) setCheckingExisting(false);
     }
   };
 
   React.useEffect(() => {
     fetchMyStaffAccount();
-  }, [user]);
+
+    const interval = setInterval(() => {
+      fetchMyStaffAccount(true);
+    }, 2500);
+
+    const onFocus = () => fetchMyStaffAccount(true);
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
+  }, [user?.email, user?.id]);
 
   // Pre-populate fields from logged-in user if available
   React.useEffect(() => {
@@ -435,6 +457,10 @@ export default function PageStaffRegister() {
         name: formattedName,
         username: cleanUsername,
         email: cleanEmail,
+        parentUserId: user?.id || undefined,
+        parentUserEmail: user?.email || undefined,
+        userId: user?.id || undefined,
+        userEmail: user?.email || undefined,
         phone: cleanPhone,
         altPhone: altPhone.trim() || undefined,
         password,
@@ -473,6 +499,9 @@ export default function PageStaffRegister() {
 
       setPhase(6); // Success confirmation view
       triggerToast('Staff Profile Registered Successfully!', 'success');
+      setTimeout(() => {
+        fetchMyStaffAccount(false);
+      }, 300);
     } catch (err: any) {
       console.error('Staff registration error:', err);
       const msg = err.message || 'An error occurred during staff registration.';
@@ -599,12 +628,12 @@ export default function PageStaffRegister() {
 
                 {/* Verification Status Badge */}
                 <div className="flex items-center gap-2">
-                  {existingStaffRecord.status === 'Verified' || existingStaffRecord.status === 'Approved' ? (
+                  {existingStaffRecord.isVerified || existingStaffRecord.status?.toLowerCase() === 'verified' || existingStaffRecord.status?.toLowerCase() === 'approved' ? (
                     <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-emerald-50 text-emerald-800 border border-emerald-200 font-extrabold text-xs">
                       <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                      <span>Status: Verified Staff</span>
+                      <span>Status: Verified & Accredited Staff</span>
                     </div>
-                  ) : existingStaffRecord.status === 'Rejected' ? (
+                  ) : existingStaffRecord.isRejected || existingStaffRecord.status?.toLowerCase() === 'rejected' ? (
                     <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-rose-50 text-rose-800 border border-rose-200 font-extrabold text-xs">
                       <X className="w-4 h-4 text-rose-600" />
                       <span>Status: Registration Rejected</span>
