@@ -14,7 +14,8 @@ import PageAdminDashboard from './components/PageAdminDashboard';
 import PageManagerDashboard from './components/PageManagerDashboard';
 import PageStaffDashboard from './components/PageStaffDashboard';
 import PageStaffRegister from './components/PageStaffRegister';
-import PageStudentDashboard from './components/PageStudentDashboard';
+import PageUserDashboard from './components/PageUserDashboard';
+import PageResidentDashboard from './components/PageResidentDashboard';
 
 // Elegant wrapper for transition animations
 function PageWrapper({ children, noAnimation = false }: { children: React.ReactNode; noAnimation?: boolean }) {
@@ -36,6 +37,14 @@ function PageWrapper({ children, noAnimation = false }: { children: React.ReactN
       {children}
     </motion.div>
   );
+}
+
+function StudentDashboardRouter() {
+  const { user } = useAuth();
+  if (user?.role === 'student') {
+    return <PageResidentDashboard />;
+  }
+  return <PageUserDashboard />;
 }
 
 // Inner component to handle router-aware states and logic
@@ -357,7 +366,31 @@ function AppContent() {
           element={
             <ProtectedRoute allowedRoles={['student', 'admin', 'manager', 'user']}>
               <PageWrapper>
-                <PageStudentDashboard />
+                <StudentDashboardRouter />
+              </PageWrapper>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* 2I. USER CONSOLE ROUTE */}
+        <Route
+          path="/user/dashboard"
+          element={
+            <ProtectedRoute allowedRoles={['student', 'admin', 'manager', 'user']}>
+              <PageWrapper>
+                <PageUserDashboard />
+              </PageWrapper>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* 2J. RESIDENT CONSOLE ROUTE */}
+        <Route
+          path="/resident/dashboard"
+          element={
+            <ProtectedRoute allowedRoles={['student', 'admin', 'manager']}>
+              <PageWrapper>
+                <PageResidentDashboard />
               </PageWrapper>
             </ProtectedRoute>
           }

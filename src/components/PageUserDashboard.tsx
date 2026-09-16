@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
+import { safeJson } from '../lib/api';
 import PineLogo from './PineLogo';
 import UserAvatarSelector, { renderAvatarGraphic } from './UserAvatarSelector';
 import { 
@@ -46,12 +47,18 @@ import {
   Trash2,
   KeyRound,
   Lock,
-  ShieldAlert
+  ShieldAlert,
+  GraduationCap,
+  School,
+  Building,
+  User,
+  BookOpen,
+  CheckCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { IssueReport, HostelRoomKey, StudentDirectMessage } from '../types';
 
-export default function PageStudentDashboard() {
+export default function PageUserDashboard() {
   const { user, logout, apiFetch, updateUser } = useAuth();
   const { notifications, unreadCount, registeredAccounts, markAsRead, pushToast } = useNotifications();
   const navigate = useNavigate();
@@ -119,11 +126,18 @@ export default function PageStudentDashboard() {
   const [verifiedKeyInfo, setVerifiedKeyInfo] = useState<any | null>(null);
   const [claimError, setClaimError] = useState<string | null>(null);
   const [submittingClaim, setSubmittingClaim] = useState<boolean>(false);
+  const [claimStep, setClaimStep] = useState<1 | 2 | 3 | 4>(1); // 1: Category & Digital Key, 2: Personal & Academic Info, 3: Password & Security, 4: Success Confirmed
+  const [claimCustomType, setClaimCustomType] = useState<string>('');
+  const [claimDepartment, setClaimDepartment] = useState<string>('');
+  const [claimConfirmPassword, setClaimConfirmPassword] = useState<string>('');
+  const [showClaimPassword, setShowClaimPassword] = useState<boolean>(false);
+  const [showClaimConfirmPassword, setShowClaimConfirmPassword] = useState<boolean>(false);
+  const [claimAgreeTerms, setClaimAgreeTerms] = useState<boolean>(true);
 
   // Resident Account Creation fields on key claim
   const [claimStudentName, setClaimStudentName] = useState<string>('');
   const [claimStudentId, setClaimStudentId] = useState<string>('');
-  const [claimResidentType, setClaimResidentType] = useState<string>('student');
+  const [claimResidentType, setClaimResidentType] = useState<'student' | 'resident' | 'other'>('student');
   const [claimInstitution, setClaimInstitution] = useState<string>('');
   const [claimProgram, setClaimProgram] = useState<string>('');
   const [claimStudentPhone, setClaimStudentPhone] = useState<string>('');
@@ -181,7 +195,7 @@ export default function PageStudentDashboard() {
         const uId = currentUser?.id || '';
         const regRes = await fetch(`/api/users/my-registered-accounts?email=${encodeURIComponent(uEmail)}&userId=${encodeURIComponent(uId)}`, { headers });
         if (regRes.ok) {
-          const regData = await regRes.json();
+          const regData = await safeJson(regRes);
           
           if (regData.managerAccount && uEmail) {
             try {
@@ -552,7 +566,7 @@ export default function PageStudentDashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ roomKey: claimRoomKeyInput.trim() })
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok || !data.valid) {
         setClaimError(data.error || "Invalid room key. Check with your manager.");
         setVerifiedKeyInfo(null);
@@ -564,6 +578,7 @@ export default function PageStudentDashboard() {
         setClaimStudentPhone(currentUser?.phone || data.assignedStudentPhone || '');
         setClaimInstitution(currentUser?.institution || 'University Center');
         setClaimProgram(currentUser?.programOfStudy || 'Undergraduate Resident');
+        setClaimStep(2); // Progress to profile step
       }
     } catch (err: any) {
       setClaimError("Could not verify key. Check network connection.");
@@ -596,9 +611,8 @@ export default function PageStudentDashboard() {
           password: claimPassword.trim() || undefined
         })
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (res.ok && data.success) {
-        setShowClaimModal(false);
         setRoomKeyDetails(verifiedKeyInfo);
         triggerToast(`Resident Account Created & Room Key Activated! Connected to ${verifiedKeyInfo.hostelName} (${verifiedKeyInfo.blockName}, Room ${verifiedKeyInfo.roomNumber})`);
         if (updateUser) {
@@ -618,6 +632,7 @@ export default function PageStudentDashboard() {
           });
         }
         await loadStudentData();
+        setClaimStep(4); // Advance to final success step
       } else {
         setClaimError(data.error || "Failed to link room key and create resident account");
       }
@@ -662,7 +677,7 @@ export default function PageStudentDashboard() {
           newPassword: newPasswordInput
         })
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok || !data.success) {
         setResetPasswordError(data.error || "Failed to reset password.");
       } else {
@@ -702,7 +717,7 @@ export default function PageStudentDashboard() {
           password: deletePasswordInput
         })
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok || !data.success) {
         setDeleteAccountError(data.error || "Failed to delete account.");
       } else {
@@ -1986,29 +2001,31 @@ export default function PageStudentDashboard() {
                 })}
               </div>
             ) : (
-              <div className="bg-white/90 border border-blue-200/80 rounded-3xl p-8 shadow-xl space-y-6 text-center backdrop-blur-md">
+              <div className="bg-white/95 border border-blue-200/80 rounded-3xl p-8 shadow-xl space-y-6 text-center backdrop-blur-md max-w-2xl mx-auto">
                 <div className="w-16 h-16 rounded-3xl bg-blue-100 text-blue-900 flex items-center justify-center font-bold mx-auto">
                   <Key className="w-8 h-8 text-blue-700" />
                 </div>
-                <div className="space-y-1.5 max-w-md mx-auto">
+                <div className="space-y-2 max-w-md mx-auto">
                   <h3 className="text-xl font-black text-slate-900">
-                    No Registered Rooms Found
+                    Have a Digital Room Key?
                   </h3>
-                  <p className="text-xs text-slate-600 font-medium leading-relaxed">
-                    You have not linked any digital room keys yet. Use a digital room key provided by your hostel manager to claim your room.
+                  <p className="text-xs text-slate-650 leading-relaxed font-semibold">
+                    If your hostel manager issued you a Digital Room Key, click below to verify your room and complete your resident account setup.
                   </p>
                 </div>
                 <button
+                  type="button"
                   onClick={() => {
-                    setShowAddRoomModal(true);
-                    setAddRoomKeyInput('');
-                    setVerifiedAddKeyInfo(null);
-                    setAddRoomError(null);
+                    setShowClaimModal(true);
+                    setClaimRoomKeyInput('');
+                    setVerifiedKeyInfo(null);
+                    setClaimError(null);
+                    setClaimStep(1);
                   }}
-                  className="px-8 py-3 bg-blue-900 hover:bg-blue-850 text-white font-black text-xs rounded-xl shadow-lg transition-all inline-flex items-center gap-2 cursor-pointer"
+                  className="px-8 py-3.5 bg-gradient-to-r from-blue-900 to-indigo-900 hover:from-blue-850 hover:to-indigo-850 text-white font-black text-xs rounded-xl shadow-lg shadow-blue-900/20 transition-all inline-flex items-center gap-2 cursor-pointer"
                 >
-                  <Plus className="w-4 h-4" />
-                  <span>Register Digital Room Key Now</span>
+                  <ShieldCheck size={14} className="text-emerald-400" />
+                  <span>Verify Room Key & Start Onboarding</span>
                 </button>
               </div>
             )}
@@ -2506,154 +2523,576 @@ export default function PageStudentDashboard() {
       {/* MODAL 3: LINK / CLAIM DIGITAL ROOM KEY */}
       {/* ========================================================================= */}
       {showClaimModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-white/95 backdrop-blur-2xl rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-blue-200 space-y-5 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-start justify-between gap-3 pb-3 border-b border-blue-100">
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white/95 backdrop-blur-2xl rounded-3xl max-w-lg w-full p-5 sm:p-7 shadow-2xl border border-blue-200 space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            
+            {/* Modal Header */}
+            <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-100">
               <div className="flex items-start gap-3">
-                <div className="w-11 h-11 rounded-2xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-600/30">
+                <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-600/30">
                   <Key className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-black text-slate-900">Activate Digital Room Key</h3>
-                  <p className="text-xs text-slate-500 font-medium">Provided exclusively by your manager</p>
+                  <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
+                    <span>Resident & Student Onboarding</span>
+                    <span className="text-[9px] uppercase font-black px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-800 tracking-wider">PineVela Key</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-semibold leading-tight">
+                    {claimStep === 1 && 'Select resident category and validate your digital room key'}
+                    {claimStep === 2 && 'Fill in your personal, academic, and institutional details'}
+                    {claimStep === 3 && 'Create your account password and review room assignment'}
+                    {claimStep === 4 && 'Room verified! Your manager has been notified of your check-in'}
+                  </p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowClaimModal(false)}
-                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-xl hover:bg-slate-100"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              {claimStep !== 4 && (
+                <button
+                  type="button"
+                  onClick={() => setShowClaimModal(false)}
+                  className="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
             </div>
 
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <label className="text-xs font-black text-slate-800 block">Enter Key (Format: MAZE-A-123456)</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={claimRoomKeyInput}
-                    onChange={(e) => setClaimRoomKeyInput(e.target.value.toUpperCase())}
-                    placeholder="e.g. EMERALD-A-849201"
-                    className="flex-1 px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl font-mono text-xs font-bold uppercase text-slate-900 focus:outline-none focus:border-blue-600"
+            {/* Step indicator bar */}
+            <div className="grid grid-cols-4 gap-1 pt-1">
+              {[
+                { num: 1, label: 'Key & Role' },
+                { num: 2, label: 'Profile' },
+                { num: 3, label: 'Security' },
+                { num: 4, label: 'Activated' }
+              ].map((s) => (
+                <div key={s.num} className="flex flex-col gap-1">
+                  <div 
+                    className={`h-1 rounded-full transition-all ${
+                      claimStep >= s.num 
+                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600' 
+                        : 'bg-slate-200'
+                    }`} 
                   />
+                  <span className={`text-[9px] font-bold text-center ${
+                    claimStep === s.num ? 'text-blue-900' : 'text-slate-400'
+                  }`}>
+                    {s.label}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* STEP 1: Resident Category & Digital Room Key */}
+            {claimStep === 1 && (
+              <div className="space-y-4 pt-1">
+                
+                {/* Category Selection */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-black text-slate-800 block">
+                    1. Choose Your Residency Category <span className="text-rose-600">*</span>
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { id: 'student', label: 'Student', desc: 'Enrolled in university / college', icon: GraduationCap },
+                      { id: 'resident', label: 'Resident', desc: 'Working professional / intern', icon: Briefcase },
+                      { id: 'other', label: 'Other', desc: 'Visiting scholar / guest', icon: School }
+                    ].map((cat) => {
+                      const Icon = cat.icon;
+                      const isSelected = claimResidentType === cat.id;
+                      return (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => setClaimResidentType(cat.id as any)}
+                          className={`p-2.5 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                            isSelected
+                              ? 'border-blue-600 bg-blue-50/90 shadow-sm ring-2 ring-blue-500/20'
+                              : 'border-slate-200 hover:border-slate-300 bg-white'
+                          }`}
+                        >
+                          <div className={`w-6 h-6 rounded-lg flex items-center justify-center mb-1.5 ${
+                            isSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'
+                          }`}>
+                            <Icon size={14} />
+                          </div>
+                          <div>
+                            <div className={`text-[11px] font-black ${isSelected ? 'text-blue-950' : 'text-slate-900'}`}>
+                              {cat.label}
+                            </div>
+                            <div className="text-[9px] text-slate-500 leading-tight line-clamp-2 mt-0.5 font-medium">
+                              {cat.desc}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {claimResidentType === 'other' && (
+                    <div className="pt-1">
+                      <input
+                        type="text"
+                        value={claimCustomType}
+                        onChange={(e) => setClaimCustomType(e.target.value)}
+                        placeholder="Please specify your resident status (e.g. Visiting Fellow, Postdoc)"
+                        className="w-full px-3 py-2 bg-blue-50/50 border border-blue-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Digital Key Section */}
+                <div className="space-y-2 pt-2 border-t border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-black text-slate-800 block">
+                      2. Enter Digital Room Key <span className="text-rose-600">*</span>
+                    </label>
+                    <span className="text-[10px] text-blue-750 font-bold">
+                      Provided by Hostel Manager
+                    </span>
+                  </div>
+
+                  <div className="relative">
+                    <Key className="w-4 h-4 text-blue-600 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      type="text"
+                      autoFocus
+                      value={claimRoomKeyInput}
+                      onChange={(e) => {
+                        setClaimRoomKeyInput(e.target.value.toUpperCase());
+                        setClaimError(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleVerifyClaimKey();
+                      }}
+                      placeholder="Enter digital room key code"
+                      className="w-full pl-10 pr-24 py-3 bg-white border border-slate-200 rounded-2xl font-mono text-sm font-black uppercase text-slate-900 tracking-wider focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-400/20 shadow-inner"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleVerifyClaimKey()}
+                      disabled={verifyingKey || !claimRoomKeyInput.trim()}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-blue-900 hover:bg-blue-800 text-white rounded-xl text-xs font-bold transition-all cursor-pointer disabled:opacity-40 flex items-center gap-1.5"
+                    >
+                      {verifyingKey ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <ShieldCheck size={13} />
+                      )}
+                      <span>Verify</span>
+                    </button>
+                  </div>
+                </div>
+
+                {claimError && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-900 font-bold flex items-center gap-2 animate-fade-in">
+                    <ShieldAlert size={15} className="text-rose-600 shrink-0" />
+                    <span>{claimError}</span>
+                  </div>
+                )}
+
+                {/* Verified Room Card */}
+                {verifiedKeyInfo && (
+                  <div className="p-3.5 bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl space-y-1.5 text-xs text-emerald-950 animate-fade-in shadow-xs">
+                    <div className="flex items-center justify-between font-black text-emerald-900">
+                      <span className="flex items-center gap-1.5">
+                        <CheckCircle2 size={15} className="text-emerald-600" />
+                        <span>Room Key Validated: {verifiedKeyInfo.roomKey}</span>
+                      </span>
+                      <span className="px-2 py-0.5 bg-emerald-200/85 text-emerald-900 font-extrabold rounded-full text-[9px]">
+                        Available
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 pt-1 font-bold text-[10px] bg-white/75 p-2 rounded-xl border border-emerald-200/50">
+                      <div>
+                        <span className="text-slate-400 block text-[9px] font-semibold">Hostel</span>
+                        <span className="text-slate-900 truncate block font-bold">{verifiedKeyInfo.hostelName}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[9px] font-semibold">Block</span>
+                        <span className="text-slate-900 truncate block font-bold">{verifiedKeyInfo.blockName}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[9px] font-semibold">Room No.</span>
+                        <span className="text-slate-900 truncate block font-bold">{verifiedKeyInfo.roomNumber}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="pt-2">
                   <button
                     type="button"
-                    onClick={handleVerifyClaimKey}
+                    onClick={() => {
+                      if (!verifiedKeyInfo) {
+                        handleVerifyClaimKey();
+                      } else {
+                        setClaimStep(2);
+                      }
+                    }}
                     disabled={verifyingKey || !claimRoomKeyInput.trim()}
-                    className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-all cursor-pointer disabled:opacity-50"
+                    className="w-full py-3 bg-gradient-to-r from-blue-900 to-indigo-900 hover:from-blue-800 hover:to-indigo-800 text-white font-extrabold text-xs rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                   >
-                    {verifyingKey ? <RefreshCw className="w-4 h-4 animate-spin" /> : 'Verify'}
+                    <span>Continue to Personal & Academic Profile</span>
+                    <ArrowRight size={14} />
                   </button>
                 </div>
               </div>
+            )}
 
-              {claimError && (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 font-bold flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                  <span>{claimError}</span>
+            {/* STEP 2: Personal & Academic Profile */}
+            {claimStep === 2 && verifiedKeyInfo && (
+              <div className="space-y-4 pt-1">
+                
+                {/* Room Badge */}
+                <div className="p-3 bg-blue-50/80 border border-blue-200 rounded-2xl flex items-center justify-between text-xs text-blue-950 font-bold">
+                  <div className="flex items-center gap-2">
+                    <Building size={15} className="text-blue-700" />
+                    <span className="truncate pr-1">Assigning: <strong>{verifiedKeyInfo.hostelName}</strong> ({verifiedKeyInfo.blockName} - {verifiedKeyInfo.roomNumber})</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setClaimStep(1)}
+                    className="text-blue-700 underline text-[10px] shrink-0 font-bold cursor-pointer"
+                  >
+                    Change
+                  </button>
                 </div>
-              )}
 
-              {verifiedKeyInfo && (
-                <div className="p-4 bg-emerald-50/90 border border-emerald-300 rounded-2xl space-y-3.5 text-xs text-emerald-950">
-                  <div className="font-black flex items-center gap-1.5 text-emerald-800 pb-2 border-b border-emerald-200">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                    <span>Verified Room Assignment Match!</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-[11px] font-semibold bg-white/70 p-2.5 rounded-xl border border-emerald-100">
-                    <div>Hostel: <strong className="text-slate-900">{verifiedKeyInfo.hostelName}</strong></div>
-                    <div>Block: <strong className="text-slate-900">{verifiedKeyInfo.blockName}</strong></div>
-                    <div>Room: <strong className="text-slate-900">{verifiedKeyInfo.roomNumber}</strong></div>
-                    <div>Key Status: <strong className="text-emerald-700 font-bold">{verifiedKeyInfo.status}</strong></div>
-                  </div>
-
-                  <div className="space-y-2 pt-1 border-t border-emerald-200/80">
-                    <h5 className="font-black text-slate-800 text-[11px] uppercase tracking-wider">Complete Resident Registration</h5>
-                    
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-slate-700 block">Full Legal Name *</label>
+                <div className="space-y-3">
+                  {/* Name */}
+                  <div className="space-y-1">
+                    <label className="text-xs font-black text-slate-800 block">
+                      Full Legal Name <span className="text-rose-600">*</span>
+                    </label>
+                    <div className="relative">
+                      <User className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                       <input
                         type="text"
+                        required
                         value={claimStudentName}
                         onChange={(e) => setClaimStudentName(e.target.value)}
                         placeholder="e.g. Kwesi Mensah"
-                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
-                        required
+                        className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
                       />
                     </div>
+                  </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-bold text-slate-700 block">Student / Resident ID</label>
+                  {/* ID & Phone */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs font-black text-slate-800 block">
+                        {claimResidentType === 'student' ? 'Student ID / Index No.' : 'Resident ID / National ID'} <span className="text-rose-600">*</span>
+                      </label>
+                      <div className="relative">
+                        <ShieldCheck className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                         <input
                           type="text"
+                          required
                           value={claimStudentId}
-                          onChange={(e) => setClaimStudentId(e.target.value)}
+                          onChange={(e) => setClaimStudentId(e.target.value.toUpperCase())}
                           placeholder="e.g. STU-2026-904"
-                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
+                          className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl font-mono text-xs font-bold uppercase text-slate-900 focus:outline-none focus:border-blue-600"
                         />
                       </div>
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-bold text-slate-700 block">Contact Phone</label>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-black text-slate-800 block">
+                        Phone Number <span className="text-rose-600">*</span>
+                      </label>
+                      <div className="relative">
+                        <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                         <input
                           type="tel"
+                          required
                           value={claimStudentPhone}
                           onChange={(e) => setClaimStudentPhone(e.target.value)}
                           placeholder="e.g. +233 24 000 0000"
-                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
+                          className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
                         />
                       </div>
                     </div>
+                  </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {/* Institution, Program & Department */}
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                    <div className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                      <BookOpen size={13} className="text-blue-600" />
+                      <span>{claimResidentType === 'student' ? 'Academic Program Details' : 'Professional & Institutional Details'}</span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-700 block">
+                        {claimResidentType === 'student' ? 'Program of Study / Major' : 'Occupation / Field of Practice'}
+                      </label>
+                      <input
+                        type="text"
+                        value={claimProgram}
+                        onChange={(e) => setClaimProgram(e.target.value)}
+                        placeholder={claimResidentType === 'student' ? "e.g. Computer Science" : "e.g. Software Engineer"}
+                        className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                       <div className="space-y-1">
-                        <label className="text-[11px] font-bold text-slate-700 block">Institution / University</label>
+                        <label className="text-[10px] font-bold text-slate-700 block">
+                          Department / Faculty
+                        </label>
+                        <input
+                          type="text"
+                          value={claimDepartment}
+                          onChange={(e) => setClaimDepartment(e.target.value)}
+                          placeholder="e.g. Department of Computer Science"
+                          className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-700 block">
+                          Institution / University
+                        </label>
                         <input
                           type="text"
                           value={claimInstitution}
                           onChange={(e) => setClaimInstitution(e.target.value)}
                           placeholder="e.g. University of Ghana"
-                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-bold text-slate-700 block">Program of Study</label>
-                        <input
-                          type="text"
-                          value={claimProgram}
-                          onChange={(e) => setClaimProgram(e.target.value)}
-                          placeholder="e.g. Computer Science"
-                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
+                          className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
                         />
                       </div>
                     </div>
+                  </div>
+                </div>
 
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-slate-700 block">Resident Account Password / Security PIN</label>
-                      <input
-                        type="password"
-                        value={claimPassword}
-                        onChange={(e) => setClaimPassword(e.target.value)}
-                        placeholder="Create resident account password (min 6 characters)"
-                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
-                      />
+                <div className="pt-2 flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setClaimStep(1)}
+                    className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50 cursor-pointer"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!claimStudentName.trim() || !claimStudentId.trim() || !claimStudentPhone.trim()) {
+                        triggerToast('Please provide your name, ID, and phone number.', 'error');
+                        return;
+                      }
+                      setClaimStep(3);
+                    }}
+                    className="flex-1 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white font-black text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <span>Continue to Password & Security</span>
+                    <ArrowRight size={14} />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* STEP 3: Password & Security Setup */}
+            {claimStep === 3 && verifiedKeyInfo && (
+              <div className="space-y-4 pt-1">
+                
+                {/* Onboarding Summary Badge */}
+                <div className="p-3 bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl space-y-1.5 text-xs text-blue-950">
+                  <div className="flex items-center justify-between font-black text-blue-900">
+                    <span className="flex items-center gap-1.5">
+                      <Sparkles size={15} className="text-blue-600" />
+                      <span>Room Assignment Summary</span>
+                    </span>
+                    <span className="font-mono text-[10px] bg-blue-200/60 px-1.5 py-0.5 rounded-lg text-blue-950">
+                      {verifiedKeyInfo.roomKey}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-1.5 bg-white/80 p-2.5 rounded-xl border border-blue-200/50 font-medium text-[10px]">
+                    <div>
+                      <span className="text-slate-400 block text-[9px]">Resident Name:</span>
+                      <strong className="text-slate-900">{claimStudentName || 'Resident'}</strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[9px]">ID & Category:</span>
+                      <strong className="text-slate-900 font-mono">{claimStudentId || 'ID'}</strong> ({claimResidentType})
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[9px]">Hostel & Room:</span>
+                      <strong className="text-slate-900">{verifiedKeyInfo.hostelName}</strong> - {verifiedKeyInfo.blockName} (Room {verifiedKeyInfo.roomNumber})
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[9px]">Institution:</span>
+                      <strong className="text-slate-900 truncate block">{claimInstitution || 'University / College'}</strong>
                     </div>
                   </div>
 
+                  <div className="p-2 bg-blue-100/50 rounded-xl flex items-center gap-1.5 text-[10px] text-blue-900 font-semibold leading-tight">
+                    <Bell size={13} className="text-blue-700 shrink-0" />
+                    <span>A minimalistic notification will be dispatched to your Hostel Manager upon check-in.</span>
+                  </div>
+                </div>
+
+                {/* Password Setup */}
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-black text-slate-800 block">
+                      Create Account Password <span className="text-rose-600">*</span>
+                    </label>
+                    <div className="relative">
+                      <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type={showClaimPassword ? "text" : "password"}
+                        required
+                        value={claimPassword}
+                        onChange={(e) => setClaimPassword(e.target.value)}
+                        placeholder="Choose a strong password (min 6 chars)"
+                        className="w-full pl-9 pr-9 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowClaimPassword(!showClaimPassword)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        {showClaimPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-black text-slate-800 block">
+                      Confirm Account Password <span className="text-rose-600">*</span>
+                    </label>
+                    <div className="relative">
+                      <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type={showClaimConfirmPassword ? "text" : "password"}
+                        required
+                        value={claimConfirmPassword}
+                        onChange={(e) => setClaimConfirmPassword(e.target.value)}
+                        placeholder="Repeat your password"
+                        className="w-full pl-9 pr-9 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowClaimConfirmPassword(!showClaimConfirmPassword)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        {showClaimConfirmPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {claimPassword && (
+                    <div className="space-y-1.5">
+                      {(() => {
+                        const score = claimPassword.length;
+                        let strengthLabel = 'Weak';
+                        let strengthColor = 'bg-rose-500';
+                        let strengthText = 'text-rose-600';
+                        if (score >= 8) {
+                          strengthLabel = 'Strong';
+                          strengthColor = 'bg-emerald-500';
+                          strengthText = 'text-emerald-600';
+                        } else if (score >= 5) {
+                          strengthLabel = 'Good';
+                          strengthColor = 'bg-amber-500';
+                          strengthText = 'text-amber-600';
+                        }
+                        return (
+                          <div>
+                            <div className="flex justify-between items-center text-[9px] font-bold mb-1">
+                              <span className="text-slate-500">Security Strength</span>
+                              <span className={strengthText}>{strengthLabel}</span>
+                            </div>
+                            <div className="h-1 w-full bg-slate-100 rounded-full overflow-hidden">
+                              <div className={`h-full ${strengthColor} transition-all duration-300`} style={{ width: `${Math.min(100, score * 10)}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+
+                  <label className="flex items-start gap-2 pt-1 text-[11px] text-slate-600 cursor-pointer font-medium leading-normal">
+                    <input
+                      type="checkbox"
+                      checked={claimAgreeTerms}
+                      onChange={(e) => setClaimAgreeTerms(e.target.checked)}
+                      className="mt-0.5 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
+                    />
+                    <span>
+                      I agree to the <strong>Hostel Community Code of Conduct</strong> and PineVela Resident Terms.
+                    </span>
+                  </label>
+                </div>
+
+                {claimError && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-900 font-bold flex items-center gap-2 animate-fade-in">
+                    <ShieldAlert size={15} className="text-rose-600 shrink-0" />
+                    <span>{claimError}</span>
+                  </div>
+                )}
+
+                <div className="pt-2 flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setClaimStep(2)}
+                    className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50 cursor-pointer"
+                  >
+                    Back
+                  </button>
                   <button
                     type="button"
                     onClick={handleClaimRoomKey}
-                    disabled={submittingClaim}
-                    className="w-full mt-2 py-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-black text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                    disabled={submittingClaim || !claimPassword.trim() || claimPassword !== claimConfirmPassword || !claimAgreeTerms}
+                    className="flex-1 py-3 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white font-black text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                   >
-                    {submittingClaim ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                    <span>Complete Resident Registration & Activate Key</span>
+                    {submittingClaim ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Activating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle size={15} />
+                        <span>Complete Onboarding & Enter Room</span>
+                      </>
+                    )}
                   </button>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+
+            {/* STEP 4: Minimalistic Confirmation & Room Activated */}
+            {claimStep === 4 && verifiedKeyInfo && (
+              <div className="space-y-5 text-center py-4 animate-fade-in">
+                <div className="w-16 h-16 bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-3xl mx-auto flex items-center justify-center shadow-lg shadow-emerald-500/30 animate-bounce">
+                  <CheckCircle2 size={32} />
+                </div>
+
+                <div className="space-y-1.5">
+                  <h4 className="text-xl font-black text-slate-900 tracking-tight">
+                    Room Successfully Activated!
+                  </h4>
+                  <p className="text-xs text-slate-550 max-w-sm mx-auto font-medium">
+                    Welcome to <strong>{verifiedKeyInfo.hostelName}</strong>. Your digital room key has been claimed and your profile is active.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowClaimModal(false);
+                    // Force navigation to make sure context triggers full role refresh
+                    navigate(0); 
+                  }}
+                  className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-2xl shadow-lg shadow-emerald-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <CheckCircle size={15} />
+                  <span>Enter Resident Portal & Dashboard</span>
+                </button>
+              </div>
+            )}
+
           </div>
         </div>
       )}

@@ -152,6 +152,10 @@ export default function PageUnifiedLogin() {
     if (params.get('mode') === 'register' || (location.state as any)?.mode === 'register') {
       setActiveTab('register');
     }
+    if (params.get('mode') === 'onboard' || params.get('mode') === 'claim' || params.get('verify_room_key') === 'true' || (location.state as any)?.mode === 'onboard') {
+      setStudentKeyStep(1);
+      setShowStudentKeyModal(true);
+    }
   }, [location]);
 
   // Extended Manager Verification States (Phase 1)
@@ -602,6 +606,8 @@ export default function PageUnifiedLogin() {
         setStudentKeyInput(code);
         setStudentKeyError(null);
         triggerToast(`Room Found: ${data.hostelName} (${data.blockName}, ${data.roomNumber})`, 'success');
+        // Automatically start the student or resident registration profile setup
+        setStudentKeyStep(2);
       }
     } catch (e: any) {
       setStudentKeyError('Network error verifying room key. Please try again.');
@@ -657,8 +663,23 @@ export default function PageUnifiedLogin() {
       const data = await res.json();
       if (res.ok && data.success) {
         setClaimedUserData(data);
-        setStudentKeyStep(4);
-        triggerToast(`Welcome to ${verifiedKeyDetails.hostelName}! Manager notified.`, 'success');
+        
+        // Automatically set the authenticated session and persist the tokens to log in instantly
+        if (data.user) {
+          const mergedUser = { ...data.user, token: data.token };
+          setSessionUser(mergedUser);
+          if (data.token) {
+            localStorage.setItem('pinevela_session_token', data.token);
+            localStorage.setItem('token', data.token);
+            localStorage.setItem('pinevela_auth_token', data.token);
+            localStorage.setItem('pinevela_token', data.token);
+            localStorage.setItem('pinevela_user', JSON.stringify(data.user));
+          }
+        }
+
+        setShowStudentKeyModal(false);
+        triggerToast(`Onboarding complete! Welcome to ${verifiedKeyDetails.hostelName || 'your hostel'}.`, 'success');
+        navigate('/student/dashboard', { replace: true });
       } else {
         triggerToast(data.error || 'Failed to complete resident onboarding.', 'error');
       }
@@ -1164,6 +1185,8 @@ export default function PageUnifiedLogin() {
                   )}
                 </button>
 
+
+
               </form>
             ) : (
               /* Unified Registration Form */
@@ -1333,6 +1356,9 @@ export default function PageUnifiedLogin() {
                   </svg>
                   <span>Sign up with Google</span>
                 </button>
+
+
+
               </form>
             )}
 
@@ -2576,16 +2602,20 @@ export default function PageUnifiedLogin() {
                   onClick={() => {
                     setShowStudentKeyModal(false);
                     if (claimedUserData?.user) {
-                      setSessionUser(claimedUserData.user);
+                      const mergedUser = { ...claimedUserData.user, token: claimedUserData.token };
+                      setSessionUser(mergedUser);
                       if (claimedUserData.token) {
+                        localStorage.setItem('pinevela_session_token', claimedUserData.token);
+                        localStorage.setItem('token', claimedUserData.token);
+                        localStorage.setItem('pinevela_auth_token', claimedUserData.token);
                         localStorage.setItem('pinevela_token', claimedUserData.token);
                         localStorage.setItem('pinevela_user', JSON.stringify(claimedUserData.user));
                       }
                       triggerToast(`Welcome ${claimedUserData.user.name || 'Resident'}! Logged in successfully.`, 'success');
-                      navigate('/dashboard');
+                      navigate('/student/dashboard', { replace: true });
                     } else if (stuPassword && (stuId || stuEmail)) {
                       login(stuId || stuEmail, stuPassword)
-                        .then(() => navigate('/dashboard'))
+                        .then(() => navigate('/student/dashboard', { replace: true }))
                         .catch(() => {
                           setStudentKeyStep(1);
                           triggerToast('Please sign in with your new email/ID and password.', 'info');

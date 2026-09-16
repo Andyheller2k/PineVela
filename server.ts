@@ -638,14 +638,8 @@ managerRequests = (persistentData.managerRegistrationRequests || []).filter(r =>
   return true;
 });
 verificationAuditLogs = persistentData.verificationAuditLogs;
-// Filter out all non-admin accounts and clear registered account queues as requested
-MOCK_USERS = (persistentData.users || []).filter(u => {
-  if (!u) return false;
-  const role = (u.role || u.user?.role || '').toLowerCase();
-  const email = (u.email || u.user?.email || '').toLowerCase().trim();
-  const username = (u.username || u.user?.username || '').toLowerCase().trim();
-  return role === 'admin' || email === 'andyheller2k@gmail.com' || email === 'admin@pinevela.com' || username === 'admin' || username === 'andyheller';
-});
+// Retain all registered users (managers, staff, students/residents) so they are not wiped on restart
+MOCK_USERS = (persistentData.users || []).filter(u => u !== null && u !== undefined);
 
 // Ensure default admin accounts exist
 if (!MOCK_USERS.some(u => (u.email || u.user?.email) === 'andyheller2k@gmail.com')) {
@@ -676,23 +670,89 @@ if (!MOCK_USERS.some(u => (u.email || u.user?.email) === 'admin@pinevela.com')) 
   });
 }
 
-managerRequests = [];
-managerVerifications = [];
-staff = [];
-staffApplications = [];
-jobOffers = [];
+// Seed dummy student account for direct login & verification
+if (!MOCK_USERS.some(u => (u.email || u.user?.email) === 'student.alex@pinevela.com')) {
+  MOCK_USERS.push({
+    email: 'student.alex@pinevela.com',
+    username: 'alexstudent',
+    password: 'student123',
+    user: {
+      id: 'user_stu_alex',
+      name: 'Alex Mercer',
+      role: 'student',
+      email: 'student.alex@pinevela.com',
+      roomKey: 'PREMU-AALPHA-428185',
+      hostelId: '02179313-4f59-40fd-bb59-d8cb122bb063',
+      hostelName: 'Premuim Crest Hostel',
+      blockName: 'Block A (Alpha)',
+      roomNumber: 'A-102',
+      token: 'token_user_stu_alex'
+    }
+  });
 
-// Also clean up persistent store
+  // Assign the room key PREMU-AALPHA-428185 in store if it exists
+  const storeInstance = getStoreInstance();
+  if (storeInstance && storeInstance.roomKeys) {
+    const keyRecord = storeInstance.roomKeys.find((rk: any) => rk.roomKey === 'PREMU-AALPHA-428185');
+    if (keyRecord) {
+      keyRecord.isAssigned = true;
+      keyRecord.status = 'Occupied';
+      keyRecord.assignedStudentId = 'user_stu_alex';
+      keyRecord.assignedStudentName = 'Alex Mercer';
+      keyRecord.assignedStudentEmail = 'student.alex@pinevela.com';
+      keyRecord.studentId = 'user_stu_alex';
+      keyRecord.residentId = 'user_stu_alex';
+      keyRecord.studentName = 'Alex Mercer';
+      keyRecord.studentEmail = 'student.alex@pinevela.com';
+      keyRecord.assignedResidentType = 'student';
+      keyRecord.assignedAt = new Date().toISOString();
+    }
+  }
+}
+
+// Add the exact alias requested by user (alex@pinevela.com)
+if (!MOCK_USERS.some(u => (u.email || u.user?.email) === 'alex@pinevela.com')) {
+  MOCK_USERS.push({
+    email: 'alex@pinevela.com',
+    username: 'alexmercer',
+    password: 'student123',
+    user: {
+      id: 'user_stu_alex_alias',
+      name: 'Alex Mercer',
+      role: 'student',
+      email: 'alex@pinevela.com',
+      roomKey: 'PREMU-AALPHA-428185',
+      hostelId: '02179313-4f59-40fd-bb59-d8cb122bb063',
+      hostelName: 'Premuim Crest Hostel',
+      blockName: 'Block A (Alpha)',
+      roomNumber: 'A-102',
+      token: 'token_user_stu_alex_alias'
+    }
+  });
+}
+
+managerRequests = persistentData.managerRegistrationRequests || [];
+managerVerifications = persistentData.managerVerifications || [];
+staff = persistentData.staff || [];
+staffApplications = persistentData.staffApplications || [];
+jobOffers = persistentData.jobOffers || [];
+
+// Ensure all seeded/retained accounts are written back safely to the database
 const initStore = getStoreInstance();
 if (initStore) {
   initStore.users = [...MOCK_USERS];
-  initStore.managerRegistrationRequests = [];
-  (initStore as any).managerRequests = [];
-  initStore.managerVerifications = [];
-  (initStore as any).managerVerifications = [];
-  initStore.staff = [];
-  initStore.staffApplications = [];
-  initStore.jobOffers = [];
+  if (!initStore.managerRegistrationRequests) {
+    initStore.managerRegistrationRequests = [];
+  }
+  if (!initStore.staff) {
+    initStore.staff = [];
+  }
+  if (!initStore.staffApplications) {
+    initStore.staffApplications = [];
+  }
+  if (!initStore.jobOffers) {
+    initStore.jobOffers = [];
+  }
   savePersistentStore(initStore);
 }
 staffBargains = persistentData.staffBargains || [];
