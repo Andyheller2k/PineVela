@@ -65,12 +65,12 @@ export default function ResidentOnboardingWizard({
   const [phone, setPhone] = useState('');
   const [altPhone, setAltPhone] = useState('');
   const [gender, setGender] = useState('Male');
-  const [programOfStudy, setProgramOfStudy] = useState('BSc. Computer Science');
+  const [programOfStudy, setProgramOfStudy] = useState('');
 
   // Phase 2: Address & Location
   const [address, setAddress] = useState('');
-  const [city, setCity] = useState('Accra');
-  const [region, setRegion] = useState('Greater Accra');
+  const [city, setCity] = useState('');
+  const [region, setRegion] = useState('');
   const [customRegion, setCustomRegion] = useState('');
   const [digitalAddress, setDigitalAddress] = useState('');
   const [landmark, setLandmark] = useState('');
@@ -78,7 +78,7 @@ export default function ResidentOnboardingWizard({
   // Phase 3: Identification & Student Records
   const [idType, setIdType] = useState('Ghana Card (National ID)');
   const [idNumber, setIdNumber] = useState('');
-  const [institution, setInstitution] = useState('University of Ghana (Legon)');
+  const [institution, setInstitution] = useState('');
   const [docFileName, setDocFileName] = useState<string | null>(null);
 
   // Phase 4: Assigned Manager & Residence Details (THE MANAGERS INFO SECTION)

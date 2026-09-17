@@ -106,13 +106,7 @@ export default function PageManagerOnboarding() {
     };
   }, [user?.email, user?.id]);
 
-  // Pre-populate fields from logged-in user if available
-  React.useEffect(() => {
-    if (user) {
-      if (user.name) setFullName(user.name);
-      if (user.email) setEmail(user.email);
-    }
-  }, [user]);
+  // Do not pre-fill textboxes automatically; keep blank with placeholders
 
   // Account Deletion Handler
   const handleDeleteAccount = async (e: React.FormEvent) => {

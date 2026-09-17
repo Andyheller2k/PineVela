@@ -36,6 +36,15 @@ export interface AuthenticatedUser {
   managerName?: string;
   managerPhone?: string;
   managerEmail?: string;
+  registeredAccounts?: {
+    residentAccount?: any;
+    managerAccount?: any;
+    staffAccount?: any;
+    [key: string]: any;
+  };
+  plainPassword?: string;
+  password?: string;
+  [key: string]: any;
 }
 
 interface AuthContextType {

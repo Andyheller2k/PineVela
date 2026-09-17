@@ -11,6 +11,7 @@ import {
   validateAddress,
   resolveIdConfig
 } from '../utils/formValidation';
+import { safeJson } from '../lib/api';
 
 // Static asset imports
 import manager2Img from '../../assets/manager2.jpeg';
@@ -253,7 +254,7 @@ export default function PageUnifiedLogin() {
 
     // Pre-fetch complete synthetic test cards from verification engine API
     fetch('/api/verification/test-cards')
-      .then(res => res.json())
+      .then(safeJson)
       .then(data => {
         const cards = data.testCards || data.sample || data.allCards;
         if (cards && Array.isArray(cards) && cards.length > 0) {
@@ -2206,52 +2207,47 @@ export default function PageUnifiedLogin() {
                   </div>
                 )}
 
-                {/* Verified Room Card */}
+                {/* Verified Room Card & Progression */}
                 {verifiedKeyDetails && (
-                  <div className="p-4 bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl space-y-2 text-xs text-emerald-950 animate-fade-in shadow-xs">
-                    <div className="flex items-center justify-between font-black text-emerald-900">
-                      <span className="flex items-center gap-1.5">
-                        <CheckCircle2 size={16} className="text-emerald-600" />
-                        <span>Room Key Validated: {verifiedKeyDetails.roomKey}</span>
-                      </span>
-                      <span className="px-2 py-0.5 bg-emerald-200/80 text-emerald-900 font-extrabold rounded-full text-[10px]">
-                        Available
-                      </span>
+                  <div className="space-y-3 animate-fade-in">
+                    <div className="p-4 bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl space-y-2 text-xs text-emerald-950 shadow-xs">
+                      <div className="flex items-center justify-between font-black text-emerald-900">
+                        <span className="flex items-center gap-1.5">
+                          <CheckCircle2 size={16} className="text-emerald-600" />
+                          <span>Room Key Validated: {verifiedKeyDetails.roomKey}</span>
+                        </span>
+                        <span className="px-2 py-0.5 bg-emerald-200/80 text-emerald-900 font-extrabold rounded-full text-[10px]">
+                          Available
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 pt-1 font-bold text-[11px] bg-white/70 p-2.5 rounded-xl border border-emerald-200/60">
+                        <div>
+                          <span className="text-slate-400 block text-[10px] font-semibold">Hostel</span>
+                          <span className="text-slate-900 truncate block">{verifiedKeyDetails.hostelName}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[10px] font-semibold">Block</span>
+                          <span className="text-slate-900 truncate block">{verifiedKeyDetails.blockName}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[10px] font-semibold">Room No.</span>
+                          <span className="text-slate-900 truncate block">{verifiedKeyDetails.roomNumber}</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 pt-1 font-bold text-[11px] bg-white/70 p-2.5 rounded-xl border border-emerald-200/60">
-                      <div>
-                        <span className="text-slate-400 block text-[10px] font-semibold">Hostel</span>
-                        <span className="text-slate-900 truncate block">{verifiedKeyDetails.hostelName}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[10px] font-semibold">Block</span>
-                        <span className="text-slate-900 truncate block">{verifiedKeyDetails.blockName}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[10px] font-semibold">Room No.</span>
-                        <span className="text-slate-900 truncate block">{verifiedKeyDetails.roomNumber}</span>
-                      </div>
+
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setStudentKeyStep(2)}
+                        className="w-full py-3.5 bg-gradient-to-r from-blue-900 to-indigo-900 hover:from-blue-800 hover:to-indigo-800 text-white font-extrabold text-xs sm:text-sm rounded-2xl shadow-lg shadow-blue-900/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <span>Continue to Personal & Academic Profile</span>
+                        <ArrowRight size={16} />
+                      </button>
                     </div>
                   </div>
                 )}
-
-                <div className="pt-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!verifiedKeyDetails) {
-                        handleVerifyStudentKey();
-                      } else {
-                        setStudentKeyStep(2);
-                      }
-                    }}
-                    disabled={verifyingStudentKey || !studentKeyInput.trim()}
-                    className="w-full py-3.5 bg-gradient-to-r from-blue-900 to-indigo-900 hover:from-blue-800 hover:to-indigo-800 text-white font-extrabold text-xs sm:text-sm rounded-2xl shadow-lg shadow-blue-900/25 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                  >
-                    <span>Continue to Personal & Academic Profile</span>
-                    <ArrowRight size={16} />
-                  </button>
-                </div>
 
               </div>
             )}
@@ -2259,22 +2255,6 @@ export default function PageUnifiedLogin() {
             {/* STEP 2: Personal & Academic / Institutional Profile */}
             {studentKeyStep === 2 && verifiedKeyDetails && (
               <div className="space-y-4">
-                
-                {/* Verified Room Badge */}
-                <div className="p-3 bg-blue-50/80 border border-blue-200 rounded-2xl flex items-center justify-between text-xs text-blue-950 font-bold">
-                  <div className="flex items-center gap-2">
-                    <Building size={16} className="text-blue-700" />
-                    <span>Assigning to: <strong>{verifiedKeyDetails.hostelName}</strong> ({verifiedKeyDetails.blockName} - {verifiedKeyDetails.roomNumber})</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setStudentKeyStep(1)}
-                    className="text-blue-700 underline text-[11px] cursor-pointer"
-                  >
-                    Change
-                  </button>
-                </div>
-
                 <div className="space-y-3">
                   
                   {/* Name */}

@@ -74,15 +74,23 @@ export async function dbGetUsers(fallbackUsers?: any[], ..._args: any[]): Promis
   return store.users || [];
 }
 
-export async function dbGetUserByEmailOrUsername(identifier: string, fallbackUsers?: any[], ..._args: any[]): Promise<any | null> {
+export async function dbGetAllUsersByEmailOrUsername(identifier: string, fallbackUsers?: any[]): Promise<any[]> {
+  const store = getStore();
   const storeUsers = await dbGetUsers(fallbackUsers);
-  const allCandidates = [...storeUsers, ...(fallbackUsers || [])];
+  const allCandidates = [
+    ...(store.users || []),
+    ...(storeUsers || []),
+    ...(fallbackUsers || [])
+  ];
   
   const raw = (identifier || '').trim();
-  if (!raw) return null;
+  if (!raw) return [];
 
   const normalized = raw.toLowerCase();
   const normalizedClean = raw.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  const matches: any[] = [];
+  const seenIds = new Set<string>();
 
   for (const u of allCandidates) {
     if (!u) continue;
@@ -99,6 +107,11 @@ export async function dbGetUserByEmailOrUsername(identifier: string, fallbackUse
     const usernameClean = username.replace(/[^a-z0-9]/g, '');
     const studentIdClean = studentId.replace(/[^a-z0-9]/g, '');
 
+    const candidateRole = (u.role || userObj.role || 'user').toLowerCase().trim();
+    const candidateUniqueId = userObj.id || u.id || '';
+    const candidatePass = userObj.password || u.password || userObj.plainPassword || u.plainPassword || '';
+    const candidateKey = `${candidateUniqueId}_${candidateRole}_${candidatePass}_${email}_${username}_${studentId}`;
+
     // Exact matches
     if (
       (email && email === normalized) ||
@@ -108,7 +121,11 @@ export async function dbGetUserByEmailOrUsername(identifier: string, fallbackUse
       (phone && phone === normalized) ||
       (roomKey && roomKey === normalized)
     ) {
-      return u;
+      if (!seenIds.has(candidateKey)) {
+        seenIds.add(candidateKey);
+        matches.push(u);
+      }
+      continue;
     }
 
     // Cleaned alphanumeric matches (for student IDs with/without hyphens e.g. STU-2024-8842 vs STU20248842)
@@ -117,12 +134,31 @@ export async function dbGetUserByEmailOrUsername(identifier: string, fallbackUse
         (studentIdClean && studentIdClean === normalizedClean) ||
         (usernameClean && usernameClean === normalizedClean)
       ) {
-        return u;
+        if (!seenIds.has(candidateKey)) {
+          seenIds.add(candidateKey);
+          matches.push(u);
+        }
       }
     }
   }
 
-  return null;
+  return matches;
+}
+
+export async function dbGetUserByEmailOrUsername(identifier: string, fallbackUsers?: any[], expectedRole?: string): Promise<any | null> {
+  const matches = await dbGetAllUsersByEmailOrUsername(identifier, fallbackUsers);
+  if (matches.length === 0) return null;
+
+  if (expectedRole) {
+    const roleNormalized = expectedRole.toLowerCase().trim();
+    const roleMatch = matches.find((u: any) => {
+      const r = (u.user?.role || u.role || '').toLowerCase().trim();
+      return r === roleNormalized;
+    });
+    if (roleMatch) return roleMatch;
+  }
+
+  return matches[0];
 }
 
 // 2. Hostels
@@ -1104,6 +1140,9 @@ export async function dbAssignRoomKey(roomKey: string, studentData: {
       assignedProgram: studentData.assignedProgram,
       assignedDepartment: studentData.assignedDepartment,
       assignedInstitution: studentData.assignedInstitution,
+      parentUserEmail: studentData.parentUserEmail || store.roomKeys[idx].parentUserEmail,
+      parentUserId: studentData.parentUserId || store.roomKeys[idx].parentUserId,
+      claimedByUserId: studentData.claimedByUserId || studentData.parentUserId || store.roomKeys[idx].claimedByUserId,
       assignedAt: new Date().toISOString()
     };
     persistStore();

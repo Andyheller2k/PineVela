@@ -283,7 +283,12 @@ export interface IssueReport {
   id: string;
   title: string;
   category: string;
-  urgency: 'Low' | 'Medium' | 'High';
+  urgency: 'Low' | 'Medium' | 'High' | 'Emergency';
+  subArea?: string;
+  locationTag?: string;
+  visitWindow?: string;
+  contactPhone?: string;
+  parentUserEmail?: string;
   description: string;
   photos: string[];
   contactMethod: 'In-app Notification' | 'Phone Call' | 'Email';

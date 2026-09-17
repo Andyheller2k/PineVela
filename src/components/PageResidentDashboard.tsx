@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
 import PineLogo from './PineLogo';
-import { renderAvatarGraphic } from './UserAvatarSelector';
+import UserAvatarSelector, { renderAvatarGraphic } from './UserAvatarSelector';
 import { 
   Home, 
   Wrench, 
@@ -38,18 +38,24 @@ import {
   Lock, 
   ShieldAlert, 
   BookOpen, 
-  User 
+  User,
+  Copy,
+  Bed,
+  Layers,
+  GraduationCap,
+  Eye,
+  ImageIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { IssueReport, HostelRoomKey, StudentDirectMessage } from '../types';
 
 export default function PageResidentDashboard() {
-  const { user, logout, apiFetch } = useAuth();
+  const { user, logout, apiFetch, updateUser } = useAuth();
   const { notifications, unreadCount, registeredAccounts, markAsRead, pushToast } = useNotifications();
   const navigate = useNavigate();
 
   // Navigation tabs for the resident dashboard
-  const [activeTab, setActiveTab] = useState<'room' | 'complaints' | 'billing' | 'alerts' | 'settings'>('room');
+  const [activeTab, setActiveTab] = useState<'room' | 'complaints' | 'alerts' | 'settings'>('room');
 
   // Data states
   const [issueReports, setIssueReports] = useState<IssueReport[]>([]);
@@ -68,12 +74,42 @@ export default function PageResidentDashboard() {
   const [issueTitle, setIssueTitle] = useState<string>('');
   const [issueCategory, setIssueCategory] = useState<string>('Plumbing');
   const [issueUrgency, setIssueUrgency] = useState<'Low' | 'Medium' | 'High'>('Medium');
+  const [issueSubArea, setIssueSubArea] = useState<string>('Bathroom / Shower / WC');
   const [issueDescription, setIssueDescription] = useState<string>('');
   const [issuePhotos, setIssuePhotos] = useState<string[]>([]);
+  const [issueVisitWindow, setIssueVisitWindow] = useState<string>('Morning (8:00 AM - 12:00 PM)');
+  const [issueContactPhone, setIssueContactPhone] = useState<string>('');
   const [issueContactMethod, setIssueContactMethod] = useState<'In-app Notification' | 'Phone Call' | 'Email'>('In-app Notification');
   const [submittingIssue, setSubmittingIssue] = useState<boolean>(false);
   const [issueFilter, setIssueFilter] = useState<'all' | 'pending' | 'in-progress' | 'awaiting-confirmation' | 'resolved'>('all');
   const [issueSearch, setIssueSearch] = useState<string>('');
+  const [lightboxPhoto, setLightboxPhoto] = useState<string | null>(null);
+
+  // Sample evidence photos for quick selection
+  const SAMPLE_EVIDENCE_PHOTOS = [
+    { label: '💧 Leaking Tap / Pipe', url: 'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?auto=format&fit=crop&w=600&q=80' },
+    { label: '⚡ Power Socket / Wiring', url: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=600&q=80' },
+    { label: '🔒 Door Handle / Lock', url: 'https://images.unsplash.com/photo-1558002038-1055907df827?auto=format&fit=crop&w=600&q=80' },
+    { label: '❄️ AC / Cooling Unit', url: 'https://images.unsplash.com/photo-1615873968403-89e068629265?auto=format&fit=crop&w=600&q=80' }
+  ];
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (reader.result && typeof reader.result === 'string') {
+          setIssuePhotos(prev => [...prev, reader.result as string]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removePhoto = (index: number) => {
+    setIssuePhotos(prev => prev.filter((_, i) => i !== index));
+  };
 
   // Student Confirmation Modal for completed tasks
   const [selectedIssueForConfirm, setSelectedIssueForConfirm] = useState<IssueReport | null>(null);
@@ -89,6 +125,17 @@ export default function PageResidentDashboard() {
   const [showSignoutConfirmModal, setShowSignoutConfirmModal] = useState<boolean>(false);
   const [showRoomKey, setShowRoomKey] = useState<boolean>(false);
 
+  // Profile settings state
+  const [editName, setEditName] = useState<string>('');
+  const [editEmail, setEditEmail] = useState<string>('');
+  const [editPhone, setEditPhone] = useState<string>('');
+  const [editStudentId, setEditStudentId] = useState<string>('');
+  const [editResidentType, setEditResidentType] = useState<string>('');
+  const [editInstitution, setEditInstitution] = useState<string>('');
+  const [editProgram, setEditProgram] = useState<string>('');
+  const [editDept, setEditDept] = useState<string>('');
+  const [savingProfile, setSavingProfile] = useState<boolean>(false);
+
   // Load profile, issues, messages, and staff on mount
   useEffect(() => {
     async function init() {
@@ -96,7 +143,15 @@ export default function PageResidentDashboard() {
       setLoadingData(true);
       try {
         const profile = await apiFetch('/api/student/my-profile').catch(() => null);
-        if (profile) setStudentProfile(profile);
+        if (profile) {
+          if (profile.user) {
+            setStudentProfile(profile.user);
+          } else {
+            setStudentProfile(profile);
+          }
+          if (profile.roomKeyDetails) setRoomKeyDetails(profile.roomKeyDetails);
+          if (profile.rooms) setUserRooms(profile.rooms);
+        }
 
         const issues = await apiFetch('/api/issue-reports').catch(() => []);
         setIssueReports(issues);
@@ -104,7 +159,7 @@ export default function PageResidentDashboard() {
         const msgs = await apiFetch('/api/student-messages').catch(() => []);
         setMessages(msgs);
 
-        const staff = await fetch('/api/accredited-staff').then(r => r.json()).catch(() => []);
+        const staff = await apiFetch('/api/accredited-staff').catch(() => []);
         setAccreditedStaff(staff);
       } catch (err) {
         console.error('Error fetching resident dashboard data:', err);
@@ -138,6 +193,61 @@ export default function PageResidentDashboard() {
   };
 
   const currentUser = studentProfile || user;
+  const activeAvatar = studentProfile?.avatar || user?.avatar || (user?.email ? localStorage.getItem(`pinevela_avatar_${user.email}`) : null) || currentUser?.avatar || 'preset:pine-classic';
+
+  // Keep edit fields updated when currentUser loads
+  useEffect(() => {
+    if (currentUser) {
+      setEditName(currentUser.name || '');
+      setEditEmail(currentUser.email || '');
+      setEditPhone(currentUser.phone || '');
+      setEditStudentId(currentUser.studentId || currentUser.residentId || '');
+      setEditResidentType(currentUser.residentType || (currentUser.role === 'student' ? 'Student Resident' : 'Special Resident'));
+      setEditInstitution(currentUser.institution || '');
+      setEditProgram(currentUser.programOfStudy || '');
+      setEditDept(currentUser.department || '');
+    }
+  }, [currentUser?.id, currentUser?.email, currentUser?.name, currentUser?.roomKey]);
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingProfile(true);
+    try {
+      const res = await apiFetch('/api/auth/profile', {
+        method: 'PUT',
+        body: JSON.stringify({
+          name: editName.trim(),
+          email: editEmail.trim(),
+          phone: editPhone.trim(),
+          studentId: editStudentId.trim(),
+          residentType: editResidentType.trim(),
+          institution: editInstitution.trim(),
+          programOfStudy: editProgram.trim(),
+          department: editDept.trim()
+        })
+      });
+      triggerToast('Profile information updated successfully!');
+      if (res && res.user) {
+        setStudentProfile(res.user);
+      } else {
+        setStudentProfile((prev: any) => ({
+          ...prev,
+          name: editName.trim(),
+          email: editEmail.trim(),
+          phone: editPhone.trim(),
+          studentId: editStudentId.trim(),
+          residentType: editResidentType.trim(),
+          institution: editInstitution.trim(),
+          programOfStudy: editProgram.trim(),
+          department: editDept.trim()
+        }));
+      }
+    } catch (err: any) {
+      triggerToast('Failed to update profile: ' + (err.message || 'Error occurred'));
+    } finally {
+      setSavingProfile(false);
+    }
+  };
 
   // Submit New Maintenance Issue
   const handleSubmitIssue = async (e: React.FormEvent) => {
@@ -156,15 +266,19 @@ export default function PageResidentDashboard() {
           title: issueTitle.trim(),
           category: issueCategory,
           urgency: issueUrgency,
+          subArea: issueSubArea,
+          locationTag: issueSubArea,
           description: issueDescription.trim(),
           photos: issuePhotos,
+          visitWindow: issueVisitWindow,
+          contactPhone: issueContactPhone || editPhone || currentUser?.phone || '',
           contactMethod: issueContactMethod
         })
       });
 
       setIssueReports(prev => [newIssue, ...prev]);
       setShowNewIssueModal(false);
-      triggerToast('Maintenance Report Submitted successfully!');
+      triggerToast('Maintenance Report submitted successfully to Dispatch Desk!');
       
       // Reset fields
       setIssueTitle('');
@@ -269,7 +383,7 @@ export default function PageResidentDashboard() {
   }
 
   return (
-    <div className="min-h-screen h-screen flex flex-col lg:flex-row bg-slate-50 text-slate-800 overflow-hidden font-sans relative">
+    <div className="min-h-screen h-screen flex flex-col lg:flex-row bg-gradient-to-br from-slate-50 via-blue-50/70 to-indigo-50/50 text-slate-800 overflow-hidden font-sans relative">
       {/* Toast Notification */}
       <AnimatePresence>
         {toastMessage && (
@@ -311,108 +425,148 @@ export default function PageResidentDashboard() {
         </div>
       </header>
 
-      {/* SIDEBAR NAVIGATION (DESKTOP) */}
-      <aside className="hidden lg:flex flex-col w-72 bg-white border-r border-slate-200 shrink-0 p-6 justify-between select-none">
+      {/* SIDEBAR: PURELY STATIC / FIXED ICE-BLUE FROSTY GLASS LOOK WITH CURVED EDGES & BLUE GLOW */}
+      <aside className="hidden lg:flex w-72 my-6 ml-6 h-[calc(100vh-3rem)] bg-gradient-to-br from-sky-100/90 via-blue-100/85 to-amber-50/40 backdrop-blur-3xl border border-sky-200/80 shadow-2xl rounded-3xl p-6 flex flex-col justify-between shrink-0 overflow-y-auto z-20">
         <div className="space-y-6">
-          <div className="flex items-center gap-3">
+          {/* Logo & Header */}
+          <div className="flex items-center space-x-3 px-2">
             <PineLogo size={36} />
             <div>
-              <h1 className="text-sm font-black text-slate-900 tracking-tight leading-none">PineVela</h1>
-              <p className="text-[10px] text-emerald-600 font-extrabold flex items-center gap-1 mt-1">
-                <ShieldCheck size={12} />
-                <span>Verified Resident</span>
-              </p>
+              <h1 className="text-sm font-extrabold tracking-tight bg-gradient-to-r from-blue-900 to-cyan-800 bg-clip-text text-transparent">
+                PineVela Resident
+              </h1>
+              <p className="text-[10px] font-medium text-blue-600/70 uppercase tracking-widest">Resident Portal</p>
             </div>
           </div>
 
-          <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100 space-y-1">
-            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Resident</div>
-            <div className="text-xs font-black text-slate-900 truncate">{currentUser?.name}</div>
-            <div className="text-[10px] text-slate-500 font-semibold flex items-center gap-1 pt-1">
-              <Building2 size={12} className="text-slate-400" />
-              <span className="truncate">{currentUser?.hostelName || 'No Hostel Assigned'}</span>
+          {/* Student Profile Pill */}
+          <div className="p-3 bg-white/70 border border-blue-200/60 rounded-2xl flex items-center justify-between shadow-xs">
+            <div className="flex items-center gap-3 overflow-hidden">
+              {renderAvatarGraphic(activeAvatar, "w-10 h-10 text-xs")}
+              <div className="overflow-hidden">
+                <div className="text-xs font-bold text-slate-900 truncate">{currentUser?.name || 'Resident'}</div>
+                <div className="text-[10px] font-semibold text-emerald-700 flex items-center gap-1">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 inline shrink-0" />
+                  <span className="truncate">Verified Resident</span>
+                </div>
+              </div>
             </div>
           </div>
 
           <nav className="space-y-1.5">
             <button
               onClick={() => setActiveTab('room')}
-              className={`w-full px-4 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${
-                activeTab === 'room' ? 'bg-blue-900 text-white shadow-md' : 'text-slate-600 hover:bg-slate-50'
+              className={`w-full flex items-center justify-between px-3.5 py-3 rounded-2xl transition-all duration-150 group cursor-pointer ${
+                activeTab === 'room'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25 ring-1 ring-blue-50'
+                  : 'text-slate-600 hover:bg-white/60 hover:text-slate-900'
               }`}
             >
-              <span className="flex items-center gap-2.5">
-                <Home size={16} />
-                <span>My Resident Room</span>
-              </span>
-              <ChevronRight size={14} className={activeTab === 'room' ? 'text-white' : 'text-slate-400'} />
+              <div className="flex items-center space-x-3">
+                <div className={`p-2 rounded-xl transition-colors ${
+                  activeTab === 'room' ? 'bg-white/20 text-white' : 'bg-blue-200/70 text-blue-700 group-hover:bg-blue-300/80'
+                }`}>
+                  <Home className="w-4 h-4" />
+                </div>
+                <div className="text-left">
+                  <div className="text-xs font-semibold tracking-wide flex items-center gap-1.5">
+                    My Resident Room
+                  </div>
+                  <div className={`text-[10px] font-normal ${activeTab === 'room' ? 'text-blue-100' : 'text-slate-500'}`}>
+                    Digital key & room hub
+                  </div>
+                </div>
+              </div>
             </button>
 
             <button
               onClick={() => setActiveTab('complaints')}
-              className={`w-full px-4 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${
-                activeTab === 'complaints' ? 'bg-blue-900 text-white shadow-md' : 'text-slate-600 hover:bg-slate-50'
+              className={`w-full flex items-center justify-between px-3.5 py-3 rounded-2xl transition-all duration-150 group cursor-pointer ${
+                activeTab === 'complaints'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25 ring-1 ring-blue-50'
+                  : 'text-slate-600 hover:bg-white/60 hover:text-slate-900'
               }`}
             >
-              <span className="flex items-center gap-2.5">
-                <Wrench size={16} />
-                <span>Maintenance Complaints</span>
-              </span>
-              <ChevronRight size={14} className={activeTab === 'complaints' ? 'text-white' : 'text-slate-400'} />
-            </button>
-
-            <button
-              onClick={() => setActiveTab('billing')}
-              className={`w-full px-4 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${
-                activeTab === 'billing' ? 'bg-blue-900 text-white shadow-md' : 'text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              <span className="flex items-center gap-2.5">
-                <FileText size={16} />
-                <span>Billing & Statements</span>
-              </span>
-              <ChevronRight size={14} className={activeTab === 'billing' ? 'text-white' : 'text-slate-400'} />
+              <div className="flex items-center space-x-3">
+                <div className={`p-2 rounded-xl transition-colors ${
+                  activeTab === 'complaints' ? 'bg-white/20 text-white' : 'bg-blue-200/70 text-blue-700 group-hover:bg-blue-300/80'
+                }`}>
+                  <Wrench className="w-4 h-4" />
+                </div>
+                <div className="text-left">
+                  <div className="text-xs font-semibold tracking-wide flex items-center gap-1.5">
+                    Maintenance
+                  </div>
+                  <div className={`text-[10px] font-normal ${activeTab === 'complaints' ? 'text-blue-100' : 'text-slate-500'}`}>
+                    File & track complaints
+                  </div>
+                </div>
+              </div>
             </button>
 
             <button
               onClick={() => setActiveTab('alerts')}
-              className={`w-full px-4 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${
-                activeTab === 'alerts' ? 'bg-blue-900 text-white shadow-md' : 'text-slate-600 hover:bg-slate-50'
+              className={`w-full flex items-center justify-between px-3.5 py-3 rounded-2xl transition-all duration-150 group cursor-pointer ${
+                activeTab === 'alerts'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25 ring-1 ring-blue-50'
+                  : 'text-slate-600 hover:bg-white/60 hover:text-slate-900'
               }`}
             >
-              <span className="flex items-center gap-2.5">
-                <Bell size={16} />
-                <span>Bulletins & Alerts</span>
-              </span>
-              <ChevronRight size={14} className={activeTab === 'alerts' ? 'text-white' : 'text-slate-400'} />
+              <div className="flex items-center space-x-3">
+                <div className={`p-2 rounded-xl transition-colors ${
+                  activeTab === 'alerts' ? 'bg-white/20 text-white' : 'bg-blue-200/70 text-blue-700 group-hover:bg-blue-300/80'
+                }`}>
+                  <Bell className="w-4 h-4" />
+                </div>
+                <div className="text-left">
+                  <div className="text-xs font-semibold tracking-wide flex items-center gap-1.5">
+                    Bulletins & Alerts
+                  </div>
+                  <div className={`text-[10px] font-normal ${activeTab === 'alerts' ? 'text-blue-100' : 'text-slate-500'}`}>
+                    Announcements & news
+                  </div>
+                </div>
+              </div>
             </button>
 
             <button
               onClick={() => setActiveTab('settings')}
-              className={`w-full px-4 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${
-                activeTab === 'settings' ? 'bg-blue-900 text-white shadow-md' : 'text-slate-600 hover:bg-slate-50'
+              className={`w-full flex items-center justify-between px-3.5 py-3 rounded-2xl transition-all duration-150 group cursor-pointer ${
+                activeTab === 'settings'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25 ring-1 ring-blue-50'
+                  : 'text-slate-600 hover:bg-white/60 hover:text-slate-900'
               }`}
             >
-              <span className="flex items-center gap-2.5">
-                <Settings size={16} />
-                <span>Profile & Settings</span>
-              </span>
-              <ChevronRight size={14} className={activeTab === 'settings' ? 'text-white' : 'text-slate-400'} />
+              <div className="flex items-center space-x-3">
+                <div className={`p-2 rounded-xl transition-colors ${
+                  activeTab === 'settings' ? 'bg-white/20 text-white' : 'bg-blue-200/70 text-blue-700 group-hover:bg-blue-300/80'
+                }`}>
+                  <Settings className="w-4 h-4" />
+                </div>
+                <div className="text-left">
+                  <div className="text-xs font-semibold tracking-wide flex items-center gap-1.5">
+                    Profile & Settings
+                  </div>
+                  <div className={`text-[10px] font-normal ${activeTab === 'settings' ? 'text-blue-100' : 'text-slate-500'}`}>
+                    Manage personal settings
+                  </div>
+                </div>
+              </div>
             </button>
           </nav>
         </div>
 
         <button
           onClick={() => setShowSignoutConfirmModal(true)}
-          className="w-full py-3 bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold text-xs rounded-xl flex items-center justify-center gap-2 border border-rose-100 cursor-pointer"
+          className="w-full flex items-center justify-center space-x-2 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 px-4 py-2.5 rounded-2xl font-semibold text-xs transition-all shadow-xs cursor-pointer"
         >
-          <LogOut size={14} />
+          <LogOut className="w-4 h-4" />
           <span>Sign Out Session</span>
         </button>
       </aside>
 
       {/* MOBILE BOTTOM NAVIGATION */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 flex items-center justify-around py-2 shadow-lg">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/80 flex items-center justify-around py-2 shadow-lg">
         <button 
           onClick={() => setActiveTab('room')}
           className={`flex flex-col items-center p-1.5 cursor-pointer ${activeTab === 'room' ? 'text-blue-900' : 'text-slate-400'}`}
@@ -428,13 +582,6 @@ export default function PageResidentDashboard() {
           <span className="text-[10px] font-bold mt-0.5">Complaints</span>
         </button>
         <button 
-          onClick={() => setActiveTab('billing')}
-          className={`flex flex-col items-center p-1.5 cursor-pointer ${activeTab === 'billing' ? 'text-blue-900' : 'text-slate-400'}`}
-        >
-          <FileText size={18} />
-          <span className="text-[10px] font-bold mt-0.5">Billing</span>
-        </button>
-        <button 
           onClick={() => setActiveTab('alerts')}
           className={`flex flex-col items-center p-1.5 cursor-pointer ${activeTab === 'alerts' ? 'text-blue-900' : 'text-slate-400'}`}
         >
@@ -443,125 +590,181 @@ export default function PageResidentDashboard() {
         </button>
       </nav>
 
-      {/* MAIN CONTENT WORKSPACE */}
-      <main className="flex-1 overflow-y-auto p-5 sm:p-8 pb-24 lg:pb-8 flex flex-col space-y-6">
+      {/* MAIN CONTENT WORKSPACE WITH PERSISTENT PINEVELA GIANT WATERMARK */}
+      <main className="flex-1 overflow-y-auto p-5 sm:p-8 pb-24 lg:pb-8 flex flex-col space-y-6 relative z-10">
+        
+        {/* GIANT WATERMARK PINEVELA LOGO IN BACKGROUND (PERSISTS ACROSS ALL TABS) */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden z-0">
+          <div className="transform scale-[4.5] opacity-[0.14] blur-[0.4px]">
+            <PineLogo size={180} hideText={true} />
+          </div>
+        </div>
         
         {/* ROOM TAB */}
         {activeTab === 'room' && (
-          <div className="space-y-6 max-w-4xl animate-fade-in">
-            {/* Header */}
-            <div>
-              <h2 className="text-xl font-black text-slate-900 tracking-tight">Active Room Desk</h2>
-              <p className="text-xs text-slate-500 font-medium">View your registered student accommodation, keys, and alerts</p>
+          <div className="space-y-6 max-w-5xl animate-fade-in">
+            {/* Header with PineVela Branding */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white/70 backdrop-blur-xl border border-white/60 p-6 rounded-3xl shadow-sm">
+              <div className="flex items-center gap-4">
+                <div className="p-2.5 bg-gradient-to-br from-blue-900 to-indigo-900 rounded-2xl shadow-md flex items-center justify-center shrink-0">
+                  <PineLogo size={32} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-xl font-black text-slate-900 tracking-tight">Resident Room & Key Hub</h2>
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100/80 text-emerald-800 border border-emerald-200/80 flex items-center gap-1">
+                      <ShieldCheck size={11} className="text-emerald-600" />
+                      <span>Verified Active</span>
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 font-semibold mt-0.5">
+                    Official digital access credentials, allocated accommodation details, and emergency services
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
+                <div className="px-3.5 py-2 bg-blue-50/80 border border-blue-200/60 rounded-2xl text-right">
+                  <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider block leading-none">Residency Type</span>
+                  <span className="text-xs font-black text-blue-950 capitalize">{currentUser?.residentType || 'Enrolled Student'}</span>
+                </div>
+              </div>
             </div>
 
-            {/* Room Card Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {/* Room Card Grid - Glassy Vibe */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               
-              {/* Room details */}
-              <div className="p-5 bg-white border border-slate-200 rounded-3xl space-y-4 md:col-span-2">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-700 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/10">
-                    <Home size={22} />
+              {/* Primary Accommodation Dossier */}
+              <div className="lg:col-span-2 bg-white/80 backdrop-blur-xl border border-white/80 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all space-y-6 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-bl from-blue-100/40 via-indigo-50/20 to-transparent rounded-bl-full pointer-events-none" />
+
+                <div className="flex items-start justify-between gap-4 relative z-10">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-900 via-blue-800 to-indigo-900 text-white flex items-center justify-center shadow-lg shadow-blue-950/15 ring-4 ring-blue-50">
+                      <Home size={22} className="text-blue-200" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-extrabold text-blue-700 uppercase tracking-wider block">Assigned Hostel Complex</span>
+                      <h3 className="text-lg font-black text-slate-900 tracking-tight leading-snug">
+                        {currentUser?.hostelName || roomKeyDetails?.hostelName || 'PineVela Residence'}
+                      </h3>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase block leading-none">Assigned Accommodation</span>
-                    <h3 className="text-base font-extrabold text-slate-900 mt-1">{currentUser?.hostelName || 'Premium Resident Lodge'}</h3>
-                  </div>
+
+                  <span className="px-3 py-1 bg-blue-50 border border-blue-100 text-blue-900 font-mono text-xs font-black rounded-xl">
+                    Room {currentUser?.roomNumber || roomKeyDetails?.roomNumber || userRooms[0]?.roomNumber || 'Assigned'}
+                  </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100 text-xs font-semibold">
-                  <div>
-                    <span className="text-slate-400 block text-[10px]">Resident Block</span>
-                    <span className="text-slate-900 font-extrabold">{currentUser?.blockName || 'Block A (Alpha)'}</span>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-4 border-t border-slate-150/60 relative z-10 text-xs">
+                  <div className="p-3 bg-slate-50/70 border border-slate-200/50 rounded-2xl space-y-1">
+                    <div className="flex items-center gap-1.5 text-slate-400 font-bold text-[10px] uppercase">
+                      <Layers size={12} className="text-slate-500" />
+                      <span>Block / Wing</span>
+                    </div>
+                    <div className="font-black text-slate-900 truncate">
+                      {currentUser?.blockName || roomKeyDetails?.blockName || userRooms[0]?.blockName || 'Main Complex'}
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px]">Room Number</span>
-                    <span className="text-slate-900 font-extrabold">{currentUser?.roomNumber || 'A-102'}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px]">Institution Link</span>
-                    <span className="text-slate-900 font-extrabold truncate block">{currentUser?.institution || 'PineVela University'}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px]">Program / Department</span>
-                    <span className="text-slate-900 font-extrabold truncate block">{currentUser?.programOfStudy || 'Undergrad Resident'}</span>
-                  </div>
-                </div>
-              </div>
 
-              {/* Digital Room Key Details */}
-              <div className="p-5 bg-gradient-to-br from-slate-900 to-blue-950 text-white rounded-3xl space-y-4 flex flex-col justify-between shadow-xl">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-black tracking-widest text-blue-400 uppercase">Room Key</span>
-                  <Key className="w-5 h-5 text-blue-400" />
-                </div>
-
-                <div className="space-y-1">
-                  <div className="text-[10px] font-bold text-blue-200/60 uppercase">Resident Code Access</div>
-                  <div className="font-mono text-lg font-black tracking-wider bg-white/10 p-2 rounded-xl text-center">
-                    {showRoomKey ? currentUser?.roomKey || 'PREMU-AALPHA-428185' : '•••••••••••••••••'}
+                  <div className="p-3 bg-slate-50/70 border border-slate-200/50 rounded-2xl space-y-1">
+                    <div className="flex items-center gap-1.5 text-slate-400 font-bold text-[10px] uppercase">
+                      <Bed size={12} className="text-slate-500" />
+                      <span>Room Number</span>
+                    </div>
+                    <div className="font-black text-slate-900 truncate">
+                      {currentUser?.roomNumber || roomKeyDetails?.roomNumber || userRooms[0]?.roomNumber || 'Assigned'}
+                    </div>
                   </div>
-                </div>
 
-                <button
-                  onClick={() => setShowRoomKey(!showRoomKey)}
-                  className="w-full py-2 bg-blue-500 hover:bg-blue-400 text-white font-extrabold text-[11px] rounded-xl transition-all cursor-pointer text-center"
-                >
-                  {showRoomKey ? 'Hide Digital Key' : 'Reveal Digital Key'}
-                </button>
-              </div>
-
-            </div>
-
-            {/* Submitting complaints promo section */}
-            <div className="p-6 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-3xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div className="space-y-1 max-w-lg">
-                <h4 className="text-sm font-black text-slate-900 flex items-center gap-1.5">
-                  <Wrench className="text-blue-600 w-4 h-4 shrink-0" />
-                  <span>Is something broken in your room?</span>
-                </h4>
-                <p className="text-xs text-slate-600 font-medium">
-                  Report immediate electrical, plumbing, appliance, or general maintenance complaints. Registered staff technicians will be auto-dispatched to bargain or schedule repairs instantly.
-                </p>
-              </div>
-              <button
-                onClick={() => { setActiveTab('complaints'); setShowNewIssueModal(true); }}
-                className="px-4 py-2.5 bg-blue-900 hover:bg-blue-800 text-white font-black text-xs rounded-xl shadow-lg shadow-blue-900/20 cursor-pointer shrink-0 transition-colors"
-              >
-                File New Maintenance Report
-              </button>
-            </div>
-
-            {/* Emergency Contacts card */}
-            <div className="bg-white border border-slate-200 rounded-3xl p-5 space-y-3">
-              <h3 className="text-sm font-black text-slate-900 flex items-center gap-1.5">
-                <AlertCircle size={16} className="text-rose-500" />
-                <span>Hostel Emergency Operations</span>
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-semibold">
-                <div className="p-3 bg-slate-50 border border-slate-100 rounded-2xl flex items-center gap-3">
-                  <Phone size={16} className="text-slate-400" />
-                  <div>
-                    <div className="text-[10px] text-slate-400 font-bold uppercase">Front Desk</div>
-                    <div className="text-slate-900 font-extrabold">+233 302 9481</div>
+                  <div className="p-3 bg-slate-50/70 border border-slate-200/50 rounded-2xl space-y-1">
+                    <div className="flex items-center gap-1.5 text-slate-400 font-bold text-[10px] uppercase">
+                      <User size={12} className="text-slate-500" />
+                      <span>Resident Name</span>
+                    </div>
+                    <div className="font-black text-slate-900 truncate">
+                      {currentUser?.name || roomKeyDetails?.assignedStudentName || 'Resident'}
+                    </div>
                   </div>
-                </div>
-                <div className="p-3 bg-slate-50 border border-slate-100 rounded-2xl flex items-center gap-3">
-                  <Phone size={16} className="text-slate-400" />
-                  <div>
-                    <div className="text-[10px] text-slate-400 font-bold uppercase">Security Guard</div>
-                    <div className="text-slate-900 font-extrabold">+233 24 990 0112</div>
+
+                  <div className="p-3 bg-slate-50/70 border border-slate-200/50 rounded-2xl space-y-1">
+                    <div className="flex items-center gap-1.5 text-slate-400 font-bold text-[10px] uppercase">
+                      <GraduationCap size={12} className="text-slate-500" />
+                      <span>ID / Index</span>
+                    </div>
+                    <div className="font-black font-mono text-slate-900 truncate">
+                      {currentUser?.studentId || roomKeyDetails?.assignedStudentId || 'N/A'}
+                    </div>
                   </div>
-                </div>
-                <div className="p-3 bg-slate-50 border border-slate-100 rounded-2xl flex items-center gap-3">
-                  <Mail size={16} className="text-slate-400" />
-                  <div>
-                    <div className="text-[10px] text-slate-400 font-bold uppercase">Operations Mail</div>
-                    <div className="text-slate-900 font-extrabold truncate">admin@pinevela.com</div>
+
+                  <div className="p-3 bg-slate-50/70 border border-slate-200/50 rounded-2xl space-y-1 sm:col-span-2">
+                    <div className="flex items-center gap-1.5 text-slate-400 font-bold text-[10px] uppercase">
+                      <BookOpen size={12} className="text-slate-500" />
+                      <span>Institution / Program</span>
+                    </div>
+                    <div className="font-black text-slate-900 truncate">
+                      {(currentUser?.institution || roomKeyDetails?.assignedInstitution || 'Academic Institution') + ' • ' + (currentUser?.programOfStudy || roomKeyDetails?.assignedProgram || 'Resident')}
+                    </div>
                   </div>
                 </div>
               </div>
+
+              {/* Digital Room Key Security Card */}
+              <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-950 text-white rounded-3xl p-6 shadow-xl space-y-5 flex flex-col justify-between border border-blue-900/40 relative overflow-hidden">
+                <div className="absolute top-0 right-0 -mt-8 -mr-8 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <PineLogo size={20} />
+                      <span className="text-[10px] font-black tracking-widest text-blue-300 uppercase">PineVela KeyPass</span>
+                    </div>
+                    <Key className="w-5 h-5 text-blue-400" />
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-extrabold text-blue-200/70 uppercase tracking-wider">Digital Room Key</span>
+                      <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-800/60">
+                        VALIDATED
+                      </span>
+                    </div>
+
+                    <div className="relative group">
+                      <div className="font-mono text-sm sm:text-base font-black tracking-widest bg-white/10 border border-white/15 p-3 rounded-2xl text-center select-all transition-all group-hover:border-blue-400/50">
+                        {showRoomKey ? (currentUser?.roomKey || roomKeyDetails?.roomKey || userRooms[0]?.roomKey || 'Key Unassigned') : '•••••••••••••••••'}
+                      </div>
+                      {showRoomKey && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(currentUser?.roomKey || roomKeyDetails?.roomKey || '');
+                            triggerToast('Digital Room Key copied to clipboard!');
+                          }}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-all cursor-pointer"
+                          title="Copy Key"
+                        >
+                          <Copy size={13} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowRoomKey(!showRoomKey)}
+                    className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs rounded-xl shadow-md transition-all cursor-pointer text-center"
+                  >
+                    {showRoomKey ? 'Hide Digital Key' : 'Reveal Digital Key'}
+                  </button>
+                  <p className="text-[10px] text-blue-200/50 text-center font-medium">
+                    Do not share your digital key code with unauthorized visitors
+                  </p>
+                </div>
+              </div>
+
             </div>
 
           </div>
@@ -635,15 +838,26 @@ export default function PageResidentDashboard() {
                       }`}
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <div className="space-y-0.5">
-                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-black inline-block ${
-                            issue.urgency === 'High' ? 'bg-rose-100 text-rose-800' : issue.urgency === 'Medium' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'
-                          }`}>
-                            {issue.urgency} Urgency
-                          </span>
-                          <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 leading-tight">{issue.title}</h3>
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black inline-block ${
+                              issue.urgency === 'High' || issue.urgency === 'Emergency' ? 'bg-rose-100 text-rose-800 border border-rose-200' : issue.urgency === 'Medium' ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-blue-100 text-blue-800 border border-blue-200'
+                            }`}>
+                              {issue.urgency} Urgency
+                            </span>
+                            <span className="px-2 py-0.5 bg-slate-100 text-slate-700 font-bold text-[9px] rounded-full border border-slate-200">
+                              {issue.category}
+                            </span>
+                            {(issue.subArea || issue.locationTag) && (
+                              <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 font-bold text-[9px] rounded-full border border-indigo-100 flex items-center gap-1">
+                                <MapPin size={10} />
+                                <span>{issue.subArea || issue.locationTag}</span>
+                              </span>
+                            )}
+                          </div>
+                          <h3 className="text-xs sm:text-sm font-black text-slate-900 leading-tight pt-0.5">{issue.title}</h3>
                         </div>
-                        <span className={`px-2.5 py-1 text-[10px] font-bold rounded-lg text-right ${
+                        <span className={`px-2.5 py-1 text-[10px] font-bold rounded-lg text-right shrink-0 ${
                           (issue.status === 'Resolved' && issue.studentAcceptedResolved) ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
                           (issue.status === 'Resolved' && !issue.studentAcceptedResolved) ? 'bg-teal-50 text-teal-800 border border-teal-200 animate-pulse' :
                           issue.status === 'In Progress' ? 'bg-amber-50 text-amber-700 border border-amber-100' :
@@ -655,21 +869,62 @@ export default function PageResidentDashboard() {
                         </span>
                       </div>
 
-                      <p className="text-xs text-slate-500 truncate">{issue.description}</p>
+                      <p className="text-xs text-slate-600 leading-relaxed">{issue.description}</p>
 
-                      <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400 pt-2 border-t border-slate-50">
-                        <div className="flex items-center gap-1.5">
-                          <Clock size={12} />
-                          <span>Filed: {new Date(issue.date || '').toLocaleDateString()}</span>
+                      {/* Photo Gallery Attachments */}
+                      {Array.isArray(issue.photos) && issue.photos.length > 0 && (
+                        <div className="pt-1">
+                          <div className="text-[10px] font-bold text-slate-400 uppercase mb-1.5 flex items-center gap-1">
+                            <Camera size={11} className="text-blue-600" />
+                            <span>Attached Picture Proof ({issue.photos.length})</span>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {issue.photos.map((photo: string, pIdx: number) => (
+                              <div
+                                key={pIdx}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setLightboxPhoto(photo);
+                                }}
+                                className="w-16 h-16 rounded-xl overflow-hidden border border-slate-200 cursor-pointer hover:opacity-90 relative group shadow-2xs"
+                              >
+                                <img src={photo} alt="Attached proof" className="w-full h-full object-cover" />
+                                <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
+                                  <Eye size={14} />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         </div>
+                      )}
+
+                      {/* Additional Details row */}
+                      <div className="flex flex-wrap items-center justify-between text-[10px] font-semibold text-slate-500 pt-2 border-t border-slate-100 gap-2">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <div className="flex items-center gap-1 text-slate-500">
+                            <Clock size={11} />
+                            <span>Filed: {new Date(issue.date || '').toLocaleDateString()}</span>
+                          </div>
+                          {issue.visitWindow && (
+                            <div className="flex items-center gap-1 text-slate-600 font-bold bg-slate-50 px-2 py-0.5 rounded-md">
+                              <span>🕒 Visit: {issue.visitWindow}</span>
+                            </div>
+                          )}
+                          {(issue.contactPhone || issue.studentPhone) && (
+                            <div className="flex items-center gap-1 text-slate-600 font-bold">
+                              <span>📞 {issue.contactPhone || issue.studentPhone}</span>
+                            </div>
+                          )}
+                        </div>
+
                         <div className="flex items-center gap-1.5">
                           {issue.assignedStaffName ? (
-                            <span className="text-blue-700 font-extrabold flex items-center gap-1">
+                            <span className="text-blue-700 font-extrabold flex items-center gap-1 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
                               <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
                               Assigned Tech: {issue.assignedStaffName} ({issue.assignedStaffRole || 'Artisan'})
                             </span>
                           ) : (
-                            <span className="text-slate-400">Awaiting technical assignment...</span>
+                            <span className="text-slate-400">Awaiting artisan dispatch...</span>
                           )}
                         </div>
                       </div>
@@ -789,85 +1044,7 @@ export default function PageResidentDashboard() {
           </div>
         )}
 
-        {/* BILLING TAB */}
-        {activeTab === 'billing' && (
-          <div className="space-y-6 max-w-4xl animate-fade-in">
-            <div>
-              <h2 className="text-xl font-black text-slate-900 tracking-tight">Billing & Utilities Portal</h2>
-              <p className="text-xs text-slate-500 font-medium">Track your room statements, rent balances, and utilities dues</p>
-            </div>
 
-            {/* Grid stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="p-5 bg-white border border-slate-200 rounded-3xl space-y-1">
-                <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">Rent Balance</span>
-                <div className="text-2xl font-black text-slate-900">GHS 0.00</div>
-                <span className="text-[10px] text-emerald-600 font-bold block">Paid / Up-to-date</span>
-              </div>
-              <div className="p-5 bg-white border border-slate-200 rounded-3xl space-y-1">
-                <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">Utility Bill Dues</span>
-                <div className="text-2xl font-black text-slate-900">GHS 45.50</div>
-                <span className="text-[10px] text-rose-500 font-bold block">Due in 5 days (Water & Power)</span>
-              </div>
-              <div className="p-5 bg-white border border-slate-200 rounded-3xl space-y-1">
-                <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">Last Payment</span>
-                <div className="text-lg font-black text-slate-900">GHS 3,400.00</div>
-                <span className="text-[10px] text-slate-500 font-bold block">Accredited Bank Transfer - Sep 2026</span>
-              </div>
-            </div>
-
-            {/* Utility Billing Statement Table */}
-            <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-xs">
-              <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                <h3 className="text-xs font-black text-slate-900">Room Billing Statement</h3>
-                <span className="px-2.5 py-0.5 bg-blue-100 text-blue-800 rounded-full text-[10px] font-black">Room A-102</span>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs font-semibold">
-                  <thead>
-                    <tr className="bg-slate-50/50 text-slate-400 uppercase text-[9px] border-b border-slate-100">
-                      <th className="p-3.5">Bill ID</th>
-                      <th className="p-3.5">Category</th>
-                      <th className="p-3.5">Period</th>
-                      <th className="p-3.5">Amount</th>
-                      <th className="p-3.5">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    <tr>
-                      <td className="p-3.5 font-mono">UT-0926-02</td>
-                      <td className="p-3.5">Water & Power Tariff</td>
-                      <td className="p-3.5">September 2026</td>
-                      <td className="p-3.5 font-bold">GHS 45.50</td>
-                      <td className="p-3.5">
-                        <span className="px-2 py-0.5 bg-rose-100 text-rose-800 rounded-md text-[10px]">Unpaid</span>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="p-3.5 font-mono">UT-0826-04</td>
-                      <td className="p-3.5">Water & Power Tariff</td>
-                      <td className="p-3.5">August 2026</td>
-                      <td className="p-3.5 font-bold">GHS 38.00</td>
-                      <td className="p-3.5">
-                        <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-md text-[10px]">Paid</span>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="p-3.5 font-mono">RT-2026-A1</td>
-                      <td className="p-3.5">Semester Rent Fees</td>
-                      <td className="p-3.5">Academic Yr 26/27</td>
-                      <td className="p-3.5 font-bold">GHS 3,400.00</td>
-                      <td className="p-3.5">
-                        <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-md text-[10px]">Paid</span>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-          </div>
-        )}
 
         {/* ALERTS TAB */}
         {activeTab === 'alerts' && (
@@ -879,27 +1056,36 @@ export default function PageResidentDashboard() {
 
             {/* List of Alerts */}
             <div className="space-y-4">
-              <div className="p-5 bg-white border border-slate-200 rounded-3xl space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="px-2 py-0.5 bg-rose-100 text-rose-800 font-black text-[9px] rounded-full uppercase tracking-wider">Scheduled Water Shutoff</span>
-                  <span className="text-[10px] text-slate-400 font-semibold">Posted Today, 2:15 PM</span>
+              {notifications && notifications.length > 0 ? (
+                notifications.map((notif: any) => (
+                  <div key={notif.id} className="p-5 bg-white border border-slate-200 rounded-3xl space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className={`px-2 py-0.5 font-black text-[9px] rounded-full uppercase tracking-wider ${
+                        notif.type === 'error' || notif.type === 'danger' ? 'bg-rose-100 text-rose-800' :
+                        notif.type === 'warning' ? 'bg-amber-100 text-amber-800' :
+                        'bg-blue-100 text-blue-800'
+                      }`}>
+                        {notif.type || 'Notice'}
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-semibold">{notif.date || notif.timestamp || 'Recent'}</span>
+                    </div>
+                    <h3 className="text-sm font-black text-slate-900">{notif.title}</h3>
+                    <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                      {notif.message}
+                    </p>
+                  </div>
+                ))
+              ) : (
+                <div className="p-12 text-center bg-white border border-slate-200 rounded-3xl space-y-3">
+                  <div className="w-12 h-12 bg-slate-100 text-slate-400 rounded-2xl flex items-center justify-center mx-auto text-xl">
+                    🔔
+                  </div>
+                  <h3 className="text-sm font-bold text-slate-800">No Active Bulletins</h3>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                    There are no active announcements or emergency bulletins posted at this time.
+                  </p>
                 </div>
-                <h3 className="text-sm font-black text-slate-900">Maintenance: Water Pump Servicing (A-Block Wing)</h3>
-                <p className="text-xs text-slate-600 font-medium leading-relaxed">
-                  Attention all residents of Block A. There will be a temporary scheduled water shutoff tomorrow from 8:00 AM to 12:00 PM as engineers service the primary water filtration pumps. Please store water beforehand. Sorry for the brief inconvenience.
-                </p>
-              </div>
-
-              <div className="p-5 bg-white border border-slate-200 rounded-3xl space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="px-2 py-0.5 bg-blue-100 text-blue-800 font-black text-[9px] rounded-full uppercase tracking-wider">Community Update</span>
-                  <span className="text-[10px] text-slate-400 font-semibold">Sep 12, 2026</span>
-                </div>
-                <h3 className="text-sm font-black text-slate-900">Hostel Security Gate Protocol Enforcement</h3>
-                <p className="text-xs text-slate-600 font-medium leading-relaxed">
-                  To ensure resident safety, the main security gates will be closed at 10:00 PM nightly. Security guards will verify valid resident profiles or key assignments at the gate. If you expect to arrive later, please coordinate with the security desk or have your digital portal key ready for verify checks.
-                </p>
-              </div>
+              )}
             </div>
 
           </div>
@@ -910,46 +1096,159 @@ export default function PageResidentDashboard() {
           <div className="space-y-6 max-w-xl animate-fade-in">
             <div>
               <h2 className="text-xl font-black text-slate-900 tracking-tight">Profile & Security Settings</h2>
-              <p className="text-xs text-slate-500 font-medium">Manage your personal information, room credentials, and settings</p>
+              <p className="text-xs text-slate-500 font-medium">Manage your personal information, room credentials, avatar, and settings</p>
             </div>
 
+            {/* Profile Avatar Update Component */}
+            <UserAvatarSelector 
+              onAvatarSave={(avatarUrl) => {
+                setStudentProfile((prev: any) => ({ ...prev, avatar: avatarUrl }));
+                if (updateUser) {
+                  updateUser({ avatar: avatarUrl, photoUrl: avatarUrl, profilePicture: avatarUrl });
+                }
+                triggerToast('Profile picture updated successfully!');
+              }} 
+            />
+
             {/* Settings Forms */}
-            <div className="bg-white border border-slate-200 rounded-3xl p-6 space-y-4">
+            <form onSubmit={handleSaveProfile} className="bg-white border border-slate-200 rounded-3xl p-6 space-y-5 shadow-sm">
               <div className="flex items-center gap-4 pb-4 border-b border-slate-100">
-                {renderAvatarGraphic(currentUser?.avatar, "w-14 h-14 text-base bg-blue-100 text-blue-900")}
+                {renderAvatarGraphic(activeAvatar, "w-14 h-14 text-base bg-blue-100 text-blue-900")}
                 <div>
-                  <h3 className="text-sm font-black text-slate-900">{currentUser?.name}</h3>
-                  <p className="text-xs text-slate-400 font-medium">{currentUser?.email}</p>
+                  <h3 className="text-sm font-black text-slate-900">{currentUser?.name || editName}</h3>
+                  <p className="text-xs text-slate-400 font-medium">{currentUser?.email || editEmail}</p>
+                  <span className="inline-block mt-1 px-2.5 py-0.5 bg-emerald-100 text-emerald-800 rounded-md text-[10px] font-extrabold uppercase">
+                    {editResidentType || 'Resident Account'}
+                  </span>
                 </div>
               </div>
 
-              <div className="space-y-3 text-xs font-semibold">
+              <div className="space-y-3.5 text-xs font-semibold">
                 <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Full Name</label>
                   <input
                     type="text"
-                    disabled
-                    value={currentUser?.name}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-100 text-slate-500 rounded-xl font-bold cursor-not-allowed"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    placeholder="e.g. John Doe"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl font-bold focus:bg-white focus:border-blue-500 outline-none transition-all"
                   />
                 </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Email Address</label>
+                    <input
+                      type="email"
+                      value={editEmail}
+                      onChange={(e) => setEditEmail(e.target.value)}
+                      placeholder="e.g. resident@gmail.com"
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl font-bold focus:bg-white focus:border-blue-500 outline-none transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Phone Number</label>
+                    <input
+                      type="text"
+                      value={editPhone}
+                      onChange={(e) => setEditPhone(e.target.value)}
+                      placeholder="e.g. +233 24 123 4567"
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl font-bold focus:bg-white focus:border-blue-500 outline-none transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Student / Resident ID</label>
+                    <input
+                      type="text"
+                      value={editStudentId}
+                      onChange={(e) => setEditStudentId(e.target.value)}
+                      placeholder="e.g. 10293847"
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl font-bold focus:bg-white focus:border-blue-500 outline-none transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Verification Role Type</label>
+                    <input
+                      type="text"
+                      value={editResidentType}
+                      onChange={(e) => setEditResidentType(e.target.value)}
+                      placeholder="e.g. Student Resident / Special Resident"
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl font-bold focus:bg-white focus:border-blue-500 outline-none transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Institution / College</label>
+                    <input
+                      type="text"
+                      value={editInstitution}
+                      onChange={(e) => setEditInstitution(e.target.value)}
+                      placeholder="e.g. University of Ghana"
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl font-bold focus:bg-white focus:border-blue-500 outline-none transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Program of Study</label>
+                    <input
+                      type="text"
+                      value={editProgram}
+                      onChange={(e) => setEditProgram(e.target.value)}
+                      placeholder="e.g. BSc. Computer Science"
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl font-bold focus:bg-white focus:border-blue-500 outline-none transition-all"
+                    />
+                  </div>
+                </div>
+
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Email Address</label>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Department</label>
                   <input
                     type="text"
-                    disabled
-                    value={currentUser?.email}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-100 text-slate-500 rounded-xl font-bold cursor-not-allowed"
+                    value={editDept}
+                    onChange={(e) => setEditDept(e.target.value)}
+                    placeholder="e.g. Department of Computer Science"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl font-bold focus:bg-white focus:border-blue-500 outline-none transition-all"
                   />
                 </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Verification Role Type</label>
-                  <span className="inline-block px-3 py-1 bg-emerald-100 text-emerald-800 rounded-md text-[10px] font-extrabold capitalize">
-                    {currentUser?.role === 'student' ? 'Student Resident' : 'Special Resident'}
-                  </span>
+
+                {/* Assigned Room & Hostel Credentials Card */}
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2 mt-4">
+                  <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Assigned Housing Credentials</span>
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <div>
+                      <p className="font-extrabold text-slate-800">{currentUser?.hostelName || roomKeyDetails?.hostelName || 'Accredited Hostel'}</p>
+                      <p className="text-[11px] text-slate-500 font-medium">
+                        {(currentUser?.blockName || roomKeyDetails?.blockName || 'Block')} • Room {currentUser?.roomNumber || roomKeyDetails?.roomNumber || 'N/A'}
+                      </p>
+                    </div>
+                    <div className="bg-blue-50 text-blue-900 border border-blue-200 px-3 py-1.5 rounded-xl font-mono text-xs font-black">
+                      {currentUser?.roomKey || roomKeyDetails?.roomKey || userRooms[0]?.roomKey || 'Key Unassigned'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    disabled={savingProfile}
+                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    {savingProfile ? (
+                      <>
+                        <RefreshCw size={14} className="animate-spin" />
+                        Saving Updates...
+                      </>
+                    ) : (
+                      'Save Profile Updates'
+                    )}
+                  </button>
                 </div>
               </div>
-            </div>
+            </form>
 
           </div>
         )}
@@ -976,74 +1275,215 @@ export default function PageResidentDashboard() {
 
             <form onSubmit={handleSubmitIssue} className="space-y-4 text-xs font-semibold">
               <div className="space-y-1">
-                <label className="block text-slate-700">Complaint Title *</label>
+                <label className="block text-slate-800 font-extrabold">Complaint Title *</label>
                 <input
                   type="text"
                   required
                   value={issueTitle}
                   onChange={(e) => setIssueTitle(e.target.value)}
                   placeholder="e.g. Broken water tap or shower leaking"
-                  className="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-600"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-blue-600 text-xs font-bold"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1">
-                  <label className="block text-slate-700">Category *</label>
+                  <label className="block text-slate-800 font-extrabold">Category *</label>
                   <select
                     value={issueCategory}
                     onChange={(e) => setIssueCategory(e.target.value)}
-                    className="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-600"
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-blue-600 font-bold"
                   >
-                    <option value="Plumbing">Plumbing</option>
-                    <option value="Electrical">Electrical</option>
-                    <option value="Carpentry">Carpentry</option>
-                    <option value="Appliance">Appliance</option>
+                    <option value="Plumbing">Plumbing (Tap/Pipes)</option>
+                    <option value="Electrical">Electrical (Lights/Sockets)</option>
+                    <option value="Carpentry">Carpentry & Doors</option>
+                    <option value="Appliance">Appliance & HVAC</option>
                     <option value="Pest Control">Pest Control</option>
-                    <option value="Other">Other Category</option>
+                    <option value="Sanitation">Sanitation & Leakage</option>
+                    <option value="Lock & Key">Lock & Key</option>
+                    <option value="Furniture">Furniture & Bedding</option>
+                    <option value="Other">Other Maintenance</option>
                   </select>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="block text-slate-700">Urgency Level *</label>
+                  <label className="block text-slate-800 font-extrabold">Urgency Level *</label>
                   <select
                     value={issueUrgency}
                     onChange={(e: any) => setIssueUrgency(e.target.value)}
-                    className="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-600"
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-blue-600 font-bold"
                   >
-                    <option value="Low">Low (No rush)</option>
+                    <option value="Low">Low (Fix in 3-5 days)</option>
                     <option value="Medium">Medium (Fix in 24h)</option>
-                    <option value="High">High (Immediate Risk)</option>
+                    <option value="High">High (Fix in 12h)</option>
+                    <option value="Emergency">Emergency (Fix ASAP)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-slate-800 font-extrabold">Specific Location in Room *</label>
+                  <select
+                    value={issueSubArea}
+                    onChange={(e) => setIssueSubArea(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-blue-600 font-bold"
+                  >
+                    <option value="Bathroom / Shower / WC">Bathroom / Shower / WC</option>
+                    <option value="Bedroom Ceiling / Lighting">Bedroom Ceiling / Lighting</option>
+                    <option value="Air Conditioner Unit">Air Conditioner Unit</option>
+                    <option value="Window / Balcony Latch">Window / Balcony Latch</option>
+                    <option value="Kitchenette Sink / Tap">Kitchenette Sink / Tap</option>
+                    <option value="Main Entrance / Digital Lock">Main Entrance / Digital Lock</option>
+                    <option value="Study Desk / Power Socket">Study Desk / Power Socket</option>
+                    <option value="Wardrobe / Cabinet">Wardrobe / Cabinet</option>
                   </select>
                 </div>
               </div>
 
               <div className="space-y-1">
-                <label className="block text-slate-700">Detailed Complaint Description *</label>
+                <label className="block text-slate-800 font-extrabold">Detailed Complaint Description *</label>
                 <textarea
                   required
-                  rows={4}
+                  rows={3}
                   value={issueDescription}
                   onChange={(e) => setIssueDescription(e.target.value)}
                   placeholder="Describe what is wrong, exact location in room, and any other helpful instructions for dispatching the artisan..."
-                  className="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-600"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-blue-600 font-medium resize-none"
                 />
               </div>
 
-              <div className="pt-3 flex gap-2.5 justify-end">
+              {/* PICTURE PROOF UPLOAD */}
+              <div className="space-y-2.5 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                    <Camera className="w-4 h-4 text-blue-600" />
+                    <span>Upload Picture Evidence & Proof</span>
+                  </label>
+                  <span className="text-[10px] font-extrabold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
+                    Max 5MB each
+                  </span>
+                </div>
+
+                {/* File Upload Box */}
+                <label className="border-2 border-dashed border-blue-200 hover:border-blue-400 rounded-xl p-3 flex flex-col items-center justify-center gap-1 bg-white cursor-pointer transition-all text-center">
+                  <Upload className="w-5 h-5 text-blue-600" />
+                  <span className="text-xs font-bold text-blue-900">Click or drag pictures here</span>
+                  <span className="text-[10px] text-slate-400 font-semibold">Supports JPG, PNG, WEBP</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handlePhotoUpload}
+                    className="hidden"
+                  />
+                </label>
+
+                {/* Quick Sample Evidence Pickers */}
+                <div className="space-y-1 pt-1">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase">Or select sample evidence picture:</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {SAMPLE_EVIDENCE_PHOTOS.map((sample, sIdx) => (
+                      <button
+                        key={sIdx}
+                        type="button"
+                        onClick={() => setIssuePhotos(prev => [...prev, sample.url])}
+                        className="px-2.5 py-1 bg-white hover:bg-blue-50 border border-slate-200 text-slate-700 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1"
+                      >
+                        <Plus size={10} className="text-blue-600" />
+                        <span>{sample.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Preview Thumbnails */}
+                {issuePhotos.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-200">
+                    {issuePhotos.map((photo, pIdx) => (
+                      <div key={pIdx} className="w-16 h-16 rounded-xl overflow-hidden border border-slate-300 relative group shadow-2xs">
+                        <img src={photo} alt="Attached preview" className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => removePhoto(pIdx)}
+                          className="absolute top-1 right-1 bg-rose-600 text-white rounded-full p-0.5 shadow-md hover:bg-rose-700 cursor-pointer"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Preferred Artisan Visit Window & Phone */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="block text-slate-800 font-extrabold">Preferred Artisan Visit Window</label>
+                  <select
+                    value={issueVisitWindow}
+                    onChange={(e) => setIssueVisitWindow(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:bg-white focus:border-blue-600"
+                  >
+                    <option value="Morning (8:00 AM - 12:00 PM)">Morning (8:00 AM - 12:00 PM)</option>
+                    <option value="Afternoon (12:00 PM - 4:00 PM)">Afternoon (12:00 PM - 4:00 PM)</option>
+                    <option value="Evening (4:00 PM - 8:00 PM)">Evening (4:00 PM - 8:00 PM)</option>
+                    <option value="Immediate / Anytime">Immediate / Anytime</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-slate-800 font-extrabold">Resident Phone Number</label>
+                  <input
+                    type="text"
+                    value={issueContactPhone}
+                    onChange={(e) => setIssueContactPhone(e.target.value)}
+                    placeholder={currentUser?.phone || '050 000 0000'}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:bg-white focus:border-blue-600"
+                  />
+                </div>
+              </div>
+
+              {/* Update Notification Channel */}
+              <div className="space-y-1">
+                <label className="block text-slate-800 font-extrabold">Preferred Update Channel</label>
+                <div className="flex flex-wrap gap-2">
+                  {(['In-app Notification', 'Phone Call', 'WhatsApp / SMS', 'Email'] as const).map(method => (
+                    <button
+                      key={method}
+                      type="button"
+                      onClick={() => setIssueContactMethod(method as any)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                        issueContactMethod === method
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {method}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-2.5 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setShowNewIssueModal(false)}
-                  className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 cursor-pointer"
+                  className="px-4 py-2 border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submittingIssue}
-                  className="px-5 py-2 bg-blue-900 hover:bg-blue-800 text-white font-black rounded-xl cursor-pointer disabled:opacity-40"
+                  className="px-6 py-2.5 bg-gradient-to-r from-blue-900 to-indigo-900 hover:from-blue-800 hover:to-indigo-800 text-white font-black text-xs rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-40 flex items-center gap-2"
                 >
-                  {submittingIssue ? 'Submitting...' : 'File Maintenance Report'}
+                  {submittingIssue ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Filing Report...</span>
+                    </>
+                  ) : (
+                    <span>File Maintenance Report</span>
+                  )}
                 </button>
               </div>
             </form>
@@ -1092,7 +1532,11 @@ export default function PageResidentDashboard() {
       {/* SIGN OUT CONFIRMATION MODAL */}
       {showSignoutConfirmModal && (
         <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-6 space-y-4 text-center">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 space-y-4 text-center border border-slate-100 shadow-2xl">
+            <div className="flex items-center justify-center gap-2 pt-1 pb-1">
+              <PineLogo size={28} />
+              <span className="font-black text-slate-900 tracking-tight text-sm">PineVela Housing</span>
+            </div>
             <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto">
               <LogOut size={20} />
             </div>
@@ -1113,6 +1557,32 @@ export default function PageResidentDashboard() {
               >
                 Sign Out
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* LIGHTBOX PHOTO MODAL */}
+      {lightboxPhoto && (
+        <div 
+          className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4"
+          onClick={() => setLightboxPhoto(null)}
+        >
+          <div className="relative max-w-4xl w-full bg-slate-900 rounded-3xl overflow-hidden p-2 shadow-2xl border border-slate-700" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-3 border-b border-slate-800 text-white">
+              <span className="text-xs font-black tracking-wide flex items-center gap-2">
+                <Camera size={14} className="text-blue-400" />
+                <span>High-Resolution Complaint Photo Evidence</span>
+              </span>
+              <button 
+                onClick={() => setLightboxPhoto(null)} 
+                className="bg-white/10 hover:bg-white/20 text-white p-2 rounded-full cursor-pointer transition-all"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="p-2 flex items-center justify-center min-h-[300px]">
+              <img src={lightboxPhoto} alt="Evidence detail" className="max-h-[80vh] w-auto max-w-full object-contain rounded-2xl" />
             </div>
           </div>
         </div>

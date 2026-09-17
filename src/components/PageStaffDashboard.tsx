@@ -671,13 +671,23 @@ export default function PageStaffDashboard() {
       return;
     }
 
-    if (!applicantPhone) {
+    if (!applicantPhone || !applicantPhone.trim()) {
       triggerToast("Please enter your contact phone number.", 'error');
       return;
     }
 
     if (!cvData) {
       triggerToast("Please upload your Curriculum Vitae (CV / Resume).", 'error');
+      return;
+    }
+
+    if (!idDocData) {
+      triggerToast("Please upload your National ID Card Document (Ghana Card photo/scan).", 'error');
+      return;
+    }
+
+    if (!coverNote || !coverNote.trim()) {
+      triggerToast("Please enter your Cover Note / Practical Experience description.", 'error');
       return;
     }
 
@@ -1831,25 +1841,12 @@ export default function PageStaffDashboard() {
                         required
                       />
                     </div>
-
-                    {/* National ID Number */}
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">National ID / Ghana Card Number *</label>
-                      <input
-                        type="text"
-                        value={applicantNationalId}
-                        onChange={(e) => setApplicantNationalId(e.target.value)}
-                        placeholder="GHA-000000000-0"
-                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-blue-600 focus:bg-white"
-                        required
-                      />
-                    </div>
                   </div>
 
                   {/* FILE UPLOAD SECTION: CV & NATIONAL ID */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2">
                     {/* CV / Resume Upload */}
-                    <div className="p-5 border-2 border-dashed border-blue-200 hover:border-blue-400 bg-blue-50/40 rounded-2xl transition-all space-y-3 text-center">
+                    <div className="p-5 border-2 border-dashed border-blue-200 hover:border-blue-400 bg-blue-50/40 rounded-2xl transition-all space-y-3 text-center animate-pulse-subtle">
                       <FileText className="w-8 h-8 text-blue-600 mx-auto" />
                       <div>
                         <span className="text-xs font-bold text-slate-900 block">Curriculum Vitae (CV / Resume) *</span>
@@ -1875,11 +1872,11 @@ export default function PageStaffDashboard() {
                     </div>
 
                     {/* National ID Document Upload */}
-                    <div className="p-5 border-2 border-dashed border-slate-200 hover:border-slate-400 bg-slate-50 rounded-2xl transition-all space-y-3 text-center">
-                      <ShieldCheck className="w-8 h-8 text-emerald-600 mx-auto" />
+                    <div className="p-5 border-2 border-dashed border-red-200 hover:border-red-400 bg-red-50/20 rounded-2xl transition-all space-y-3 text-center">
+                      <ShieldCheck className="w-8 h-8 text-red-600 mx-auto" />
                       <div>
-                        <span className="text-xs font-bold text-slate-900 block">National ID Card Document</span>
-                        <span className="text-[10px] text-slate-500 font-medium">Clear photo or scan of Ghana Card (Optional)</span>
+                        <span className="text-xs font-bold text-slate-900 block text-red-950">National ID Card Document *</span>
+                        <span className="text-[10px] text-red-700 font-medium">Clear photo or scan of Ghana Card (Compulsory)</span>
                       </div>
 
                       {idDocFileName ? (
@@ -1888,8 +1885,8 @@ export default function PageStaffDashboard() {
                           <span className="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded">Attached</span>
                         </div>
                       ) : (
-                        <label className="inline-block px-4 py-2 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 text-xs font-bold rounded-xl cursor-pointer shadow-xs transition-all">
-                          <span>Upload ID Image</span>
+                        <label className="inline-block px-4 py-2 bg-red-900 hover:bg-red-800 text-white text-xs font-bold rounded-xl cursor-pointer shadow-xs transition-all">
+                          <span>Upload Ghana Card</span>
                           <input
                             type="file"
                             accept="image/*,.pdf"
@@ -1903,13 +1900,14 @@ export default function PageStaffDashboard() {
 
                   {/* Cover Note */}
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Cover Note / Practical Experience</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Cover Note / Practical Experience *</label>
                     <textarea
                       rows={3}
                       value={coverNote}
                       onChange={(e) => setCoverNote(e.target.value)}
-                      placeholder="Briefly state your relevant experience (e.g. 4 years maintaining campus plumbing and borehole pumps)."
+                      placeholder="Briefly state your relevant experience (e.g. 4 years maintaining campus plumbing and borehole pumps). This field is compulsory."
                       className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-blue-600 focus:bg-white"
+                      required
                     />
                   </div>
 

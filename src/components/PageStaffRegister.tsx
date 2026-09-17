@@ -114,13 +114,7 @@ export default function PageStaffRegister() {
     };
   }, [user?.email, user?.id]);
 
-  // Pre-populate fields from logged-in user if available
-  React.useEffect(() => {
-    if (user) {
-      if (user.name) setFullName(user.name);
-      if (user.email) setEmail(user.email);
-    }
-  }, [user]);
+  // Do not pre-fill textboxes automatically; keep blank with placeholders
 
   // Account Deletion Handler
   const handleDeleteAccount = async (e: React.FormEvent) => {
@@ -147,6 +141,18 @@ export default function PageStaffRegister() {
       }
       setToastType('success');
       setToastMessage(data.message || 'Staff account deleted successfully.');
+      try {
+        const localStaff = JSON.parse(localStorage.getItem('pinevela_registered_staff') || '[]');
+        const tEmail = delEmail.trim().toLowerCase();
+        const filteredStaff = localStaff.filter((s: any) => {
+          const sEmail = (s.email || '').toLowerCase().trim();
+          const sParentEmail = (s.parentUserEmail || '').toLowerCase().trim();
+          return sEmail !== tEmail && sParentEmail !== tEmail;
+        });
+        localStorage.setItem('pinevela_registered_staff', JSON.stringify(filteredStaff));
+      } catch (e) {
+        console.warn(e);
+      }
       setExistingStaffRecord(null);
       setShowDeleteModal(false);
       setDelPassword('');

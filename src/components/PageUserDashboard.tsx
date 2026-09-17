@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
-import { safeJson } from '../lib/api';
+import { safeJson, hashPassword } from '../lib/api';
 import PineLogo from './PineLogo';
 import UserAvatarSelector, { renderAvatarGraphic } from './UserAvatarSelector';
 import { 
@@ -53,13 +53,14 @@ import {
   Building,
   User,
   BookOpen,
-  CheckCircle
+  CheckCircle,
+  LogIn
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { IssueReport, HostelRoomKey, StudentDirectMessage } from '../types';
 
 export default function PageUserDashboard() {
-  const { user, logout, apiFetch, updateUser } = useAuth();
+  const { user, logout, apiFetch, updateUser, setSessionUser } = useAuth();
   const { notifications, unreadCount, registeredAccounts, markAsRead, pushToast } = useNotifications();
   const navigate = useNavigate();
 
@@ -89,6 +90,9 @@ export default function PageUserDashboard() {
   // Delete Room Modal state
   const [deletingRoomTarget, setDeletingRoomTarget] = useState<any | null>(null);
   const [submittingDeleteRoom, setSubmittingDeleteRoom] = useState<boolean>(false);
+  const [delRoomEmailInput, setDelRoomEmailInput] = useState<string>('');
+  const [delRoomPasswordInput, setDelRoomPasswordInput] = useState<string>('');
+  const [delRoomError, setDelRoomError] = useState<string | null>(null);
 
   const currentUser = studentUser || user;
 
@@ -101,9 +105,12 @@ export default function PageUserDashboard() {
   const [showNewIssueModal, setShowNewIssueModal] = useState<boolean>(false);
   const [issueTitle, setIssueTitle] = useState<string>('');
   const [issueCategory, setIssueCategory] = useState<string>('Plumbing');
-  const [issueUrgency, setIssueUrgency] = useState<'Low' | 'Medium' | 'High'>('Medium');
+  const [issueUrgency, setIssueUrgency] = useState<'Low' | 'Medium' | 'High' | 'Emergency'>('Medium');
+  const [issueSubArea, setIssueSubArea] = useState<string>('Bathroom / Shower / WC');
   const [issueDescription, setIssueDescription] = useState<string>('');
   const [issuePhotos, setIssuePhotos] = useState<string[]>([]);
+  const [issueVisitWindow, setIssueVisitWindow] = useState<string>('Morning (8:00 AM - 12:00 PM)');
+  const [issueContactPhone, setIssueContactPhone] = useState<string>('');
   const [issueContactMethod, setIssueContactMethod] = useState<'In-app Notification' | 'Phone Call' | 'Email'>('In-app Notification');
   const [submittingIssue, setSubmittingIssue] = useState<boolean>(false);
   const [issueFilter, setIssueFilter] = useState<'all' | 'pending' | 'in-progress' | 'awaiting-confirmation' | 'resolved'>('all');
@@ -141,7 +148,10 @@ export default function PageUserDashboard() {
   const [claimInstitution, setClaimInstitution] = useState<string>('');
   const [claimProgram, setClaimProgram] = useState<string>('');
   const [claimStudentPhone, setClaimStudentPhone] = useState<string>('');
+  const [claimEmail, setClaimEmail] = useState<string>('');
+  const [claimEmailChoice, setClaimEmailChoice] = useState<'custom' | 'same'>('custom');
   const [claimPassword, setClaimPassword] = useState<string>('');
+  const [quickLoggingInRoomKey, setQuickLoggingInRoomKey] = useState<string | null>(null);
 
   // Reset Password Modal states
   const [showResetPasswordModal, setShowResetPasswordModal] = useState<boolean>(false);
@@ -308,8 +318,36 @@ export default function PageUserDashboard() {
             }
           }
 
-          if (regData.residentAccount && !roomKeyDetails) {
-            setRoomKeyDetails({
+          if (regData.residentRooms && Array.isArray(regData.residentRooms) && regData.residentRooms.length > 0) {
+            const mappedRooms: HostelRoomKey[] = regData.residentRooms.map((rk: any) => ({
+              id: rk.roomKey || rk.id,
+              hostelId: rk.hostelId || '',
+              hostelName: rk.hostelName || 'PineVela Student Residence',
+              blockName: rk.blockName || 'Block A',
+              blockInitial: ((rk.blockName || 'A')[0] || 'A').toUpperCase(),
+              roomNumber: rk.roomNumber || '101',
+              roomKey: rk.roomKey || rk.id,
+              status: 'Occupied' as const,
+              isAssigned: true,
+              assignedStudentId: rk.assignedStudentId || rk.studentId || rk.residentId,
+              assignedStudentName: rk.assignedStudentName || rk.studentName || rk.name,
+              assignedStudentEmail: rk.assignedStudentEmail || rk.studentEmail || rk.email,
+              assignedStudentPhone: rk.assignedStudentPhone || rk.studentPhone || rk.phone,
+              assignedResidentType: rk.assignedResidentType || rk.residentType,
+              assignedProgram: rk.assignedProgram || rk.programOfStudy,
+              assignedDepartment: rk.assignedDepartment || rk.department,
+              assignedInstitution: rk.assignedInstitution || rk.institution,
+              managerName: rk.managerName,
+              managerPhone: rk.managerPhone,
+              assignedAt: rk.assignedAt || rk.submittedAt || rk.claimedAt || new Date().toISOString(),
+              createdAt: rk.assignedAt || rk.submittedAt || rk.claimedAt || new Date().toISOString()
+            }));
+            setUserRooms(mappedRooms);
+            if (mappedRooms[0]) {
+              setRoomKeyDetails(mappedRooms[0]);
+            }
+          } else if (regData.residentAccount) {
+            const defaultRoom: HostelRoomKey = {
               id: regData.residentAccount.roomKey,
               hostelId: regData.residentAccount.hostelId || '',
               hostelName: regData.residentAccount.hostelName || 'PineVela Student Residence',
@@ -317,15 +355,23 @@ export default function PageUserDashboard() {
               blockInitial: ((regData.residentAccount.blockName || 'A')[0] || 'A').toUpperCase(),
               roomNumber: regData.residentAccount.roomNumber || '101',
               roomKey: regData.residentAccount.roomKey,
-              status: 'Occupied',
+              status: 'Occupied' as const,
               isAssigned: true,
               assignedStudentId: regData.residentAccount.studentId,
               assignedStudentName: regData.residentAccount.name,
               assignedStudentEmail: regData.residentAccount.email,
               assignedStudentPhone: regData.residentAccount.phone,
-              assignedAt: regData.residentAccount.claimedAt || new Date().toISOString(),
-              createdAt: regData.residentAccount.claimedAt || new Date().toISOString()
-            });
+              assignedResidentType: regData.residentAccount.residentType,
+              assignedProgram: regData.residentAccount.programOfStudy,
+              assignedDepartment: regData.residentAccount.department,
+              assignedInstitution: regData.residentAccount.institution,
+              managerName: regData.residentAccount.managerName,
+              managerPhone: regData.residentAccount.managerPhone,
+              assignedAt: regData.residentAccount.submittedAt || regData.residentAccount.claimedAt || new Date().toISOString(),
+              createdAt: regData.residentAccount.submittedAt || regData.residentAccount.claimedAt || new Date().toISOString()
+            };
+            setRoomKeyDetails(defaultRoom);
+            setUserRooms(prev => prev.length > 0 ? prev : [defaultRoom]);
           }
         }
       } catch (e) {
@@ -334,7 +380,7 @@ export default function PageUserDashboard() {
 
       // 1. Fetch accredited staff
       try {
-        const staffRes = await fetch('/api/accredited-staff').then(r => r.json()).catch(() => []);
+        const staffRes = await apiFetch('/api/accredited-staff').catch(() => []);
         if (Array.isArray(staffRes) && staffRes.length > 0) {
           setAccreditedStaff(staffRes);
         }
@@ -344,7 +390,7 @@ export default function PageUserDashboard() {
 
       // 2. Fetch available hostels
       try {
-        const hostelsList = await fetch('/api/hostels').then(r => r.json()).catch(() => []);
+        const hostelsList = await apiFetch('/api/hostels').catch(() => []);
         if (Array.isArray(hostelsList)) {
           setAvailableHostels(hostelsList);
         }
@@ -457,13 +503,17 @@ export default function PageUserDashboard() {
         title: issueTitle.trim(),
         category: issueCategory,
         urgency: issueUrgency,
+        subArea: issueSubArea,
+        locationTag: issueSubArea,
         description: issueDescription.trim(),
         photos: issuePhotos,
+        visitWindow: issueVisitWindow,
+        contactPhone: issueContactPhone || currentUser?.phone || '',
         contactMethod: issueContactMethod,
         studentId: currentUser?.studentId || currentUser?.id,
         studentName: currentUser?.name || 'Student Resident',
         studentEmail: currentUser?.email || '',
-        studentPhone: currentUser?.phone || '',
+        studentPhone: issueContactPhone || currentUser?.phone || '',
         hostelId: currentUser?.hostelId || roomKeyDetails?.hostelId || '',
         hostelName: currentUser?.hostelName || roomKeyDetails?.hostelName || 'PineVela Student Residence',
         blockName: currentUser?.blockName || roomKeyDetails?.blockName || 'Block A',
@@ -573,11 +623,18 @@ export default function PageUserDashboard() {
       } else {
         setVerifiedKeyInfo(data);
         setClaimError(null);
-        setClaimStudentName(currentUser?.name || data.assignedStudentName || '');
-        setClaimStudentId(currentUser?.studentId || data.assignedStudentId || `STU-${Date.now().toString().slice(-4)}`);
-        setClaimStudentPhone(currentUser?.phone || data.assignedStudentPhone || '');
-        setClaimInstitution(currentUser?.institution || 'University Center');
-        setClaimProgram(currentUser?.programOfStudy || 'Undergraduate Resident');
+        setClaimStudentName(data.assignedStudentName || '');
+        setClaimStudentId(data.assignedStudentId || '');
+        setClaimStudentPhone(data.assignedStudentPhone || '');
+        if (data.assignedStudentEmail && currentUser?.email && data.assignedStudentEmail.toLowerCase() !== currentUser.email.toLowerCase()) {
+          setClaimEmail(data.assignedStudentEmail);
+          setClaimEmailChoice('custom');
+        } else if (data.assignedStudentEmail) {
+          setClaimEmail(data.assignedStudentEmail);
+        }
+        setClaimInstitution(data.assignedInstitution || '');
+        setClaimProgram(data.assignedProgram || '');
+        setClaimDepartment(data.assignedDepartment || '');
         setClaimStep(2); // Progress to profile step
       }
     } catch (err: any) {
@@ -594,6 +651,37 @@ export default function PageUserDashboard() {
       setClaimError("Please enter your full legal name for your resident account.");
       return;
     }
+
+    const resolvedEmail = (claimEmailChoice === 'same' ? (currentUser?.email || '') : (claimEmail.trim() || currentUser?.email || '')).toLowerCase().trim();
+    if (!resolvedEmail) {
+      setClaimError("Please provide a valid email address for your resident account.");
+      return;
+    }
+
+    const isSameEmailAsUser = currentUser?.email && resolvedEmail === currentUser.email.toLowerCase().trim();
+    if (isSameEmailAsUser) {
+      const userPlainPass = currentUser?.plainPassword || '';
+      const userHashPass = currentUser?.password || '';
+      const inputPass = claimPassword.trim();
+      const inputPassHash = await hashPassword(inputPass);
+      if (
+        (userPlainPass && inputPass === userPlainPass) ||
+        (userHashPass && (inputPass === userHashPass || inputPassHash === userHashPass))
+      ) {
+        setClaimError("Because you are using the same email as your primary User account, your resident account password cannot be identical to your User account password. Please choose a different password.");
+        return;
+      }
+    }
+
+    if (claimPassword.trim() && claimConfirmPassword.trim() && claimPassword.trim() !== claimConfirmPassword.trim()) {
+      setClaimError("Passwords do not match. Please verify and repeat your password.");
+      return;
+    }
+
+    const resolvedRoleType = claimResidentType === 'other' ? (claimCustomType.trim() || 'Special Resident') : claimResidentType;
+    const rawPassword = claimPassword.trim() || 'student123';
+    const hashedPassword = await hashPassword(rawPassword);
+
     setSubmittingClaim(true);
     try {
       const res = await fetch('/api/room-keys/claim', {
@@ -602,33 +690,67 @@ export default function PageUserDashboard() {
         body: JSON.stringify({
           roomKey: verifiedKeyInfo.roomKey,
           studentId: claimStudentId.trim() || currentUser?.studentId || currentUser?.id || `STU-${Date.now().toString().slice(-4)}`,
+          residentId: claimStudentId.trim() || currentUser?.studentId || currentUser?.id || `STU-${Date.now().toString().slice(-4)}`,
           studentName: claimStudentName.trim() || currentUser?.name || 'Student Resident',
-          studentEmail: currentUser?.email || '',
+          name: claimStudentName.trim() || currentUser?.name || 'Student Resident',
+          studentEmail: resolvedEmail,
+          email: resolvedEmail,
+          parentUserEmail: currentUser?.email || '',
           studentPhone: claimStudentPhone.trim() || currentUser?.phone || '',
-          institution: claimInstitution.trim(),
-          programOfStudy: claimProgram.trim(),
-          residentType: claimResidentType || 'student',
-          password: claimPassword.trim() || undefined
+          phone: claimStudentPhone.trim() || currentUser?.phone || '',
+          institution: claimInstitution.trim() || (claimResidentType === 'student' ? 'University / College' : 'Organization / Independent'),
+          programOfStudy: claimProgram.trim() || (claimResidentType === 'student' ? 'General Academic Studies' : 'Professional Resident'),
+          department: claimDepartment.trim() || (claimResidentType === 'student' ? 'Academic Department' : 'Resident Division'),
+          residentType: resolvedRoleType,
+          password: hashedPassword,
+          plainPassword: rawPassword,
+          userId: currentUser?.id
         })
       });
       const data = await safeJson(res);
       if (res.ok && data.success) {
         setRoomKeyDetails(verifiedKeyInfo);
-        triggerToast(`Resident Account Created & Room Key Activated! Connected to ${verifiedKeyInfo.hostelName} (${verifiedKeyInfo.blockName}, Room ${verifiedKeyInfo.roomNumber})`);
+        triggerToast(`Resident Account Created & Room Key Activated! Connected to ${verifiedKeyInfo.hostelName} (${verifiedKeyInfo.blockName}, Room ${verifiedKeyInfo.roomNumber})`, 'success');
+        
         if (updateUser) {
-          updateUser({
-            role: 'student',
+          const newRoomRecord = {
+            email: resolvedEmail,
             name: claimStudentName.trim() || currentUser?.name,
+            roomKey: verifiedKeyInfo.roomKey,
+            roomNumber: verifiedKeyInfo.roomNumber,
+            blockName: verifiedKeyInfo.blockName,
+            hostelName: verifiedKeyInfo.hostelName,
+            hostelId: verifiedKeyInfo.hostelId,
+            residentId: claimStudentId.trim() || currentUser?.studentId,
             studentId: claimStudentId.trim() || currentUser?.studentId,
+            phone: claimStudentPhone.trim() || currentUser?.phone,
+            institution: claimInstitution.trim(),
+            program: claimProgram.trim(),
+            department: claimDepartment.trim(),
+            residentType: resolvedRoleType,
+            active: true
+          };
+
+          const existingRoomsList = Array.isArray(currentUser?.registeredAccounts?.residentRooms)
+            ? currentUser.registeredAccounts.residentRooms
+            : (currentUser?.registeredAccounts?.residentAccount ? [currentUser.registeredAccounts.residentAccount] : []);
+          
+          const updatedRoomsList = [
+            ...existingRoomsList.filter((r: any) => (r.roomKey || r.id)?.toUpperCase() !== verifiedKeyInfo.roomKey.toUpperCase()),
+            newRoomRecord
+          ];
+
+          updateUser({
+            registeredAccounts: {
+              ...(currentUser?.registeredAccounts || {}),
+              residentAccount: newRoomRecord,
+              residentRooms: updatedRoomsList
+            },
             roomKey: verifiedKeyInfo.roomKey,
             hostelId: verifiedKeyInfo.hostelId,
             hostelName: verifiedKeyInfo.hostelName,
             blockName: verifiedKeyInfo.blockName,
-            roomNumber: verifiedKeyInfo.roomNumber,
-            phone: claimStudentPhone.trim() || currentUser?.phone,
-            institution: claimInstitution.trim(),
-            programOfStudy: claimProgram.trim(),
-            residentType: claimResidentType
+            roomNumber: verifiedKeyInfo.roomNumber
           });
         }
         await loadStudentData();
@@ -640,6 +762,41 @@ export default function PageUserDashboard() {
       setClaimError("Failed to claim room key and create resident account");
     } finally {
       setSubmittingClaim(false);
+    }
+  };
+
+  // Quick Log In to Digital Room & switch session to Resident Portal
+  const handleQuickLoginToRoom = async (roomData?: any) => {
+    const targetRoomKey = roomData?.roomKey || roomData?.id || roomKeyDetails?.roomKey || (userRooms[0] && (userRooms[0].roomKey || userRooms[0].id));
+    const targetEmail = (claimEmailChoice === 'same' ? currentUser?.email : (claimEmail.trim() || registeredAccounts?.residentAccount?.email || currentUser?.email || ''));
+    const targetStudentId = claimStudentId.trim() || currentUser?.studentId || registeredAccounts?.residentAccount?.studentId || '';
+
+    setQuickLoggingInRoomKey(targetRoomKey || 'default');
+    try {
+      const res = await fetch('/api/auth/quick-resident-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: targetEmail,
+          studentId: targetStudentId,
+          roomKey: targetRoomKey,
+          userId: currentUser?.id
+        })
+      });
+      const data = await safeJson(res);
+      if (res.ok && data && (data.token || data.id)) {
+        if (setSessionUser) {
+          setSessionUser(data);
+        }
+        triggerToast(`Quick Login Successful! Welcome to ${data.hostelName || 'Resident Portal'}.`, 'success');
+        navigate('/student/dashboard');
+      } else {
+        triggerToast(data?.error || "Unable to quick-login to resident account. Please check credentials.", 'error');
+      }
+    } catch (err: any) {
+      triggerToast(err.message || "Failed to perform quick login.", 'error');
+    } finally {
+      setQuickLoggingInRoomKey(null);
     }
   };
 
@@ -724,7 +881,33 @@ export default function PageUserDashboard() {
         setShowDeleteAccountModal(false);
         setDeletePasswordInput('');
         triggerToast(`${deleteTargetRole.toUpperCase()} account deleted. You can now start the registration process again.`);
-        if (deleteTargetRole === 'resident') {
+        
+        const tEmail = (deleteTargetEmail || currentUser?.email || '').toLowerCase().trim();
+        if (deleteTargetRole === 'staff') {
+          try {
+            const localStaff = JSON.parse(localStorage.getItem('pinevela_registered_staff') || '[]');
+            const filteredStaff = localStaff.filter((s: any) => {
+              const sEmail = (s.email || '').toLowerCase().trim();
+              const sParentEmail = (s.parentUserEmail || '').toLowerCase().trim();
+              return sEmail !== tEmail && sParentEmail !== tEmail;
+            });
+            localStorage.setItem('pinevela_registered_staff', JSON.stringify(filteredStaff));
+          } catch (e) {
+            console.warn(e);
+          }
+        } else if (deleteTargetRole === 'manager') {
+          try {
+            const localMgrs = JSON.parse(localStorage.getItem('pinevela_registered_managers') || '[]');
+            const filteredMgrs = localMgrs.filter((m: any) => {
+              const mEmail = (m.email || '').toLowerCase().trim();
+              const mParentEmail = (m.parentUserEmail || '').toLowerCase().trim();
+              return mEmail !== tEmail && mParentEmail !== tEmail;
+            });
+            localStorage.setItem('pinevela_registered_managers', JSON.stringify(filteredMgrs));
+          } catch (e) {
+            console.warn(e);
+          }
+        } else if (deleteTargetRole === 'resident') {
           setRoomKeyDetails(null);
           if (updateUser) {
             updateUser({
@@ -1873,10 +2056,11 @@ export default function PageUserDashboard() {
                   <button
                     type="button"
                     onClick={() => {
-                      setShowAddRoomModal(true);
-                      setAddRoomKeyInput('');
-                      setVerifiedAddKeyInfo(null);
-                      setAddRoomError(null);
+                      setShowClaimModal(true);
+                      setClaimRoomKeyInput('');
+                      setVerifiedKeyInfo(null);
+                      setClaimError(null);
+                      setClaimStep(1);
                     }}
                     className="w-full sm:w-auto px-5 py-3 bg-gradient-to-r from-blue-900 to-indigo-900 hover:from-blue-850 hover:to-indigo-850 text-white font-black text-xs rounded-2xl shadow-lg shadow-blue-900/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
@@ -1977,24 +2161,45 @@ export default function PageUserDashboard() {
                       </div>
 
                       {/* CARD ACTIONS */}
-                      <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                      <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
                         <button
                           type="button"
-                          onClick={() => setDeletingRoomTarget(roomItem)}
+                          onClick={() => {
+                            setDeletingRoomTarget(roomItem);
+                            setDelRoomEmailInput(roomItem.assignedStudentEmail || roomItem.email || registeredAccounts.residentAccount?.email || currentUser?.email || '');
+                            setDelRoomPasswordInput('');
+                            setDelRoomError(null);
+                          }}
                           className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
                         >
                           <Trash2 className="w-3.5 h-3.5 text-rose-600" />
                           <span>Delete Room</span>
                         </button>
 
-                        <button
-                          type="button"
-                          onClick={() => setActiveTab('home')}
-                          className="px-4 py-2 bg-blue-900 hover:bg-blue-850 text-white font-black text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <span>Room Portal</span>
-                          <ArrowRight className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleQuickLoginToRoom(roomItem)}
+                            disabled={quickLoggingInRoomKey === rKey}
+                            className="px-4 py-2.5 bg-gradient-to-r from-blue-700 to-indigo-800 hover:from-blue-800 hover:to-indigo-900 text-white font-black text-xs rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                          >
+                            {quickLoggingInRoomKey === rKey ? (
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <LogIn className="w-3.5 h-3.5 text-emerald-400" />
+                            )}
+                            <span>Quick Log In</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab('home')}
+                            className="px-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <span>Overview</span>
+                            <ArrowRight className="w-3.5 h-3.5 text-slate-500" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -2690,74 +2895,53 @@ export default function PageUserDashboard() {
                   </div>
                 )}
 
-                {/* Verified Room Card */}
+                {/* Verified Room Card & Progression Button */}
                 {verifiedKeyInfo && (
-                  <div className="p-3.5 bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl space-y-1.5 text-xs text-emerald-950 animate-fade-in shadow-xs">
-                    <div className="flex items-center justify-between font-black text-emerald-900">
-                      <span className="flex items-center gap-1.5">
-                        <CheckCircle2 size={15} className="text-emerald-600" />
-                        <span>Room Key Validated: {verifiedKeyInfo.roomKey}</span>
-                      </span>
-                      <span className="px-2 py-0.5 bg-emerald-200/85 text-emerald-900 font-extrabold rounded-full text-[9px]">
-                        Available
-                      </span>
+                  <div className="space-y-3 animate-fade-in">
+                    <div className="p-3.5 bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl space-y-1.5 text-xs text-emerald-950 shadow-xs">
+                      <div className="flex items-center justify-between font-black text-emerald-900">
+                        <span className="flex items-center gap-1.5">
+                          <CheckCircle2 size={15} className="text-emerald-600" />
+                          <span>Room Key Validated: {verifiedKeyInfo.roomKey}</span>
+                        </span>
+                        <span className="px-2 py-0.5 bg-emerald-200/85 text-emerald-900 font-extrabold rounded-full text-[9px]">
+                          Available
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 pt-1 font-bold text-[10px] bg-white/75 p-2 rounded-xl border border-emerald-200/50">
+                        <div>
+                          <span className="text-slate-400 block text-[9px] font-semibold">Hostel</span>
+                          <span className="text-slate-900 truncate block font-bold">{verifiedKeyInfo.hostelName}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[9px] font-semibold">Block</span>
+                          <span className="text-slate-900 truncate block font-bold">{verifiedKeyInfo.blockName}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[9px] font-semibold">Room No.</span>
+                          <span className="text-slate-900 truncate block font-bold">{verifiedKeyInfo.roomNumber}</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 pt-1 font-bold text-[10px] bg-white/75 p-2 rounded-xl border border-emerald-200/50">
-                      <div>
-                        <span className="text-slate-400 block text-[9px] font-semibold">Hostel</span>
-                        <span className="text-slate-900 truncate block font-bold">{verifiedKeyInfo.hostelName}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[9px] font-semibold">Block</span>
-                        <span className="text-slate-900 truncate block font-bold">{verifiedKeyInfo.blockName}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[9px] font-semibold">Room No.</span>
-                        <span className="text-slate-900 truncate block font-bold">{verifiedKeyInfo.roomNumber}</span>
-                      </div>
+
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setClaimStep(2)}
+                        className="w-full py-3 bg-gradient-to-r from-blue-900 to-indigo-900 hover:from-blue-800 hover:to-indigo-800 text-white font-extrabold text-xs rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <span>Continue to Personal & Academic Profile</span>
+                        <ArrowRight size={14} />
+                      </button>
                     </div>
                   </div>
                 )}
-
-                <div className="pt-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!verifiedKeyInfo) {
-                        handleVerifyClaimKey();
-                      } else {
-                        setClaimStep(2);
-                      }
-                    }}
-                    disabled={verifyingKey || !claimRoomKeyInput.trim()}
-                    className="w-full py-3 bg-gradient-to-r from-blue-900 to-indigo-900 hover:from-blue-800 hover:to-indigo-800 text-white font-extrabold text-xs rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                  >
-                    <span>Continue to Personal & Academic Profile</span>
-                    <ArrowRight size={14} />
-                  </button>
-                </div>
               </div>
             )}
 
             {/* STEP 2: Personal & Academic Profile */}
             {claimStep === 2 && verifiedKeyInfo && (
               <div className="space-y-4 pt-1">
-                
-                {/* Room Badge */}
-                <div className="p-3 bg-blue-50/80 border border-blue-200 rounded-2xl flex items-center justify-between text-xs text-blue-950 font-bold">
-                  <div className="flex items-center gap-2">
-                    <Building size={15} className="text-blue-700" />
-                    <span className="truncate pr-1">Assigning: <strong>{verifiedKeyInfo.hostelName}</strong> ({verifiedKeyInfo.blockName} - {verifiedKeyInfo.roomNumber})</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setClaimStep(1)}
-                    className="text-blue-700 underline text-[10px] shrink-0 font-bold cursor-pointer"
-                  >
-                    Change
-                  </button>
-                </div>
-
                 <div className="space-y-3">
                   {/* Name */}
                   <div className="space-y-1">
@@ -2931,11 +3115,94 @@ export default function PageUserDashboard() {
                   </div>
                 </div>
 
-                {/* Password Setup */}
+                {/* Email Choice & Password Setup */}
                 <div className="space-y-3">
+                  <div className="space-y-2 bg-slate-50 border border-slate-200 p-3 rounded-2xl">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-black text-slate-900 block">
+                        Resident Account Email Selection <span className="text-rose-600">*</span>
+                      </label>
+                      <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
+                        Multi-Account Support
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setClaimEmailChoice('custom')}
+                        className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
+                          claimEmailChoice === 'custom'
+                            ? 'border-blue-600 bg-blue-50/80 text-blue-950 ring-1 ring-blue-600'
+                            : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 text-xs font-black">
+                          <Mail size={13} className={claimEmailChoice === 'custom' ? 'text-blue-600' : 'text-slate-400'} />
+                          <span>Use a Different Email</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 mt-1 leading-tight">
+                          Register resident account under a separate email address
+                        </p>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setClaimEmailChoice('same');
+                          if (currentUser?.email) {
+                            setClaimEmail(currentUser.email);
+                          }
+                        }}
+                        className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
+                          claimEmailChoice === 'same'
+                            ? 'border-blue-600 bg-blue-50/80 text-blue-950 ring-1 ring-blue-600'
+                            : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 text-xs font-black">
+                          <CheckCircle2 size={13} className={claimEmailChoice === 'same' ? 'text-blue-600' : 'text-slate-400'} />
+                          <span>Use Primary Account Email</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 mt-1 leading-tight truncate">
+                          {currentUser?.email || 'Same email as User account'}
+                        </p>
+                      </button>
+                    </div>
+
+                    {claimEmailChoice === 'custom' ? (
+                      <div className="space-y-1 pt-1.5">
+                        <div className="relative">
+                          <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          <input
+                            type="email"
+                            required
+                            value={claimEmail}
+                            onChange={(e) => setClaimEmail(e.target.value)}
+                            placeholder="e.g. resident.favour@gmail.com"
+                            className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
+                          />
+                        </div>
+                        <p className="text-[10px] text-slate-500 font-medium">
+                          You can log directly into your resident dashboard with this email address.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="p-2.5 bg-amber-50/90 border border-amber-200 rounded-xl space-y-1 text-amber-950 text-[11px] font-medium leading-tight">
+                        <div className="flex items-center gap-1.5 font-bold text-amber-900">
+                          <ShieldAlert size={13} className="text-amber-700 shrink-0" />
+                          <span>Password Differentiation Requirement</span>
+                        </div>
+                        <p>
+                          Using <strong>{currentUser?.email}</strong> for both accounts. Because the email is shared, your resident account password <strong>cannot be identical</strong> to your User account password so that both accounts authenticate independently.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
                   <div className="space-y-1">
                     <label className="text-xs font-black text-slate-800 block">
-                      Create Account Password <span className="text-rose-600">*</span>
+                      Create Digital Room Password <span className="text-rose-600">*</span>
                     </label>
                     <div className="relative">
                       <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -2959,7 +3226,7 @@ export default function PageUserDashboard() {
 
                   <div className="space-y-1">
                     <label className="text-xs font-black text-slate-800 block">
-                      Confirm Account Password <span className="text-rose-600">*</span>
+                      Confirm Digital Room Password <span className="text-rose-600">*</span>
                     </label>
                     <div className="relative">
                       <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -3073,23 +3340,47 @@ export default function PageUserDashboard() {
                   <h4 className="text-xl font-black text-slate-900 tracking-tight">
                     Room Successfully Activated!
                   </h4>
-                  <p className="text-xs text-slate-550 max-w-sm mx-auto font-medium">
-                    Welcome to <strong>{verifiedKeyInfo.hostelName}</strong>. Your digital room key has been claimed and your profile is active.
+                  <p className="text-xs text-slate-600 max-w-sm mx-auto font-medium">
+                    Welcome to <strong>{verifiedKeyInfo.hostelName}</strong>. Your digital room credentials have been created and all details are synchronized.
                   </p>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowClaimModal(false);
-                    // Force navigation to make sure context triggers full role refresh
-                    navigate(0); 
-                  }}
-                  className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-2xl shadow-lg shadow-emerald-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <CheckCircle size={15} />
-                  <span>Enter Resident Portal & Dashboard</span>
-                </button>
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-left space-y-2 text-xs">
+                  <div className="flex justify-between items-center text-[11px]">
+                    <span className="text-slate-500">Digital Room Key:</span>
+                    <strong className="font-mono text-blue-900 bg-blue-100/80 px-2 py-0.5 rounded border border-blue-200">{verifiedKeyInfo.roomKey}</strong>
+                  </div>
+                  <div className="flex justify-between items-center text-[11px]">
+                    <span className="text-slate-500">Login Email:</span>
+                    <strong className="text-slate-800">{claimEmail || currentUser?.email}</strong>
+                  </div>
+                  <div className="flex justify-between items-center text-[11px]">
+                    <span className="text-slate-500">Room Location:</span>
+                    <strong className="text-slate-800">{verifiedKeyInfo.blockName} • Room {verifiedKeyInfo.roomNumber}</strong>
+                  </div>
+                </div>
+
+                <div className="space-y-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => handleQuickLoginToRoom(verifiedKeyInfo)}
+                    className="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black text-xs rounded-2xl shadow-lg shadow-emerald-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <LogIn size={16} />
+                    <span>Quick Log In & Launch Resident Portal</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowClaimModal(false);
+                      setActiveTab('login-room');
+                    }}
+                    className="w-full py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-2xl transition-all cursor-pointer"
+                  >
+                    View Room in Dashboard
+                  </button>
+                </div>
               </div>
             )}
 
@@ -3580,24 +3871,71 @@ export default function PageUserDashboard() {
                 <Trash2 className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-lg font-black text-slate-900">Delete / Unlink Room</h3>
-                <p className="text-xs text-slate-500 font-medium">Remove room assignment from account.</p>
+                <h3 className="text-lg font-black text-slate-900">Delete Resident Room</h3>
+                <p className="text-xs text-slate-500 font-medium">Confirm account details to release digital room key.</p>
               </div>
             </div>
 
-            <div className="space-y-3 text-xs text-slate-600 font-medium">
+            <div className="space-y-3.5 text-xs text-slate-600 font-medium">
               <p>
-                Are you sure you want to delete/unlink <strong className="text-slate-900">{deletingRoomTarget.hostelName} ({deletingRoomTarget.blockName}, Room {deletingRoomTarget.roomNumber})</strong>?
+                Deleting <strong className="text-slate-900">{deletingRoomTarget.hostelName || 'Hostel Room'} ({deletingRoomTarget.blockName || 'Block'}, Room {deletingRoomTarget.roomNumber || 'Room'})</strong> with key <code className="font-mono bg-amber-100 px-1.5 py-0.5 rounded text-amber-900 font-bold">{deletingRoomTarget.roomKey}</code>.
               </p>
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-[11px] font-bold">
-                This will release digital room key <code className="font-mono bg-amber-100 px-1 py-0.5 rounded">{deletingRoomTarget.roomKey}</code> and free up space in your account.
+
+              {delRoomError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-900 text-xs font-bold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{delRoomError}</span>
+                </div>
+              )}
+
+              <div className="space-y-3 pt-1">
+                <div>
+                  <label className="text-[11px] font-black uppercase text-slate-700 block mb-1">
+                    Resident Account Email
+                  </label>
+                  <input
+                    type="email"
+                    value={delRoomEmailInput}
+                    onChange={(e) => {
+                      setDelRoomEmailInput(e.target.value);
+                      setDelRoomError(null);
+                    }}
+                    placeholder="e.g. resident@gmail.com"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 text-xs focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-black uppercase text-slate-700 block mb-1">
+                    Resident Account Password
+                  </label>
+                  <input
+                    type="password"
+                    value={delRoomPasswordInput}
+                    onChange={(e) => {
+                      setDelRoomPasswordInput(e.target.value);
+                      setDelRoomError(null);
+                    }}
+                    placeholder="Enter password for this resident account"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 text-xs focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                    required
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1 font-semibold">
+                    Enter the secure password used when creating this resident account.
+                  </p>
+                </div>
               </div>
             </div>
 
             <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
               <button
                 type="button"
-                onClick={() => setDeletingRoomTarget(null)}
+                onClick={() => {
+                  setDeletingRoomTarget(null);
+                  setDelRoomError(null);
+                  setDelRoomPasswordInput('');
+                }}
                 className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer"
               >
                 Cancel
@@ -3607,22 +3945,36 @@ export default function PageUserDashboard() {
                 disabled={submittingDeleteRoom}
                 onClick={async () => {
                   if (!deletingRoomTarget) return;
+                  if (!delRoomEmailInput.trim()) {
+                    setDelRoomError("Please enter the resident account email.");
+                    return;
+                  }
+                  if (!delRoomPasswordInput.trim()) {
+                    setDelRoomError("Please enter the resident account password to confirm deletion.");
+                    return;
+                  }
                   setSubmittingDeleteRoom(true);
+                  setDelRoomError(null);
                   try {
                     const res = await apiFetch('/api/student/delete-room', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ roomKey: deletingRoomTarget.roomKey })
+                      body: JSON.stringify({ 
+                        roomKey: deletingRoomTarget.roomKey,
+                        email: delRoomEmailInput.trim(),
+                        password: delRoomPasswordInput.trim()
+                      })
                     });
                     if (res && res.success) {
-                      triggerToast(res.message || "Room unlinked successfully!", 'success');
+                      triggerToast(res.message || "Room deleted successfully!", 'success');
                       setUserRooms(res.rooms || []);
                       setDeletingRoomTarget(null);
+                      setDelRoomPasswordInput('');
                     } else {
-                      triggerToast(res?.error || "Failed to delete room.", 'error');
+                      setDelRoomError(res?.error || "Failed to delete room. Please check your credentials.");
                     }
                   } catch (err: any) {
-                    triggerToast(err.message || "Error unlinking room.", 'error');
+                    setDelRoomError(err.message || "Error unlinking room. Verify credentials.");
                   } finally {
                     setSubmittingDeleteRoom(false);
                   }
@@ -3634,7 +3986,7 @@ export default function PageUserDashboard() {
                 ) : (
                   <Trash2 className="w-3.5 h-3.5" />
                 )}
-                <span>Confirm Delete Room</span>
+                <span>Verify & Delete Room</span>
               </button>
             </div>
           </div>
